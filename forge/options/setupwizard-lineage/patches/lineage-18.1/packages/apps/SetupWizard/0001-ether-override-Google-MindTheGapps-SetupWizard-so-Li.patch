@@ -1,0 +1,31 @@
+From 1919d8d4388961e369ae23d84b28013bdc953fcf Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 3 Sep 2026 17:52:55 +0000
+Subject: [PATCH] ether: override Google (MindTheGapps) SetupWizard so
+ Lineage's handles first boot
+
+Add SetupWizardPrebuilt + PartnerSetupPrebuilt to LineageSetupWizard's overrides
+(the mechanism MindTheGapps itself uses to drop Provision). On GApps builds
+com.google.android.setupwizard otherwise takes precedence and taps land offset
+on the welcome screen, so setup can't be completed; dropping it restores the
+Lineage wizard (still handles Google sign-in). No-op on non-GApps builds.
+---
+ Android.bp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Android.bp b/Android.bp
+index a577115..7767905 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -24,7 +24,7 @@ android_app {
+     system_ext_specific: true,
+     platform_apis: true,
+ 
+-    overrides: ["Provision"],
++    overrides: ["Provision", "SetupWizardPrebuilt", "PartnerSetupPrebuilt"],
+ 
+     optimize: {
+         proguard_flags_files: ["proguard.flags"],
+-- 
+2.53.0
+

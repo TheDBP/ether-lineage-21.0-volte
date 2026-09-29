@@ -1,0 +1,525 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: RobinLed -- the rear cloud LED as a notification and
+ battery indicator
+
+The Robin's rear LED cluster has no AOSP equivalent, so it needs a service of its
+own: a NotificationListener that pulses at a rate scaled to how many notifications
+are outstanding, and doubles as a battery gauge while charging.
+
+liblight gives the rear cluster up in the same change rather than a later one,
+because the point is that there is exactly one writer to leds_on_off. Two writers is
+not a worse version of this feature, it is a flickering LED.
+
+The boot chase (led_pattern 4 while bootanim runs) moves from the vendor rc to
+init.ether.led.rc on /system. Android 13 init refuses property triggers a vendor rc
+is not allowed to see, and init.svc.bootanim is one of them, so the vendor actions
+were dropped at parse time and the chase never ran. The write uses the resolved
+sysfs path because the /sys/class/leds/.../device link is labelled sysfs_leds and
+init cannot read it.
+---
+ apps/Android.mk                               |   5 +
+ apps/RobinLed/Android.mk                      |  16 ++
+ apps/RobinLed/AndroidManifest.xml             |  21 ++
+ .../robinled/LedNotificationListener.java     | 231 ++++++++++++++++++
+ device.mk                                     |   5 +
+ liblight/lights.c                             |  69 +-----
+ rootdir/Android.mk                            |   8 +
+ rootdir/init.ether.led.rc                     |   9 +
+ rootdir/init.nbq.led.rc                       |   9 +-
+ sepolicy/robinled_app.te                      |  18 ++
+ 10 files changed, 321 insertions(+), 70 deletions(-)
+ create mode 100644 apps/Android.mk
+ create mode 100644 apps/RobinLed/Android.mk
+ create mode 100644 apps/RobinLed/AndroidManifest.xml
+ create mode 100644 apps/RobinLed/src/com/nextbit/robinled/LedNotificationListener.java
+ create mode 100644 rootdir/init.ether.led.rc
+ create mode 100644 sepolicy/robinled_app.te
+
+diff --git a/apps/Android.mk b/apps/Android.mk
+new file mode 100644
+index 0000000..6fdd16b
+--- /dev/null
++++ b/apps/Android.mk
+@@ -0,0 +1,5 @@
++LOCAL_PATH := $(call my-dir)
++# device/nextbit/ether/Android.mk only recurses ONE level (all-subdir-makefiles globs $(1)/*/Android.mk),
++# so nested module makefiles (apps/RobinLed/Android.mk) are never included and the module is silently
++# dropped. This recurses the rest of the way.
++include $(call all-makefiles-under,$(LOCAL_PATH))
+diff --git a/apps/RobinLed/Android.mk b/apps/RobinLed/Android.mk
+new file mode 100644
+index 0000000..0f9bd3c
+--- /dev/null
++++ b/apps/RobinLed/Android.mk
+@@ -0,0 +1,16 @@
++LOCAL_PATH := $(call my-dir)
++include $(CLEAR_VARS)
++
++# RobinLed — a NotificationListenerService that drives the 4 rear "cloud" LEDs (LP5523) for
++# notifications (count -> LEDs lit -> pulse rate) or as a battery gauge. Runs as system uid in the
++# robinled_app sepolicy domain (see ../../sepolicy). Platform-signed, privileged.
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := $(call all-java-files-under, src)
++LOCAL_PACKAGE_NAME := RobinLed
++LOCAL_CERTIFICATE := platform
++LOCAL_PRIVILEGED_MODULE := true
++LOCAL_PRODUCT_MODULE := true
++LOCAL_USE_AAPT2 := true
++LOCAL_SDK_VERSION := current
++
++include $(BUILD_PACKAGE)
+diff --git a/apps/RobinLed/AndroidManifest.xml b/apps/RobinLed/AndroidManifest.xml
+new file mode 100644
+index 0000000..c5c30f2
+--- /dev/null
++++ b/apps/RobinLed/AndroidManifest.xml
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.nextbit.robinled"
++    android:sharedUserId="android.uid.system">
++
++    <uses-permission android:name="android.permission.WAKE_LOCK"/>
++
++    <application
++        android:label="Robin LED"
++        android:allowBackup="false">
++        <service
++            android:name=".LedNotificationListener"
++            android:label="Robin LED"
++            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
++            android:exported="true">
++            <intent-filter>
++                <action android:name="android.service.notification.NotificationListenerService"/>
++            </intent-filter>
++        </service>
++    </application>
++</manifest>
+diff --git a/apps/RobinLed/src/com/nextbit/robinled/LedNotificationListener.java b/apps/RobinLed/src/com/nextbit/robinled/LedNotificationListener.java
+new file mode 100644
+index 0000000..c69a92c
+--- /dev/null
++++ b/apps/RobinLed/src/com/nextbit/robinled/LedNotificationListener.java
+@@ -0,0 +1,231 @@
++/*
++ * Copyright (C) 2026 The LineageOS Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ */
++
++package com.nextbit.robinled;
++
++import android.content.BroadcastReceiver;
++import android.content.Context;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.database.ContentObserver;
++import android.os.BatteryManager;
++import android.os.Handler;
++import android.os.Looper;
++import android.os.PowerManager;
++import android.provider.Settings;
++import android.service.notification.NotificationListenerService;
++import android.service.notification.StatusBarNotification;
++import android.util.Log;
++
++import java.io.FileOutputStream;
++import java.io.IOException;
++
++/**
++ * Drives the Robin's 4 rear "cloud" LEDs (LP5523) as the SOLE owner of that cluster:
++ *  - Notification mode (default): the LEDs pulse for notifications. The number lit rises one per
++ *    two notifications (ceil(count/2), capped at 4); once all 4 are lit, the pulse rate ramps up
++ *    with more notifications to a capped "fast but sane" rate.
++ *  - Battery mode: the rear cluster is a static 4-bar battery gauge (the old HAL behaviour).
++ * Switch with Settings.System "robin_led_notification_mode" (1 = notifications, 0 = battery).
++ *
++ * The lights HAL no longer touches the rear cluster (see the paired lights.c change), so there is
++ * a single writer here. We write the OEM "leds_on_off" node ("<segment> <level>"), which init
++ * already chmod's to system; this app runs as system uid (sharedUserId) in the robinled_app
++ * sepolicy domain.
++ *
++ * NOTE: pulsing is done in software (a Handler ramp holding a partial wakelock while notifications
++ * are pending). That is the simplest correct-in-principle approach; offloading the pulse to the
++ * LP5523 hardware engine (engineN_load) would be the battery-friendly follow-up. Tune on device.
++ */
++public class LedNotificationListener extends NotificationListenerService {
++    private static final String TAG = "RobinLed";
++
++    private static final String LED_NODE =
++            "/sys/class/leds/lp5523:channel0/device/leds_on_off";
++    private static final int NUM_SEGMENTS = 4;
++    private static final int LEVEL_ON = 100;
++    private static final int LEVEL_OFF = 0;
++
++    private static final String KEY_MODE = "robin_led_notification_mode";
++    private static final int MODE_BATTERY = 0;
++    private static final int MODE_NOTIFICATIONS = 1;
++
++    // Pulse timing (ms). Slow breathe until all 4 are lit; then ramp toward the fast cap.
++    private static final int PULSE_SLOW_MS = 1500;
++    private static final int PULSE_FAST_MIN_MS = 300;
++    private static final int PULSE_RAMP_PER_NOTIF_MS = 120;
++
++    private final Handler mHandler = new Handler(Looper.getMainLooper());
++    private PowerManager.WakeLock mWakeLock;
++
++    private boolean mConnected;
++    private int mBatteryLevel = 100;
++
++    private int mLitSegments;        // how many rear LEDs are active
++    private int mPulseIntervalMs;    // current pulse period
++    private boolean mPulseOn;        // current phase of the software pulse
++
++    private final BroadcastReceiver mBatteryReceiver = new BroadcastReceiver() {
++        @Override
++        public void onReceive(Context context, Intent intent) {
++            int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
++            int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
++            if (level >= 0 && scale > 0) {
++                mBatteryLevel = level * 100 / scale;
++                if (getMode() == MODE_BATTERY) {
++                    render();
++                }
++            }
++        }
++    };
++
++    private final ContentObserver mSettingsObserver =
++            new ContentObserver(new Handler(Looper.getMainLooper())) {
++        @Override
++        public void onChange(boolean selfChange) {
++            render();
++        }
++    };
++
++    private final Runnable mPulseRunnable = new Runnable() {
++        @Override
++        public void run() {
++            mPulseOn = !mPulseOn;
++            writeSegments(mLitSegments, mPulseOn ? LEVEL_ON : LEVEL_OFF);
++            mHandler.postDelayed(this, mPulseIntervalMs);
++        }
++    };
++
++    @Override
++    public void onListenerConnected() {
++        mConnected = true;
++        PowerManager pm = getSystemService(PowerManager.class);
++        mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "RobinLed:pulse");
++        mWakeLock.setReferenceCounted(false);
++
++        registerReceiver(mBatteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
++        getContentResolver().registerContentObserver(
++                Settings.System.getUriFor(KEY_MODE), false, mSettingsObserver);
++        render();
++    }
++
++    @Override
++    public void onListenerDisconnected() {
++        mConnected = false;
++        stopPulse();
++        try {
++            unregisterReceiver(mBatteryReceiver);
++            getContentResolver().unregisterContentObserver(mSettingsObserver);
++        } catch (IllegalArgumentException ignored) {
++        }
++    }
++
++    @Override
++    public void onNotificationPosted(StatusBarNotification sbn) {
++        render();
++    }
++
++    @Override
++    public void onNotificationRemoved(StatusBarNotification sbn) {
++        render();
++    }
++
++    private int getMode() {
++        return Settings.System.getInt(getContentResolver(), KEY_MODE, MODE_NOTIFICATIONS);
++    }
++
++    private int countNotifications() {
++        try {
++            StatusBarNotification[] active = getActiveNotifications();
++            if (active == null) {
++                return 0;
++            }
++            int n = 0;
++            for (StatusBarNotification sbn : active) {
++                // count user-dismissable notifications only (skip ongoing/foreground)
++                if (sbn.isClearable() && !sbn.isOngoing()) {
++                    n++;
++                }
++            }
++            return n;
++        } catch (SecurityException e) {
++            Log.w(TAG, "getActiveNotifications not ready", e);
++            return 0;
++        }
++    }
++
++    private void render() {
++        if (!mConnected) {
++            return;
++        }
++        if (getMode() == MODE_BATTERY) {
++            renderBattery();
++            return;
++        }
++        int count = countNotifications();
++        if (count <= 0) {
++            stopPulse();
++            writeSegments(0, LEVEL_OFF);
++            return;
++        }
++        mLitSegments = Math.min(NUM_SEGMENTS, (count + 1) / 2); // ceil(count/2)
++        int interval = PULSE_SLOW_MS;
++        if (count > NUM_SEGMENTS * 2) {
++            interval = Math.max(PULSE_FAST_MIN_MS,
++                    PULSE_SLOW_MS - (count - NUM_SEGMENTS * 2) * PULSE_RAMP_PER_NOTIF_MS);
++        }
++        startPulse(interval);
++    }
++
++    private void renderBattery() {
++        stopPulse();
++        int bars;
++        if (mBatteryLevel > 90) bars = 4;
++        else if (mBatteryLevel > 75) bars = 3;
++        else if (mBatteryLevel > 50) bars = 2;
++        else if (mBatteryLevel > 25) bars = 1;
++        else bars = 0;
++        writeSegments(bars, LEVEL_ON);
++    }
++
++    private void startPulse(int intervalMs) {
++        mPulseIntervalMs = intervalMs;
++        if (mWakeLock != null && !mWakeLock.isHeld()) {
++            mWakeLock.acquire();
++        }
++        mHandler.removeCallbacks(mPulseRunnable);
++        mPulseOn = false;
++        mHandler.post(mPulseRunnable);
++    }
++
++    private void stopPulse() {
++        mHandler.removeCallbacks(mPulseRunnable);
++        if (mWakeLock != null && mWakeLock.isHeld()) {
++            mWakeLock.release();
++        }
++    }
++
++    /** Light the first {@code litCount} rear segments at {@code level}; the rest off. */
++    private void writeSegments(int litCount, int level) {
++        for (int i = 0; i < NUM_SEGMENTS; i++) {
++            int seg = NUM_SEGMENTS - i;            // matches the HAL's segment ordering
++            int value = (i < litCount) ? level : LEVEL_OFF;
++            writeNode(LED_NODE, seg + " " + value);
++        }
++    }
++
++    private void writeNode(String path, String value) {
++        try (FileOutputStream fos = new FileOutputStream(path)) {
++            fos.write((value + "\n").getBytes());
++        } catch (IOException e) {
++            Log.w(TAG, "failed to write " + path + " = " + value, e);
++        }
++    }
++}
+diff --git a/device.mk b/device.mk
+index 78ab571..b70be41 100644
+--- a/device.mk
++++ b/device.mk
+@@ -140,6 +140,7 @@ PRODUCT_PACKAGES += \
+ 
+ # Init
+ PRODUCT_PACKAGES += \
++    init.ether.led.rc \
+     init.nbq.fingerprint.rc \
+     init.nbq.led.rc \
+     init.nbq.poweroff_charging.rc \
+@@ -279,6 +280,10 @@ PRODUCT_PACKAGES += \
+     timekeep \
+     TimeKeep
+ 
++# RobinLed — rear-LED notification/battery service (apps/RobinLed + sepolicy/robinled_app.te)
++PRODUCT_PACKAGES += \
++    RobinLed
++
+ # Thermal
+ PRODUCT_COPY_FILES += \
+     $(LOCAL_PATH)/configs/thermal-engine-8992.conf:$(TARGET_COPY_OUT_VENDOR)/etc/thermal-engine-8992.conf
+diff --git a/liblight/lights.c b/liblight/lights.c
+index 315af0a..fe6c7d6 100644
+--- a/liblight/lights.c
++++ b/liblight/lights.c
+@@ -51,13 +51,7 @@
+ static const int BRIGHTNESS_RAMP[RAMP_SIZE]
+         = { 0, 12, 25, 37, 50, 72, 85, 100 };
+ 
+-struct battery_state_t {
+-    int bars;
+-    int brightness;
+-};
+-
+ static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
+-static struct battery_state_t g_battery;
+ static struct light_state_t g_attention;
+ static struct light_state_t g_notification;
+ 
+@@ -104,67 +98,14 @@ static int rgb_to_brightness(const struct light_state_t *state)
+     return state->color & 0x000000ff;
+ }
+ 
++/* The rear "cloud" LED cluster is owned by the RobinLed app (com.nextbit.robinled), which drives it
++ * for notification pulsing or as a battery gauge. The HAL no longer touches the rear cluster, so
++ * there is a single writer to leds_on_off. */
+ static int set_light_battery(struct light_device_t *dev,
+         const struct light_state_t *state)
+ {
+-    int brightness = 0;
+-    char buf[20];
+-    int err = 0;
+-
+-    if (!dev)
+-        return -ENODEV;
+-
+-    pthread_mutex_lock(&g_lock);
+-
+-    // framework sends the level as the upper 8 bits of color
+-    int level = (state->color & 0xFF000000) >> 24;
+-    ALOGV("%s: color=%x level=%d", __func__, state->color, level);
+-
+-    // sanity check
+-    if (level < 0)
+-        level = 0;
+-    else if (level > 100)
+-        level = 100;
+-
+-    // level is a percentage, so find the number of bars which
+-    // should be lit, and light 'em up
+-    int bars = 0;
+-    if (is_lit(state)) {
+-        if (level > 90)
+-            bars = 4;
+-        else if (level > 75)
+-            bars = 3;
+-        else if (level > 50)
+-            bars = 2;
+-        else if (level > 25)
+-            bars = 1;
+-    }
+-
+-    // framework sends brightness as the color from the range
+-    // 0-255, and we need to get and scale it from 0-100
+-    brightness = rgb_to_brightness(state);
+-    brightness = SEGMENT_BRIGHTNESS * brightness / 0xff;
+-
+-    if (bars == g_battery.bars && brightness == g_battery.brightness)
+-        goto out;
+-
+-    for (int i = 0; i < NUM_LED_SEGMENTS; i++) {
+-        int level = (bars >= i + 1) ? brightness : 0;
+-        snprintf(buf, sizeof(buf), "%d %d", NUM_LED_SEGMENTS - i, level);
+-        ALOGV("%s: %d = %s (bars=%d)", __func__, i, buf, bars);
+-        err = write_str(SEGMENTED_LED_FILE, buf);
+-        if (err < 0) {
+-            ALOGD("%s failed to write LED segment %s err=%d", __func__, buf, err);
+-            break;
+-        }
+-    }
+-    g_battery.bars = bars;
+-    g_battery.brightness = brightness;
+-
+-out:
+-    pthread_mutex_unlock(&g_lock);
+-
+-    return err;
++    (void) state;
++    return dev ? 0 : -ENODEV;
+ }
+ 
+ static int set_light_backlight(struct light_device_t *dev,
+diff --git a/rootdir/Android.mk b/rootdir/Android.mk
+index d23b6dc..12aa41f 100644
+--- a/rootdir/Android.mk
++++ b/rootdir/Android.mk
+@@ -18,6 +18,14 @@ LOCAL_SRC_FILES    := init.nbq.fingerprint.rc
+ LOCAL_MODULE_PATH  := $(TARGET_OUT_VENDOR_ETC)/init/hw
+ include $(BUILD_PREBUILT)
+ 
++include $(CLEAR_VARS)
++LOCAL_MODULE       := init.ether.led.rc
++LOCAL_MODULE_TAGS  := optional
++LOCAL_MODULE_CLASS := ETC
++LOCAL_SRC_FILES    := init.ether.led.rc
++LOCAL_MODULE_PATH  := $(TARGET_OUT_ETC)/init
++include $(BUILD_PREBUILT)
++
+ include $(CLEAR_VARS)
+ LOCAL_MODULE       := init.nbq.led.rc
+ LOCAL_MODULE_TAGS  := optional
+diff --git a/rootdir/init.ether.led.rc b/rootdir/init.ether.led.rc
+new file mode 100644
+index 0000000..84b5790
+--- /dev/null
++++ b/rootdir/init.ether.led.rc
+@@ -0,0 +1,9 @@
++# Rear cloud LED chase while the boot animation runs. System-side on purpose: init.svc.bootanim is
++# not exported to vendor_init, so this cannot live in /vendor/etc/init (see init.nbq.led.rc).
++# Resolved path, not /sys/class/leds/lp5523:channel0/device/...: the "device" link there is labelled
++# sysfs_leds and init has no lnk_file read on it, so the write fails EACCES through the link.
++on property:init.svc.bootanim=running
++    write /sys/devices/soc.0/f9965000.i2c/i2c-9/9-0032/led_pattern 4
++
++on property:init.svc.bootanim=stopped
++    write /sys/devices/soc.0/f9965000.i2c/i2c-9/9-0032/led_pattern 0
+diff --git a/rootdir/init.nbq.led.rc b/rootdir/init.nbq.led.rc
+index 2ed58a7..1679092 100644
+--- a/rootdir/init.nbq.led.rc
++++ b/rootdir/init.nbq.led.rc
+@@ -11,9 +11,6 @@ on post-fs-data
+     chmod 660 /sys/class/leds/lp5523:channel0/device/leds_on_off
+     chown system system /sys/class/leds/lp5523:channel0/device/leds_on_off
+ 
+-# happy dance during boot
+-on property:init.svc.bootanim=running
+-    write /sys/class/leds/lp5523:channel0/device/led_pattern 4
+-
+-on property:init.svc.bootanim=stopped
+-    write /sys/class/leds/lp5523:channel0/device/led_pattern 0
++# The boot chase (led_pattern on init.svc.bootanim) lives in init.ether.led.rc on /system:
++# a vendor rc may only trigger on properties exported to vendor_init, and init.svc.bootanim is
++# not one, so init drops such actions at parse time ("unexported property trigger found").
+diff --git a/sepolicy/robinled_app.te b/sepolicy/robinled_app.te
+new file mode 100644
+index 0000000..d630603
+--- /dev/null
++++ b/sepolicy/robinled_app.te
+@@ -0,0 +1,18 @@
++# Policy for the RobinLed app (com.nextbit.robinled). A NotificationListenerService running as
++# system uid that drives the rear LP5523 "cloud" LEDs by writing the OEM leds_on_off sysfs node
++# (labelled sysfs_leds via file_contexts). Modelled on timekeep_app.
++type robinled_app, domain;
++
++app_domain(robinled_app)
++
++# The app-facing system services (platform_app grants the same set). PowerManager alone needs
++# power_service AND thermal_service -- without thermal_service getSystemService(PowerManager)
++# returns null and onListenerConnected NPEs; the listener also needs notification_service.
++allow robinled_app app_api_service:service_manager find;
++
++# Drive the rear LED cluster: /sys/class/leds/lp5523:.../device/leds_on_off (u:object_r:sysfs_leds).
++# The "device" component of that path is a symlink carrying the same label; without lnk_file read
++# the open fails EACCES with no file-class denial in the log.
++allow robinled_app sysfs_leds:dir search;
++allow robinled_app sysfs_leds:lnk_file read;
++allow robinled_app sysfs_leds:file rw_file_perms;

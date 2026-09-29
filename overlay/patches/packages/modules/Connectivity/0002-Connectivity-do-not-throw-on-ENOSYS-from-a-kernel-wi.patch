@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 17:48:58 -0400
+Subject: [PATCH] Connectivity: do not throw on ENOSYS from a kernel with no
+ eBPF
+
+WiFi on ether 20.0 completes the WPA handshake and gets a full DHCP lease,
+then fails to provision:
+
+  E Netd    : no such netId 100
+  W ConnectivityService: Exception adding interface: ServiceSpecificException:
+              Machine is not on the network (code 64)
+  D ConnectivityService: Setting DNS servers for network 100 to []
+
+netd never created the network, so there is nothing for the routes or DNS to
+attach to. netd is not at fault -- ConnectivityService never called
+networkCreate(), because the setup path threw first:
+
+  E NetworkStats: IllegalStateException: IOException: ServiceSpecificException:
+                  Unable to swap active stats map: Function not implemented
+
+maybeThrow() converts any non-zero errno into a ServiceSpecificException, and
+all ten of its call sites are BPF operations. On a 3.10 kernel there is no
+bpf() syscall, so they return ENOSYS every time, forever -- 113 attempts in a
+single boot by WifiHandlerThread, NetworkPolicy, jobscheduler and others.
+
+ENOSYS here is not an error condition to propagate, it is a permanent property
+of the kernel. So log it and continue, the same reasoning applied to BpfMap's
+constructor: the BPF-backed features are unavailable either way, and taking the
+caller down with them is what actually breaks the device.
+
+Complements the existing BpfHandler patch (socket tagging) and the BpfMap
+constructor fix (map open). Same class, third location.
+---
+ service/src/com/android/server/BpfNetMaps.java | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/service/src/com/android/server/BpfNetMaps.java b/service/src/com/android/server/BpfNetMaps.java
+index c006bc605..be83c328e 100644
+--- a/service/src/com/android/server/BpfNetMaps.java
++++ b/service/src/com/android/server/BpfNetMaps.java
+@@ -16,6 +16,7 @@
+ 
+ package com.android.server;
+ 
++import static android.system.OsConstants.ENOSYS;
+ import static android.system.OsConstants.EOPNOTSUPP;
+ 
+ import android.net.INetd;
+@@ -67,6 +68,17 @@ public class BpfNetMaps {
+     }
+ 
+     private void maybeThrow(final int err, final String msg) {
++        if (err == ENOSYS) {
++            // No bpf() syscall at all: pre-4.x kernels predate it entirely, so every
++            // one of these calls will fail this way for the life of the device. Throwing
++            // aborts whatever operation the caller was part of -- on msm8992 that meant
++            // ConnectivityService never reached networkCreate(), so netd had no network
++            // to attach routes to and WiFi could not provision despite a valid DHCP
++            // lease. Degrade instead: the BPF-backed features (per-UID accounting, the
++            // firewall chains) are unavailable regardless, but the caller can continue.
++            Log.w(TAG, msg + ": " + Os.strerror(err) + " -- kernel has no eBPF, continuing");
++            return;
++        }
+         if (err != 0) {
+             throw new ServiceSpecificException(err, msg + ": " + Os.strerror(err));
+         }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Nextbit Robin nav-bar icon, redrawn as a VectorDrawable. Same annulus as the SystemUI set
+     (frameworks/base/packages/SystemUI/res/drawable/ic_sysbar_*.xml), re-centred on the 20dp
+     canvas Trebuchet uses: on branches with taskbar/navbar unification the phone 3-button bar is
+     drawn by the launcher taskbar, not SystemUI. Flat white on purpose: the taskbar tints the
+     ImageView (NavbarButtonsViewController.setImageTintList), so a theme attr would not resolve.
+-->
+<!-- top half of the ring, bounding box re-centred -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M1.825,14.09 A8.175,8.175 0 0,1 18.18,14.09 L14.82,14.09 A4.825,4.825 0 0,0 5.175,14.09 Z" />
+</vector>

@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 22:03:45 -0400
+Subject: [PATCH] ether: finish the CNE property access
+
+CNEService reads the same properties cnd does, and giving persist.cne.* and persist.vendor.cnd.*
+their own type moved them out of its reach as well --
+
+    avc: denied { read } comm=".dataservices" scontext=u:r:dataservice_app:s0
+                         tcontext=u:object_r:vendor_cne_prop:s0
+
+so the framework half of CNE lost access that relabelling was never meant to take. Same rule, same
+type. The app is hosted in the .dataservices process, which is why it does not show up as "cne" in ps
+and is easy to believe dead.
+
+persist.vendor.cnd.iwlan is CNE's own IWLAN switch, read by libcne, unset by this port and by stock.
+Worth setting only now that CNE can read that property space at all.
+---
+ device.mk       | 11 +++++++++++
+ sepolicy/cnd.te |  9 +++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/device.mk b/device.mk
+index 1a67cc5..a30bbbb 100644
+--- a/device.mk
++++ b/device.mk
+@@ -407,6 +407,17 @@ PRODUCT_PROPERTY_OVERRIDES += ro.telephony.block_binder_thread_on_incoming_calls
+ #   persist.radio.VT_CAM_INTERFACE -- video telephony is deliberately off (config_device_vt_available).
+ PRODUCT_PROPERTY_OVERRIDES += persist.data.iwlan.enable=true
+ 
++# CNE's own IWLAN switch, read by libcne alongside persist.cne.feature. Left unset by this port and
++# by stock. It is only worth setting now that sepolicy lets CNE read that property space at all --
++# before the property labelling patch the daemon could not see any persist.cne.* or
++# persist.vendor.cnd.* name at all, so this would have been another property set and never read.
++#
++# The measured effect of that patch was CNE going from "pref data tech UNKNOWN" to "pref tech LTE".
++# IWLAN still does not appear among the candidates it prepares, and this is the switch named for it.
++# persist.vendor.cnd.wqe is the other one libcne reads and is deliberately not set yet: one at a
++# time, so a change in the candidate list has a single cause.
++PRODUCT_PROPERTY_OVERRIDES += persist.vendor.cnd.iwlan=true
++
+ # nanopb 0.2.8, for libril-qc-qmi-1.so alone. See nanopb-0.2.8/Android.bp for why a second copy of
+ # nanopb has to exist at all.
+ PRODUCT_PACKAGES += libnanopb_legacy
+diff --git a/sepolicy/cnd.te b/sepolicy/cnd.te
+index 29bd066..2964d4b 100644
+--- a/sepolicy/cnd.te
++++ b/sepolicy/cnd.te
+@@ -10,3 +10,12 @@
+ # libcne reads to find the WLAN interface it is supposed to be evaluating.
+ get_prop(cnd, vendor_cne_prop)
+ get_prop(cnd, wifi_hal_prop)
++
++# CNEService, the framework half of the Connectivity Engine, reads the same properties. It is not a
++# separate concern from the rule above: giving persist.cne.* and persist.vendor.cnd.* their own type
++# moved them out of default_prop, which this domain could read, so relabelling alone takes the
++# access away from it:
++#   avc: denied { read } comm=".dataservices" scontext=u:r:dataservice_app:s0
++#                        tcontext=u:object_r:vendor_cne_prop:s0
++# The app is hosted in the .dataservices process, which is why `ps | grep cne` does not find it.
++get_prop(dataservice_app, vendor_cne_prop)

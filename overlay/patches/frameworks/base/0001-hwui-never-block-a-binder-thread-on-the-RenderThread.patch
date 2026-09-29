@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 04:57:11 -0400
+Subject: [PATCH] hwui: never block a binder thread on the RenderThread's draw
+ lock
+
+The launcher and SystemUI freeze for exactly 4 s, then everything queued
+during the freeze lands at once. A trace with binder driver events and
+syscalls shows the cycle:
+
+  1. RenderThread takes mFrameMetricsReporterMutex for the whole of draw()
+     ("Fix crash from asynchronous GPU metrics", Android 13). This device's
+     Adreno driver has no EGL_EXT_buffer_age (debug.hwui.use_buffer_age is
+     off), so the window buffer is not dequeued in getFrame() before the
+     lock but lazily inside draw(). RenderThread sits in dequeueBuffer,
+     holding the lock, waiting for SurfaceFlinger to release a buffer.
+  2. SurfaceFlinger's oneway onTransactionCompleted arrives on a binder
+     thread. It releases its buffer, then calls the surface-stats listener,
+     CanvasContext::onSurfaceStatsAvailable, which blocks on the same mutex.
+  3. That thread has not returned, so it has not sent BC_FREE_BUFFER. The
+     binder driver therefore parks every later oneway transaction to this
+     process in async_todo -- including the next onTransactionCompleted,
+     the one carrying the release RenderThread is waiting for.
+  4. Nothing moves until the 4000 ms dequeueBuffer timeout fires;
+     RenderThread drops the lock, the binder thread frees, the parked
+     callbacks flush, and the frames drawn meanwhile all present together.
+
+trace: futex(0x77d5c703b8) held by RenderThread from before dequeueBuffer
+(3548.4966) until after "flush commands" (3552.5297); binder:2173_2 waits
+on it from 3548.5095, frees its transaction at 3552.5757, and only then
+receives the callbacks SurfaceFlinger sent during the stall.
+
+Do not wait on a binder thread. Hand the stats to the RenderThread, which
+owns the frame data anyway (the pre-13 code ran finishFrame there). A
+weak token tells the queued task if the context died first; both run on
+the RenderThread, so the check cannot race the destructor.
+
+Devices whose drivers dequeue in getFrame() never saw this, which is why
+it is invisible on modern hardware and absent from lineage-19.1.
+---
+ libs/hwui/renderthread/CanvasContext.cpp | 38 +++++++++++++++++-------
+ libs/hwui/renderthread/CanvasContext.h   |  5 ++++
+ 2 files changed, 32 insertions(+), 11 deletions(-)
+
+diff --git a/libs/hwui/renderthread/CanvasContext.cpp b/libs/hwui/renderthread/CanvasContext.cpp
+index f56d19bfcea0..c74afb7fc983 100644
+--- a/libs/hwui/renderthread/CanvasContext.cpp
++++ b/libs/hwui/renderthread/CanvasContext.cpp
+@@ -761,17 +761,33 @@ void CanvasContext::onSurfaceStatsAvailable(void* context, int32_t surfaceContro
+     }
+     uint64_t frameNumber = functions.getFrameNumberFunc(stats);
+ 
+-    FrameInfo* frameInfo = instance->getFrameInfoFromLast4(frameNumber, surfaceControlId);
+-
+-    if (frameInfo != nullptr) {
+-        std::scoped_lock lock(instance->mFrameMetricsReporterMutex);
+-        frameInfo->set(FrameInfoIndex::FrameCompleted) = std::max(gpuCompleteTime,
+-                frameInfo->get(FrameInfoIndex::SwapBuffersCompleted));
+-        frameInfo->set(FrameInfoIndex::GpuCompleted) = std::max(
+-                gpuCompleteTime, frameInfo->get(FrameInfoIndex::CommandSubmissionCompleted));
+-        instance->mJankTracker.finishFrame(*frameInfo, instance->mFrameMetricsReporter, frameNumber,
+-                                           surfaceControlId);
+-    }
++    // This runs on a binder thread, inside SurfaceFlinger's oneway onTransactionCompleted
++    // callback, and mFrameMetricsReporterMutex is held by the RenderThread for the whole of
++    // draw(). Blocking here is not a matter of latency: while this thread sleeps it has not
++    // freed the transaction buffer, so the binder driver parks every later oneway callback to
++    // this process -- including the one carrying the next buffer release. If the RenderThread
++    // is inside draw() waiting in dequeueBuffer for exactly that release, nothing moves until
++    // the 4 s dequeue timeout. Drivers with EGL_EXT_buffer_age dequeue in getFrame(), before
++    // the lock, and never hit this; ones without it (buffer age off, swap behaviour Preserved)
++    // dequeue lazily inside draw() and deadlock. So never wait: hand the work to the
++    // RenderThread, which owns this data anyway. The token tells the queued task whether
++    // the context is still alive when it runs.
++    std::weak_ptr<bool> alive = instance->mSurfaceStatsToken;
++    instance->mRenderThread.queue().post(
++            [instance, alive, frameNumber, surfaceControlId, gpuCompleteTime]() {
++                if (alive.expired()) return;
++                FrameInfo* frameInfo =
++                        instance->getFrameInfoFromLast4(frameNumber, surfaceControlId);
++                if (frameInfo == nullptr) return;
++                std::scoped_lock lock(instance->mFrameMetricsReporterMutex);
++                frameInfo->set(FrameInfoIndex::FrameCompleted) = std::max(
++                        gpuCompleteTime, frameInfo->get(FrameInfoIndex::SwapBuffersCompleted));
++                frameInfo->set(FrameInfoIndex::GpuCompleted) = std::max(
++                        gpuCompleteTime,
++                        frameInfo->get(FrameInfoIndex::CommandSubmissionCompleted));
++                instance->mJankTracker.finishFrame(*frameInfo, instance->mFrameMetricsReporter,
++                                                   frameNumber, surfaceControlId);
++            });
+ }
+ 
+ // Called by choreographer to do an RT-driven animation
+diff --git a/libs/hwui/renderthread/CanvasContext.h b/libs/hwui/renderthread/CanvasContext.h
+index d85e579e371c..e84aa600ecec 100644
+--- a/libs/hwui/renderthread/CanvasContext.h
++++ b/libs/hwui/renderthread/CanvasContext.h
+@@ -40,6 +40,7 @@
+ #include <utils/Mutex.h>
+ 
+ #include <functional>
++#include <memory>
+ #include <future>
+ #include <set>
+ #include <string>
+@@ -318,6 +319,10 @@ private:
+             GUARDED_BY(mFrameMetricsReporterMutex);
+     std::mutex mFrameMetricsReporterMutex;
+ 
++    // Liveness token for work onSurfaceStatsAvailable hands to the RenderThread. Dies with the
++    // context, on the RenderThread, so a queued task that finds it expired must not touch this.
++    std::shared_ptr<bool> mSurfaceStatsToken = std::make_shared<bool>(true);
++
+     std::set<RenderNode*> mPrefetchedLayers;
+ 
+     // Stores the bounds of the main content.

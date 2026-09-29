@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: default wallpaper via ro.config.wallpaper, OEM pack
+ overrides it
+
+WallpaperManager.openDefaultWallpaper() reads ro.config.wallpaper -- a file path --
+before falling back to the framework default_wallpaper drawable. Setting the property
+sidesteps a long-standing LineageOS gotcha where the drawable in the auto-generated
+framework-res RRO does not reliably reach the live wallpaper on first boot.
+
+The file it points at is whatever the wallpaper option staged under vendor/extra, so
+the property and the framework default can never disagree. No option staged: nothing
+shipped, property unset, framework default as upstream. No image is committed here.
+
+A WITH_OEM build points it at OEM_DEFAULT_WALLPAPER instead, which the extracted
+asset pack sets if it has a home scene of its own. Whether to honour it is this
+device's decision; knowing the manufacturer's filename is not.
+---
+ device.mk | 36 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/device.mk b/device.mk
+index 8b68483..9aef774 100644
+--- a/device.mk
++++ b/device.mk
+@@ -305,6 +305,42 @@ PRODUCT_COPY_FILES += \
+ endif
+ endif
+ 
++# Default wallpaper — ship the skin's wallpaper as a FILE and point ro.config.wallpaper at it.
++# WallpaperManager.openDefaultWallpaper() reads this property (a file path) BEFORE falling back to
++# the framework default_wallpaper drawable, so it is immune to the RRO-timing quirk that makes the
++# drawable overlay silently NOT take on first boot (a long-standing LineageOS gotcha — the drawable
++# in the auto-generated framework-res RRO doesn't reach the live wallpaper). The file is whatever
++# the wallpaper option staged under vendor/extra (so the option never writes into this tree). With
++# no wallpaper option staged nothing is shipped and the property stays unset: the framework default
++# applies, as upstream.
++ether_def_wallpaper :=
++ether_def_wallpaper_src := $(wildcard vendor/extra/wallpaper/default_wallpaper.jpg)
++ifneq ($(ether_def_wallpaper_src),)
++PRODUCT_COPY_FILES += \
++    $(ether_def_wallpaper_src):$(TARGET_COPY_OUT_PRODUCT)/media/wallpaper/nextbit_default.jpg
++ether_def_wallpaper := /product/media/wallpaper/nextbit_default.jpg
++endif
++# WITH_OEM (robin) builds default to the original Robin home scene (robin_scene, shipped to
++# /product/media/wallpaper by the OEM wallpaper block above); other builds keep the skin's.
++# The skin's stays selectable in the Backgrounds picker either way.
++# OEM_DEFAULT_WALLPAPER is set by whichever OEM asset pack was extracted, if that pack has a home
++# scene of its own. Choosing to honour it is this device's decision; knowing the filename is not.
++#
++# The pack writes it to its own vars file and we -include it HERE, in the device's scope. It is not
++# enough for the oem option to set it: the option lives in vendor/extra/product.mk, inherited after
++# this makefile, so the test below ran against an empty value and every WITH_OEM build silently fell
++# through to the skin's. -include, so a build without the pack staged is still fine.
++-include vendor/extra/oem-assets/assets-vars.mk
++ifeq ($(WITH_OEM),true)
++ifneq ($(OEM_DEFAULT_WALLPAPER),)
++ether_def_wallpaper := $(OEM_DEFAULT_WALLPAPER)
++endif
++endif
++ifneq ($(ether_def_wallpaper),)
++PRODUCT_PROPERTY_OVERRIDES += \
++    ro.config.wallpaper=$(ether_def_wallpaper)
++endif
++
+ # Thermal
+ PRODUCT_COPY_FILES += \
+     $(LOCAL_PATH)/configs/thermal-engine-8992.conf:$(TARGET_COPY_OUT_VENDOR)/etc/thermal-engine-8992.conf

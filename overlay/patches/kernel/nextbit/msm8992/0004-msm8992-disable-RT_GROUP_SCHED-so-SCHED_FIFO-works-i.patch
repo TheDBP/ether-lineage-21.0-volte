@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 22:12:12 -0400
+Subject: [PATCH] msm8992: disable RT_GROUP_SCHED so SCHED_FIFO works in
+ cgroups
+
+Bluetooth crashes on every enable, aborting during stack startup:
+
+  bt_osi_alarm: timer_create_internal unable to create timer with clock 7:
+                Operation not permitted
+  libbluetooth_jni.so (alarm_new_internal + tBTM_CB::Init +
+                       event_start_up_stack)
+  am_crash: [com.android.bluetooth, Native crash, Aborted]
+
+Clock 7 is plain CLOCK_BOOTTIME, not the alarm variant, so the existing
+CLOCK_BOOTTIME_ALARM -> CLOCK_BOOTTIME fallback in alarm.cc never helps. The
+EPERM comes from the thread attributes: timer_create() with SIGEV_THREAD
+spawns its notify thread with SCHED_FIFO at THREAD_RT_PRIORITY.
+
+With CONFIG_RT_GROUP_SCHED=y, real-time bandwidth is allocated per cgroup and
+child groups default to zero, so no task in one may use SCHED_FIFO:
+
+  /dev/cpuctl/cpu.rt_runtime_us                 950000
+  /dev/cpuctl/foreground/cpu.rt_runtime_us           0
+  /dev/cpuctl/background/cpu.rt_runtime_us           0
+  /dev/cpuctl/camera-daemon/cpu.rt_runtime_us        0
+
+Every Android process lives in one of those child groups, so SCHED_FIFO was
+unavailable system-wide. Disabling RT_GROUP_SCHED is what current Android
+kernels do; the alternative is distributing rt_runtime across every cgroup at
+init, which is fragile and buys nothing here.
+
+Worth noting camera-daemon is in the same position, so other subsystems that
+ask for real-time threads were affected too, not just Bluetooth.
+---
+ arch/arm64/configs/lineageos_ether_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/configs/lineageos_ether_defconfig b/arch/arm64/configs/lineageos_ether_defconfig
+index 0201c01bed0..1e6c7e4e8e7 100644
+--- a/arch/arm64/configs/lineageos_ether_defconfig
++++ b/arch/arm64/configs/lineageos_ether_defconfig
+@@ -24,7 +24,7 @@ CONFIG_CGROUP_CPUACCT=y
+ CONFIG_RESOURCE_COUNTERS=y
+ CONFIG_CGROUP_SCHED=y
+ CONFIG_CFS_BANDWIDTH=y
+-CONFIG_RT_GROUP_SCHED=y
++# CONFIG_RT_GROUP_SCHED is not set
+ CONFIG_SCHED_HMP=y
+ CONFIG_NAMESPACES=y
+ # CONFIG_UTS_NS is not set

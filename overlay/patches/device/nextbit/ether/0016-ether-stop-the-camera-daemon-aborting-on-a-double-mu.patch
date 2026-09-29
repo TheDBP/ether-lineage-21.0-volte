@@ -1,0 +1,157 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 17:14:56 -0400
+Subject: [PATCH] ether: stop the camera daemon aborting on a double mutex
+ destroy
+
+ destroy
+
+ destroy
+
+mm-qcamera-daemon dies tearing down an ISP session:
+
+  FORTIFY: pthread_mutex_destroy called on a destroyed mutex (0xef066f84)
+  #03 pthread_mutex_destroy
+  #04 libmmcamera2_isp_modules.so
+  #05 liboemcamera.so
+
+The blob destroys the same mutex twice. Against the Android 7 bionic it shipped with, the second
+call returned an error nobody checked; Android 13's bionic calls abort() instead, so the daemon dies
+and init respawns it -- eight tombstones in one boot here, always this signature.
+
+The double destroy is in a closed blob on a path we do not control, so make the second call harmless
+again. A no-op is safe because bionic's pthread_mutex_t is a caller-owned struct with no heap
+allocation and no kernel object: destroying it only marks the memory unusable, and skipping that
+leaks nothing. The cost is that real misuse in this one daemon stops being reported, which is the
+trade we want when the report is a crash loop.
+
+Scoped to the camera daemon through TARGET_LD_SHIM_LIBS, so nothing else loses the check, and marked
+DF_1_GLOBAL for the same reason as libshims_ppd_poll: a shim arriving via DT_NEEDED sits behind libc
+in the lookup order and never gets called.
+---
+ BoardConfig.mk                       |  3 ++
+ device.mk                            |  3 ++
+ libshims/Android.mk                  | 15 +++++++
+ libshims/camera_mutex/camera_mutex.c | 62 ++++++++++++++++++++++++++++
+ 4 files changed, 83 insertions(+)
+ create mode 100644 libshims/camera_mutex/camera_mutex.c
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index d9e08ab..53cf72e 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -167,6 +167,9 @@ TARGET_LD_SHIM_LIBS := \
+ TARGET_LD_SHIM_LIBS += \
+     /system/vendor/lib64/libdisp-aba.so|libshims_ppd_poll.so
+ 
++TARGET_LD_SHIM_LIBS += \
++    /system/vendor/lib/libmmcamera2_isp_modules.so|libshims_camera_mutex.so
++
+ # WiFi
+ BOARD_HAS_QCOM_WLAN              := true
+ BOARD_HOSTAPD_DRIVER             := NL80211
+diff --git a/device.mk b/device.mk
+index 546f497..db1923d 100644
+--- a/device.mk
++++ b/device.mk
+@@ -176,6 +176,9 @@ PRODUCT_PACKAGES += \
+ PRODUCT_PACKAGES += \
+     libshims_ppd_poll
+ 
++PRODUCT_PACKAGES += \
++    libshims_camera_mutex
++
+ PRODUCT_PACKAGES += \
+     vendor.lineage.livedisplay@2.0-service-legacymm \
+     vendor.lineage.livedisplay@2.0-service-sysfs
+diff --git a/libshims/Android.mk b/libshims/Android.mk
+index 847d80f..4d8c1f7 100644
+--- a/libshims/Android.mk
++++ b/libshims/Android.mk
+@@ -61,3 +61,18 @@ LOCAL_VENDOR_MODULE := true
+ LOCAL_LDFLAGS := -Wl,-z,global
+ 
+ include $(BUILD_SHARED_LIBRARY)
++
++include $(CLEAR_VARS)
++
++LOCAL_SRC_FILES := \
++    camera_mutex/camera_mutex.c
++
++LOCAL_MODULE := libshims_camera_mutex
++LOCAL_MODULE_TAGS := optional
++LOCAL_SHARED_LIBRARIES := liblog
++LOCAL_VENDOR_MODULE := true
++# See libshims_ppd_poll: DF_1_GLOBAL puts this in the linker's global group, which is searched
++# before libc, so our pthread_mutex_destroy is the one the blob reaches.
++LOCAL_LDFLAGS := -Wl,-z,global
++
++include $(BUILD_SHARED_LIBRARY)
+diff --git a/libshims/camera_mutex/camera_mutex.c b/libshims/camera_mutex/camera_mutex.c
+new file mode 100644
+index 0000000..562af46
+--- /dev/null
++++ b/libshims/camera_mutex/camera_mutex.c
+@@ -0,0 +1,62 @@
++/*
++ * Copyright (C) 2026 The LineageOS Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++/*
++ * mm-qcamera-daemon aborts on shutdown of an ISP session:
++ *
++ *   FORTIFY: pthread_mutex_destroy called on a destroyed mutex (0xef066f84)
++ *   #03 pthread_mutex_destroy
++ *   #04 libmmcamera2_isp_modules.so
++ *   #05 liboemcamera.so
++ *
++ * The blob destroys the same mutex twice. On the Android 7 bionic this shipped against that was
++ * harmless -- the second call returned an error nobody checked. Android 13's bionic treats it as a
++ * fatal FORTIFY violation and calls abort(), so the camera daemon dies and init respawns it. Eight
++ * tombstones on a single boot here, always this signature.
++ *
++ * We cannot fix the double destroy: it is in a closed blob, on a path we do not control. What we can
++ * do is make the second call harmless again.
++ *
++ * A no-op is safe specifically because of what bionic's pthread_mutex_t is: a plain struct owned by
++ * its caller, with no heap allocation and no kernel object behind it. Destroying it only marks the
++ * memory as unusable; skipping that leaks nothing. The cost is that genuine misuse in this one
++ * daemon stops being reported -- which is the trade we want, since the "report" is a crash loop in
++ * the camera stack.
++ *
++ * Scoped to the camera daemon by TARGET_LD_SHIM_LIBS in BoardConfig.mk, so nothing else in the
++ * system loses the check.
++ */
++
++#define LOG_TAG "camera_mutex"
++
++#include <pthread.h>
++#include <stdbool.h>
++
++#include <log/log.h>
++
++int pthread_mutex_destroy(pthread_mutex_t* mutex) {
++    static bool reported = false;
++
++    (void)mutex;
++
++    if (!reported) {
++        ALOGI("camera_mutex: pthread_mutex_destroy neutralised for this process; "
++              "the ISP blob destroys mutexes twice and A13 bionic aborts on that");
++        reported = true;
++    }
++
++    return 0;
++}

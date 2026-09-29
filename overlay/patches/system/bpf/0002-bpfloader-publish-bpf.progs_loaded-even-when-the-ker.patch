@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 18:59:01 -0400
+Subject: [PATCH] bpfloader: publish bpf.progs_loaded even when the kernel has
+ no eBPF
+
+Rebased from 19.1. Note the 19.1 patch still applies to A13 *cleanly* -- this
+is not a context conflict. Applying it unchanged would have produced a build
+that silently still hangs on boot.
+
+The 19.1 change was one line: replace the 'sleep(20); return 2;' on ELF load
+failure with 'break', so control falls through to
+SetProperty("bpf.progs_loaded", "1"). Without it every waitForProgsLoaded()
+caller blocks forever -- netd never registers INetd, system_server hangs in
+StartNetworkManagementService until the watchdog stack-dumps it, and the
+device sits on the boot animation with no crash and no reboot.
+
+A13 added a bpf map self-test between the load loop and the SetProperty call:
+
+    createMap(BPF_MAP_TYPE_ARRAY, ...) / writeToMapEntry(...) -> return 1
+
+On a kernel with no eBPF both always fail, so on 20.0 the 19.1 'break' would
+still return 1 before publishing the property -- reintroducing the exact hang
+the break exists to prevent, while looking like a successful patch apply. So
+this also gates the self-test behind a new bpfUnsupported flag, leaving it
+fully intact on hardware that does have eBPF.
+---
+ bpfloader/BpfLoader.cpp | 37 ++++++++++++++++++++++++++++---------
+ 1 file changed, 28 insertions(+), 9 deletions(-)
+
+diff --git a/bpfloader/BpfLoader.cpp b/bpfloader/BpfLoader.cpp
+index 5cd80b7..32c424a 100644
+--- a/bpfloader/BpfLoader.cpp
++++ b/bpfloader/BpfLoader.cpp
+@@ -178,6 +178,9 @@ int main(int argc, char** argv) {
+     (void)argc;
+     android::base::InitLogging(argv, &android::base::KernelLogger);
+ 
++    // ether/msm8992: set when the kernel turns out to have no eBPF support at all.
++    bool bpfUnsupported = false;
++
+     // Create all the pin subdirectories
+     // (this must be done first to allow selinux_context and pin_subdir functionality,
+     //  which could otherwise fail with ENOENT during object pinning or renaming,
+@@ -194,18 +197,34 @@ int main(int argc, char** argv) {
+             ALOGE("If this triggers randomly, you might be hitting some memory allocation "
+                   "problems or startup script race.");
+             ALOGE("--- DO NOT EXPECT SYSTEM TO BOOT SUCCESSFULLY ---");
+-            sleep(20);
+-            return 2;
++            // ether/msm8992: the 3.10.108 kernel has no eBPF at all, so this failure is
++            // expected and permanent rather than transient. Returning here leaves
++            // bpf.progs_loaded unset, and every waitForProgsLoaded() caller then blocks
++            // forever -- netd above all:
++            //     Netd: Waited 60s for bpf.progs_loaded, still waiting...
++            // which never registers INetd, hangs system_server in
++            // StartNetworkManagementService until the watchdog stack-dumps it, and leaves
++            // the device on the boot animation with no crash and no reboot. Nothing will
++            // ever load, so stop retrying and publish the property below anyway; netd's
++            // restored no-eBPF fallback takes it from there.
++            bpfUnsupported = true;
++            break;
+         }
+     }
+ 
+-    int key = 1;
+-    int value = 123;
+-    android::base::unique_fd map(
+-            android::bpf::createMap(BPF_MAP_TYPE_ARRAY, sizeof(key), sizeof(value), 2, 0));
+-    if (android::bpf::writeToMapEntry(map, &key, &value, BPF_ANY)) {
+-        ALOGE("Critical kernel bug - failure to write into index 1 of 2 element bpf map array.");
+-        return 1;
++    // ether/msm8992: A13 added this bpf map self-test, which 19.1 did not have. On a kernel
++    // with no eBPF createMap/writeToMapEntry always fail, and this "return 1" would abort
++    // before the SetProperty below -- reintroducing exactly the hang that breaking out of
++    // the load loop above is meant to avoid. Only run the self-test if bpf actually loaded.
++    if (!bpfUnsupported) {
++        int key = 1;
++        int value = 123;
++        android::base::unique_fd map(
++                android::bpf::createMap(BPF_MAP_TYPE_ARRAY, sizeof(key), sizeof(value), 2, 0));
++        if (android::bpf::writeToMapEntry(map, &key, &value, BPF_ANY)) {
++            ALOGE("Critical kernel bug - failure to write into index 1 of 2 element bpf map array.");
++            return 1;
++        }
+     }
+ 
+     if (android::base::SetProperty("bpf.progs_loaded", "1") == false) {

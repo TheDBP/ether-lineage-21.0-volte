@@ -1,0 +1,25 @@
+From afce898a66c61fbd7e684f7151cc4515bb7d3e8a Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 23:13:42 -0400
+Subject: [PATCH] default to dark theme (config_defaultNightMode: 1 -> 2)
+
+---
+ core/res/res/values/config.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/res/res/values/config.xml b/core/res/res/values/config.xml
+index 18fd4447..f7badc3e 100644
+--- a/core/res/res/values/config.xml
++++ b/core/res/res/values/config.xml
+@@ -906,7 +906,7 @@
+              1 - MODE_NIGHT_NO
+              2 - MODE_NIGHT_YES
+     -->
+-    <integer name="config_defaultNightMode">1</integer>
++    <integer name="config_defaultNightMode">2</integer>
+ 
+     <!-- Boolean indicating whether the HWC setColorTransform function can be performed efficiently
+          in hardware. -->
+-- 
+2.43.0
+

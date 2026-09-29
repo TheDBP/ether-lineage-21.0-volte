@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 13:19:54 -0400
+Subject: [PATCH] SetupWizard: leave mobile data alone
+
+onCreate() calls setMobileDataEnabled(this, false) unconditionally for the owner, and nothing ever
+turns it back on: finishSetupWizard() sets DEVICE_PROVISIONED and USER_SETUP_COMPLETE but not this,
+and there is no mobile-data page anywhere in the wizard. The only call site in the whole app passes
+false.
+
+The result is a device that finishes setup with mobile data off and no indication why, on a fresh
+install where the user has no other way to know. It also makes the wizard itself unusable without
+Wi-Fi, and DataSettingsManager ignores the user setting entirely while DEVICE_PROVISIONED is 0, so
+the value written here is not even the one consulted during setup.
+
+Drop the call and inherit whatever the platform default is.
+
+---
+ src/org/lineageos/setupwizard/SetupWizardApp.java | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/org/lineageos/setupwizard/SetupWizardApp.java b/src/org/lineageos/setupwizard/SetupWizardApp.java
+index 51d65af..60b327c 100644
+--- a/src/org/lineageos/setupwizard/SetupWizardApp.java
++++ b/src/org/lineageos/setupwizard/SetupWizardApp.java
+@@ -95,9 +95,6 @@ public class SetupWizardApp extends Application {
+         NetworkMonitor.initInstance(this);
+         PhoneMonitor.initInstance(this);
+         SetupWizardUtils.disableComponentsForMissingFeatures(this);
+-        if (SetupWizardUtils.isOwner()) {
+-            SetupWizardUtils.setMobileDataEnabled(this, false);
+-        }
+         sStatusBarManager = SetupWizardUtils.disableStatusBar(this);
+         mHandler.postDelayed(mRadioTimeoutRunnable, SetupWizardApp.RADIO_READY_TIMEOUT);
+     }

@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 10:28:42 -0400
+Subject: [PATCH] binder: ignore a threadpool shrink instead of aborting
+
+android.hardware.audio.service SIGABRTs on every start on this device:
+
+  signal 6 (SIGABRT)
+  Abort message: 'Binder threadpool cannot be shrunk after starting'
+
+It is a passthrough HAL: service.cpp configures a pool of 16, then loads this
+device's Android 11 vendor audio HAL in-process, which requests a smaller
+pool. setThreadPoolMaxThreadCount treats any shrink after start as fatal.
+
+The knock-on is what actually blocks boot. IDevicesFactory never registers,
+so system_server blocks in startOtherServices ('AudioPolicyService not
+published, waiting...') until the watchdog kills it:
+
+  *** WATCHDOG KILLING SYSTEM PROCESS: Blocked in handler on main thread
+
+and the device never leaves the boot animation.
+
+maxThreads is an upper bound on binder worker threads, so keeping the larger
+value costs a handful of idle threads and nothing else. Aborting the process
+-- and with it the boot -- is the worse trade on hardware whose vendor blobs
+we cannot change.
+---
+ libs/binder/ProcessState.cpp | 22 ++++++++++++++++++++--
+ 1 file changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/libs/binder/ProcessState.cpp b/libs/binder/ProcessState.cpp
+index 4a01d8176d..d18d1c751f 100644
+--- a/libs/binder/ProcessState.cpp
++++ b/libs/binder/ProcessState.cpp
+@@ -390,8 +390,26 @@ void ProcessState::spawnPooledThread(bool isMain)
+ }
+ 
+ status_t ProcessState::setThreadPoolMaxThreadCount(size_t maxThreads) {
+-    LOG_ALWAYS_FATAL_IF(mThreadPoolStarted && maxThreads < mMaxThreads,
+-           "Binder threadpool cannot be shrunk after starting");
++    // ether/msm8992: ignore a shrink instead of aborting.
++    //
++    // android.hardware.audio.service is a PASSTHROUGH HAL here: it sets the pool to 16 in
++    // service.cpp and then loads this device's Android 11 vendor audio HAL in-process, which asks
++    // for a smaller pool. Upstream makes that fatal, so the service SIGABRTs on every start:
++    //
++    //   Abort message: 'Binder threadpool cannot be shrunk after starting'
++    //
++    // IDevicesFactory therefore never registers, system_server blocks in startOtherServices with
++    // "AudioPolicyService not published, waiting...", and the watchdog kills it -- the device
++    // never leaves the boot animation.
++    //
++    // Keeping a LARGER pool than requested is harmless: maxThreads is an upper bound on binder
++    // worker threads, so honouring the high-water mark only costs a few idle threads. Refusing to
++    // boot is the worse trade.
++    if (mThreadPoolStarted && maxThreads < mMaxThreads) {
++        ALOGW("Ignoring binder threadpool shrink from %zu to %zu (keeping the larger value)",
++              mMaxThreads, maxThreads);
++        return NO_ERROR;
++    }
+     status_t result = NO_ERROR;
+     if (ioctl(mDriverFD, BINDER_SET_MAX_THREADS, &maxThreads) != -1) {
+         mMaxThreads = maxThreads;

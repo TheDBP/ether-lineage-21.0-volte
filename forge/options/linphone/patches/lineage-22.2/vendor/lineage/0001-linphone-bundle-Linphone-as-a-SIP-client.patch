@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 14:09:45 -0400
+Subject: [PATCH] linphone: bundle Linphone as a SIP client
+
+vendor/lineage/prebuilts/linphone module, installed unmodified, plus a guarded PRODUCT_PACKAGES
+line in config/common.mk. The APK is fetched by the linphone option's fetch.sh (the current
+F-Droid build, signer-pinned); the module is a no-op without it.
+
+This is a SIP client, not VoLTE: it does not register with the carrier's IMS, so it carries no
+mobile number and cannot place emergency calls. On a device with no VoLTE it is the only voice
+path left over LTE data, and Android dropped its own SIP stack in 12.
+---
+ config/common.mk                  |  9 +++++++++
+ prebuilts/linphone/.gitignore     |  8 ++++++++
+ prebuilts/linphone/jni/Android.mk | 26 ++++++++++++++++++++++++++
+ 3 files changed, 43 insertions(+)
+ create mode 100644 prebuilts/linphone/.gitignore
+ create mode 100644 prebuilts/linphone/jni/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 5265427b..9e4e354d 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -78,6 +78,15 @@ PRODUCT_COPY_FILES += \
+ PRODUCT_COPY_FILES += \
+     frameworks/native/data/etc/android.software.sip.voip.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/android.software.sip.voip.xml
+ 
++# linphone option: Linphone, a SIP client, for voice over data where the device has no VoLTE.
++# Guarded on the fetched APK so a build without the option (no APK) is unaffected; require.sh
++# fails the build if the option is on and the APK is missing.# Native libraries the fetcher unpacked beside the APK, if any, install as one module each
++# (prebuilts/linphone/jni).
++ifneq ($(wildcard vendor/lineage/prebuilts/linphone/Linphone.apk),)
++PRODUCT_PACKAGES += Linphone
++PRODUCT_PACKAGES += $(patsubst %.so,Linphone_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/linphone/lib/arm64-v8a/*.so)))
++endif
++
+ # Credential storage
+ PRODUCT_PACKAGES += \
+     android.software.credentials.prebuilt.xml
+diff --git a/prebuilts/linphone/.gitignore b/prebuilts/linphone/.gitignore
+new file mode 100644
+index 00000000..8d1d6723
+--- /dev/null
++++ b/prebuilts/linphone/.gitignore
+@@ -0,0 +1,8 @@
++# Everything here but jni/ is written by the linphone option (forge/prebuilt/fetch-linphone.sh):
++# the APK, the native libraries it unpacks beside it should a release ever pack them compressed,
++# and the Soong module file, which it writes per fetch because skip_preprocessed_apk_checks must
++# match the APK.
++*.apk
++*.apk.download
++/lib/
++/Android.bp
+diff --git a/prebuilts/linphone/jni/Android.mk b/prebuilts/linphone/jni/Android.mk
+new file mode 100644
+index 00000000..def641af
+--- /dev/null
++++ b/prebuilts/linphone/jni/Android.mk
+@@ -0,0 +1,26 @@
++# Linphone native libraries. The APK is installed byte for byte (see ../Android.bp, written by the
++# fetcher) and PackageManager does not extract native libraries for a bundled app, so if
++# fetch-linphone.sh ever finds them compressed or unaligned it unpacks lib/arm64-v8a/ beside it and
++# these install as app/Linphone/lib/arm64/. Linphone stores them aligned today, so nothing here is
++# defined; it costs nothing and catches the release that changes that.
++LOCAL_PATH := $(call my-dir)/..
++
++LINPHONE_JNI_LIBS := $(notdir $(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++
++define linphone-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := Linphone_jni_$(1:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(1:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := lib/arm64-v8a/$(1)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/app/Linphone/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach lib,$(LINPHONE_JNI_LIBS),$(eval $(call linphone-jni-module,$(lib))))
+-- 
+2.53.0
+

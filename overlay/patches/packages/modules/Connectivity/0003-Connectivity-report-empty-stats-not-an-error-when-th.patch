@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 18:33:03 -0400
+Subject: [PATCH] Connectivity: report empty stats, not an error, when there is
+ no eBPF
+
+Fourth and final layer of the same problem. With the BpfMap constructor and
+BpfNetMaps.maybeThrow already fixed, the failure moved one level down:
+
+  D TrafficControllerJni: native_swapActiveStatsMap failed, error code = 38
+  W BpfNetMaps: Unable to swap active stats map ... kernel has no eBPF, continuing
+  W BpfMap: pinned map netd_iface_index_name_map unavailable; leaving map invalid
+  E BpfNetworkStats: get ifaceIndexName map fd failed: Function not implemented
+  E NetworkStats: java.lang.IllegalStateException: java.io.IOException:
+                  Failed to parse network stats
+
+The consequence is much worse than lost statistics. NetworkStatsFactory turns
+a non-zero return into IOException, NetworkStatsService wraps it in
+IllegalStateException, and it unwinds out of
+ConnectivityService.updateLinkProperties(). The rest of network setup is
+abandoned, so the agent never leaves CONNECTING; createNativeNetwork() only
+runs on CONNECTED, so netd never gets the network:
+
+  E Netd: no such netId 100
+  W ConnectivityService: Exception adding interface: Machine is not on the
+                         network (code 64)
+  D ConnectivityService: Setting DNS servers for network 100 to []
+
+which is why WiFi associates, completes a full DHCP exchange with a valid
+lease, and is then dropped ~18 seconds later having never been usable.
+
+So on ENOSYS both parse entry points now return 0 with no stats rather than an
+error. Per-UID accounting is unavailable on this kernel regardless; being
+unable to connect at all is not an acceptable way to express that.
+---
+ .../libs/libnetworkstats/BpfNetworkStats.cpp  | 36 ++++++++++++++++++-
+ 1 file changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/service-t/native/libs/libnetworkstats/BpfNetworkStats.cpp b/service-t/native/libs/libnetworkstats/BpfNetworkStats.cpp
+index 9ebef4d6d..26ab8067b 100644
+--- a/service-t/native/libs/libnetworkstats/BpfNetworkStats.cpp
++++ b/service-t/native/libs/libnetworkstats/BpfNetworkStats.cpp
+@@ -189,6 +189,23 @@ int parseBpfNetworkStatsDetail(std::vector<stats_line>* lines,
+     BpfMapRO<uint32_t, IfaceValue> ifaceIndexNameMap(IFACE_INDEX_NAME_MAP_PATH);
+     if (!ifaceIndexNameMap.isValid()) {
+         int ret = -errno;
++        if (errno == ENOSYS) {
++            // No bpf() syscall at all -- pre-4.x kernels predate it, so these pinned
++            // maps can never exist. Report success with no stats instead of an error.
++            //
++            // A non-zero return here becomes IOException("Failed to parse network
++            // stats") in NetworkStatsFactory, which unwinds through
++            // NetworkStatsService.notifyNetworkStatus() and out of
++            // ConnectivityService.updateLinkProperties(). That abandons the rest of
++            // network setup, so the agent never reaches CONNECTED, so
++            // createNativeNetwork() never runs, so netd has no network to attach
++            // routes to -- the device gets a DHCP lease and still cannot use it.
++            //
++            // Losing per-UID traffic accounting is the acceptable cost; being unable
++            // to connect at all is not.
++            ALOGW("%s: no eBPF on this kernel, reporting empty stats", __func__);
++            return 0;
++        }
+         ALOGE("get ifaceIndexName map fd failed: %s", strerror(errno));
+         return ret;
+     }
+@@ -265,7 +282,24 @@ int parseBpfNetworkStatsDev(std::vector<stats_line>* lines) {
+     int ret = 0;
+     BpfMapRO<uint32_t, IfaceValue> ifaceIndexNameMap(IFACE_INDEX_NAME_MAP_PATH);
+     if (!ifaceIndexNameMap.isValid()) {
+-        ret = -errno;
++        int ret = -errno;
++        if (errno == ENOSYS) {
++            // No bpf() syscall at all -- pre-4.x kernels predate it, so these pinned
++            // maps can never exist. Report success with no stats instead of an error.
++            //
++            // A non-zero return here becomes IOException("Failed to parse network
++            // stats") in NetworkStatsFactory, which unwinds through
++            // NetworkStatsService.notifyNetworkStatus() and out of
++            // ConnectivityService.updateLinkProperties(). That abandons the rest of
++            // network setup, so the agent never reaches CONNECTED, so
++            // createNativeNetwork() never runs, so netd has no network to attach
++            // routes to -- the device gets a DHCP lease and still cannot use it.
++            //
++            // Losing per-UID traffic accounting is the acceptable cost; being unable
++            // to connect at all is not.
++            ALOGW("%s: no eBPF on this kernel, reporting empty stats", __func__);
++            return 0;
++        }
+         ALOGE("get ifaceIndexName map fd failed: %s", strerror(errno));
+         return ret;
+     }

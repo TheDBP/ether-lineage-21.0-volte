@@ -1,0 +1,236 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 17:14:56 -0400
+Subject: [PATCH] ether: stop mm-pp-daemon spinning a core on an uninitialised
+ poll fd
+
+ poll fd
+
+ poll fd
+
+The Qualcomm post-processing daemon waits on two descriptors and initialises only one. Slot 0 keeps
+whatever was on the stack -- the fd read 0x40F00000 on one boot and 0x4FB00000 on the next, and its
+events mask carries POLLHUP and POLLNVAL, output-only flags no caller requests. Slot 1 is the real
+one, fb0/dyn_pu, polled correctly with POLLPRI|POLLERR.
+
+poll() reports POLLNVAL for an invalid descriptor and returns at once, so the wait never waits:
+~6700 poll() calls a second and 98% of one core, continuously from boot -- 690 seconds of CPU in the
+first 716 of uptime. Stock ships the same daemon and the same ro.qualcomm.cabl=0, so this is the
+Robin's own long-standing bug. Setting cabl=1 was tried and changes nothing.
+
+libshims_ppd_poll rewrites provably-dead descriptors to -1, which POSIX says poll() ignores, leaving
+the daemon blocked on the descriptor it did open. Only fds that fcntl() rejects with EBADF are
+touched; a garbage value naming a real file is left alone.
+
+Injection is the interesting part. LD_PRELOAD does not work here: init applies an SELinux domain
+transition before exec, the kernel sets AT_SECURE=1, and bionic then ignores LD_PRELOAD entirely --
+silently, by design. Verified on device: the variable was in the daemon's environ and the library
+never appeared in its maps.
+
+TARGET_LD_SHIM_LIBS loads the library but is not enough on its own, because a shim arrives through
+DT_NEEDED and libc is already ahead of it in the lookup order. -Wl,-z,global sets DF_1_GLOBAL, which
+puts the shim in the linker's global group; that group is searched before a soinfo's local group,
+so our poll() wins. Attached to libdisp-aba.so, the daemon's first DT_NEEDED entry.
+---
+ BoardConfig.mk               |   3 +
+ device.mk                    |   3 +
+ libshims/Android.mk          |  16 +++++
+ libshims/ppd_poll/ppd_poll.c | 121 +++++++++++++++++++++++++++++++++++
+ rootdir/init.target.rc       |   4 ++
+ 5 files changed, 147 insertions(+)
+ create mode 100644 libshims/ppd_poll/ppd_poll.c
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index fae95e7..d9e08ab 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -164,6 +164,9 @@ TARGET_LD_SHIM_LIBS := \
+     /system/vendor/lib64/libril-qc-qmi-1.so|libshims_peripheral_client.so \
+     /system/vendor/lib64/libmm-abl.so|libshims_powermanager.so
+ 
++TARGET_LD_SHIM_LIBS += \
++    /system/vendor/lib64/libdisp-aba.so|libshims_ppd_poll.so
++
+ # WiFi
+ BOARD_HAS_QCOM_WLAN              := true
+ BOARD_HOSTAPD_DRIVER             := NL80211
+diff --git a/device.mk b/device.mk
+index ec57fd6..546f497 100644
+--- a/device.mk
++++ b/device.mk
+@@ -173,6 +173,9 @@ PRODUCT_PACKAGES += \
+ PRODUCT_PACKAGES += \
+     libshims_powermanager
+ 
++PRODUCT_PACKAGES += \
++    libshims_ppd_poll
++
+ PRODUCT_PACKAGES += \
+     vendor.lineage.livedisplay@2.0-service-legacymm \
+     vendor.lineage.livedisplay@2.0-service-sysfs
+diff --git a/libshims/Android.mk b/libshims/Android.mk
+index d71aa0b..847d80f 100644
+--- a/libshims/Android.mk
++++ b/libshims/Android.mk
+@@ -45,3 +45,19 @@ LOCAL_MODULE_TAGS := optional
+ LOCAL_VENDOR_MODULE := true
+ 
+ include $(BUILD_SHARED_LIBRARY)
++
++include $(CLEAR_VARS)
++
++LOCAL_SRC_FILES := \
++    ppd_poll/ppd_poll.c
++
++LOCAL_MODULE := libshims_ppd_poll
++LOCAL_MODULE_TAGS := optional
++LOCAL_SHARED_LIBRARIES := liblog
++LOCAL_VENDOR_MODULE := true
++# -z global sets DF_1_GLOBAL, which puts this library in the linker's GLOBAL GROUP. That group is
++# searched before a soinfo's local group, where libc lives, so our poll() wins the lookup. Without
++# it the shim loads and is simply never consulted: it arrives through DT_NEEDED, behind libc.
++LOCAL_LDFLAGS := -Wl,-z,global
++
++include $(BUILD_SHARED_LIBRARY)
+diff --git a/libshims/ppd_poll/ppd_poll.c b/libshims/ppd_poll/ppd_poll.c
+new file mode 100644
+index 0000000..4a6b7e4
+--- /dev/null
++++ b/libshims/ppd_poll/ppd_poll.c
+@@ -0,0 +1,121 @@
++/*
++ * Copyright (C) 2026 The LineageOS Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++/*
++ * mm-pp-daemon waits on two descriptors and only ever initialises one of them.
++ * Slot 0 keeps whatever was on the stack: the fd read 0x40F00000 on one boot
++ * and 0x4FB00000 on the next, and its events mask contains POLLHUP and
++ * POLLNVAL -- output-only flags that no caller ever requests. Slot 1 is the
++ * real one, /sys/devices/virtual/graphics/fb0/dyn_pu, polled correctly with
++ * POLLPRI|POLLERR.
++ *
++ * poll() reports POLLNVAL for an invalid descriptor and returns immediately,
++ * so the daemon's wait never waits. Measured at ~6700 poll() calls a second,
++ * 98% of one core, continuously from boot -- 690 seconds of CPU in the first
++ * 716 seconds of uptime. Stock Nextbit ships the same ro.qualcomm.cabl=0 and
++ * the same daemon, so this predates the port rather than coming from it.
++ *
++ * POSIX: a negative fd is ignored and reports revents 0. Rewriting the dead
++ * descriptors to -1 leaves the daemon blocked on the one descriptor it did
++ * open, which is what it was written to do.
++ *
++ * Only provably-invalid descriptors are touched. A garbage value that happens
++ * to name a real open file is left alone -- fcntl() succeeds for it, and
++ * guessing would be worse than the spin.
++ */
++
++#define _GNU_SOURCE
++
++#define LOG_TAG "ppd_poll"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <poll.h>
++#include <signal.h>
++#include <sys/syscall.h>
++#include <stdbool.h>
++#include <time.h>
++#include <unistd.h>
++
++#include <log/log.h>
++
++static void drop_dead_fds(struct pollfd* fds, nfds_t nfds) {
++    static bool reported = false;
++    int saved_errno = errno;
++
++    if (fds == NULL) {
++        return;
++    }
++
++    for (nfds_t i = 0; i < nfds; i++) {
++        if (fds[i].fd < 0) {
++            continue; /* already ignored by poll() */
++        }
++        if (fcntl(fds[i].fd, F_GETFD) != -1) {
++            continue; /* a real descriptor */
++        }
++        if (errno != EBADF) {
++            continue; /* some other failure -- do not second-guess it */
++        }
++
++        if (!reported) {
++            ALOGI("ppd_poll: ignoring invalid fd %d (events 0x%x); "
++                  "without this the daemon spins on POLLNVAL",
++                  fds[i].fd, (unsigned)fds[i].events);
++            reported = true;
++        }
++        fds[i].fd = -1;
++    }
++
++    errno = saved_errno;
++}
++
++/*
++ * Reach the kernel directly instead of looking up the real poll() with dlsym(RTLD_NEXT).
++ *
++ * DF_1_GLOBAL puts this library in the linker's global group, and from there RTLD_NEXT -- "the next
++ * definition after me in the lookup order" -- does not resolve to libc. On device it returned NULL,
++ * so every call fell into the error path and the daemon received -1/ENOSYS from every poll():
++ * threads spawned, failed instantly and respawned, which read as 0% CPU while the daemon was in
++ * fact broken rather than fixed. The syscall has nothing to look up and cannot fail that way.
++ *
++ * arm64 has no poll(2); poll() is ppoll(2) with the timeout converted. The final argument is the
++ * sigset size the kernel expects, exactly as bionic's own wrapper passes it.
++ */
++static int sys_ppoll(struct pollfd* fds, nfds_t nfds, const struct timespec* timeout,
++                     const sigset_t* sigmask) {
++    return syscall(SYS_ppoll, fds, nfds, timeout, sigmask, sizeof(sigset_t));
++}
++
++int poll(struct pollfd* fds, nfds_t nfds, int timeout) {
++    struct timespec ts;
++    struct timespec* tsp = NULL;
++
++    if (timeout >= 0) {
++        ts.tv_sec = timeout / 1000;
++        ts.tv_nsec = (long)(timeout % 1000) * 1000000L;
++        tsp = &ts;
++    }
++
++    drop_dead_fds(fds, nfds);
++    return sys_ppoll(fds, nfds, tsp, NULL);
++}
++
++int ppoll(struct pollfd* fds, nfds_t nfds, const struct timespec* timeout,
++          const sigset_t* sigmask) {
++    drop_dead_fds(fds, nfds);
++    return sys_ppoll(fds, nfds, timeout, sigmask);
++}
+diff --git a/rootdir/init.target.rc b/rootdir/init.target.rc
+index e21080b..fbad491 100644
+--- a/rootdir/init.target.rc
++++ b/rootdir/init.target.rc
+@@ -119,6 +119,10 @@ service ppd /vendor/bin/mm-pp-daemon
+     user system
+     socket pps stream 0660 system system
+     group system graphics
++    # This daemon polls an fd it never initialised and spins on POLLNVAL, burning a full
++    # core from boot. libshims_ppd_poll fixes it, but is injected via TARGET_LD_SHIM_LIBS
++    # in BoardConfig.mk, not from here: init applies an SELinux domain transition before
++    # exec, which sets AT_SECURE=1, and bionic ignores LD_PRELOAD entirely when it is set.
+ 
+ service energy-awareness /vendor/bin/energy-awareness
+     class main

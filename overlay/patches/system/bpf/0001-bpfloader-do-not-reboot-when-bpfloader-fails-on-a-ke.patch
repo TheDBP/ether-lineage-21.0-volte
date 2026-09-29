@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 18:58:08 -0400
+Subject: [PATCH] bpfloader: do not reboot when bpfloader fails on a kernel
+ without eBPF
+
+Rebased from 19.1. Same one-line change, but A13 inserted a ~24-line comment
+block ("How to debug bootloops caused by 'bpfloader-failed'") between
+'oneshot' and the reboot_on_failure line, so the 19.1 hunk no longer matched
+by context and git am --3way could not resolve it.
+---
+ bpfloader/bpfloader.rc | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/bpfloader/bpfloader.rc b/bpfloader/bpfloader.rc
+index 0d92cd8..2a0f9c2 100644
+--- a/bpfloader/bpfloader.rc
++++ b/bpfloader/bpfloader.rc
+@@ -81,6 +81,14 @@ service bpfloader /system/bin/bpfloader
+     #    'cannot prove return value is 0 or 1' or 'unsupported / unknown operation / helper',
+     #    'invalid bpf_context access', etc.
+     #
+-    reboot_on_failure reboot,bpfloader-failed
++    # DISABLED for msm8992/ether: this kernel (3.10.108) has no eBPF at all -- no kernel/bpf
++    # directory, no BPF options in the defconfig -- so bpfloader can never succeed, and
++    # reboot_on_failure turns that into an unbreakable boot loop:
++    #     Restarting system with command 'bpfloader-failed'
++    # Without the reboot, bpfloader still fails but init carries on and the device boots.
++    # COST: eBPF-dependent networking degrades -- per-UID traffic accounting (data usage in
++    # Settings), some firewall/VPN paths. This is a stopgap to let the rest of the port be
++    # tested; the real fix is a kernel with eBPF backported.
++    # reboot_on_failure reboot,bpfloader-failed
+     # we're not really updatable, but want to be able to load bpf programs shipped in apexes
+     updatable

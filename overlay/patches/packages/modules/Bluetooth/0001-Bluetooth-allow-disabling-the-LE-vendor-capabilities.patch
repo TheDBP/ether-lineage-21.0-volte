@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 22:59:07 -0400
+Subject: [PATCH] Bluetooth: allow disabling the LE vendor capabilities query
+
+Old Qualcomm WCNSS controllers answer vendor HCI commands with only the OCF,
+dropping the OGF. HciLayer matches opcodes strictly and aborts:
+
+  assertion 'waiting_command_ == op_code' failed -
+    Waiting for 0xfd57 (LE_ADV_FILTER), got 0x157 (Unknown OpCode: 343)
+
+0xfd57 is OGF 0x3f / OCF 0x157, so the controller echoed the OCF alone. The
+stack only reaches LE_ADV_FILTER because LeGetVendorCapabilities (0xfd53)
+succeeds and reports filtering support, so it begins issuing APCF commands the
+controller cannot round-trip -- a native abort on every Bluetooth enable.
+
+Gated behind bluetooth.core.le.vendor_capabilities.enabled, default true, so
+nothing changes for controllers that behave. vendor_capabilities_ is
+value-initialised to zero, so skipping the query simply leaves the controller
+described as having no vendor extensions and the stack never sends APCF.
+
+Costs offloaded scan filtering and batch scanning on affected devices; the
+alternative is no Bluetooth at all.
+---
+ system/gd/hci/controller.cc | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/system/gd/hci/controller.cc b/system/gd/hci/controller.cc
+index 10023e3dd9..bdcc5cc28d 100644
+--- a/system/gd/hci/controller.cc
++++ b/system/gd/hci/controller.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "hci/controller.h"
+ 
++#include <android-base/properties.h>
+ #include <android-base/strings.h>
+ #include <future>
+ #include <memory>
+@@ -159,8 +160,26 @@ struct Controller::impl {
+           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
+     }
+ 
+-    hci_->EnqueueCommand(LeGetVendorCapabilitiesBuilder::Create(),
+-                         handler->BindOnceOn(this, &Controller::impl::le_get_vendor_capabilities_handler));
++      // Querying LE vendor capabilities tells the stack the controller supports
++      // advertising filtering, after which it issues APCF commands. Some older
++      // Qualcomm WCNSS controllers answer a vendor command with only the OCF,
++      // dropping the OGF, and HciLayer matches opcodes strictly:
++      //
++      //   assertion 'waiting_command_ == op_code' failed -
++      //     Waiting for 0xfd57 (LE_ADV_FILTER), got 0x157 (Unknown OpCode: 343)
++      //
++      // 0xfd57 is OGF 0x3f / OCF 0x157, so the controller echoed the OCF alone.
++      // That aborts the whole stack on every enable, making Bluetooth unusable.
++      //
++      // vendor_capabilities_ is value-initialised to all zeroes, so skipping the
++      // query leaves the controller reported as having no vendor extensions and
++      // the stack never sends APCF. Costs offloaded scan filtering and batch
++      // scanning; keeps Bluetooth working.
++      if (android::base::GetBoolProperty(
++              "bluetooth.core.le.vendor_capabilities.enabled", true)) {
++      hci_->EnqueueCommand(LeGetVendorCapabilitiesBuilder::Create(),
++                           handler->BindOnceOn(this, &Controller::impl::le_get_vendor_capabilities_handler));
++      }
+ 
+     // We only need to synchronize the last read. Make BD_ADDR to be the last one.
+     std::promise<void> promise;

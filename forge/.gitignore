@@ -1,0 +1,14 @@
+# Fetched artifacts — verified at fetch time, never committed (proprietary or large).
+prebuilt/*.apk
+prebuilt/FDroid.apk
+prebuilt/FDroidPrivilegedExtension.apk
+prebuilt/Magisk-*.apk
+
+# Editor/OS noise
+*.swp
+.DS_Store
+
+# In-place device configs (bootstrap.sh --device). Yours, not the engine's -- keep them in your
+# own repo if you want them version-controlled; see README "Setting up a device".
+devices/
+tools/diag-efs/diag-efs.aarch64

@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 14:15:00 -0400
+Subject: [PATCH] ether: def_font_scale 115% for the 320 dpi panel
+
+Read by the SettingsProvider patch via loadFractionSetting. 320 dpi buys 540 dp of width, which is
+what dense layouts need, at the cost of physically small text on 5.2 inches; 1.15 is the second step
+of the SettingsLib ladder so it stays a normal, movable selection in Settings.
+---
+ .../base/packages/SettingsProvider/res/values/defaults.xml | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/overlay/frameworks/base/packages/SettingsProvider/res/values/defaults.xml b/overlay/frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+index d2605f5..b790737 100644
+--- a/overlay/frameworks/base/packages/SettingsProvider/res/values/defaults.xml
++++ b/overlay/frameworks/base/packages/SettingsProvider/res/values/defaults.xml
+@@ -19,4 +19,11 @@
+ <resources>
+     <!-- Set the automatic brightness mode on by default -->
+     <bool name="def_screen_brightness_automatic_mode">true</bool>
++
++    <!-- Text one notch up, to compensate for shipping the panel at 320 dpi. That reports this
++         1080x1920 screen as 540 dp wide, which is the room dense layouts need but leaves text
++         physically small on 5.2 inches. 1.15 is the second step of the SettingsLib ladder
++         (0.85 / 1.0 / 1.15 / 1.30), so Settings shows it as a normal selection the user can move
++         either way. Read by DatabaseHelper.loadSystemSettings via loadFractionSetting with base 1. -->
++    <fraction name="def_font_scale">115%</fraction>
+ </resources>

@@ -1,0 +1,34 @@
+From e0f57fa36ac18194508aff5f3930fe85ebe3f7e4 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 13 Sep 2026 10:11:34 -0400
+Subject: [PATCH] gapps: drop Velvet (the Google app) from every branch
+
+Velvet is the Google Search app and Assistant. It is the single largest item in the GApps set -- 276
+MB on the vic branch -- and the one most likely never to be opened. Dropping it keeps what makes
+GApps worth having (Play, Play Services, the app swaps) and removes the part that is mostly bulk.
+
+Nothing useful goes with it. SpeechServicesByGoogle and talkback sit behind the same upstream guard
+but are far smaller and cover voice typing and accessibility, so they stay. The -1 feed is already
+off via the google-feed-off option, so the launcher side is unaffected. VelvetTitan is behind a
+tangorpro-only guard and never applies to any device here.
+
+This was previously a bonito-only patch in that device's repo, justified on space: its retrofit super
+left about 42 MB spare and Firefox needs 242 MB. Moving it into the gapps option makes it a property
+of the option rather than of one device, so every branch that installs GApps gets the same set.
+
+---
+ arm64/arm64-vendor.mk | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/arm64/arm64-vendor.mk b/arm64/arm64-vendor.mk
+index df4fa5e..413ecd4 100644
+--- a/arm64/arm64-vendor.mk
++++ b/arm64/arm64-vendor.mk
+@@ -21,7 +21,6 @@ PRODUCT_PACKAGES += \
+     MarkupGoogle \
+     SpeechServicesByGoogle \
+     talkback \
+-    Velvet \
+     SetupWizard
+ endif
+ 

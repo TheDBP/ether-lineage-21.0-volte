@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 16:49:59 -0400
+Subject: [PATCH] SystemUI: tolerate a null list from getPackagesForOps
+
+AppOpsService returns null, not an empty list, when no package has ever
+recorded one of the watched ops. That is the state on every first boot
+after a factory reset, so fetchCurrentActiveOps() threw an NPE from
+KeyguardService.onCreate and SystemUI crashed three times before some
+app finally noted an op.
+---
+ .../com/android/systemui/appops/AppOpsControllerImpl.java    | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/appops/AppOpsControllerImpl.java b/packages/SystemUI/src/com/android/systemui/appops/AppOpsControllerImpl.java
+index 1876786b4c32..9f304a3853e0 100644
+--- a/packages/SystemUI/src/com/android/systemui/appops/AppOpsControllerImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/appops/AppOpsControllerImpl.java
+@@ -183,6 +183,11 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
+ 
+     private void fetchCurrentActiveOps() {
+         List<AppOpsManager.PackageOps> packageOps = mAppOps.getPackagesForOps(OPS);
++        if (packageOps == null) {
++            // AppOpsService returns null rather than an empty list when no package has ever
++            // recorded one of these ops, i.e. on every first boot after a wipe.
++            return;
++        }
+         for (AppOpsManager.PackageOps op : packageOps) {
+             for (AppOpsManager.OpEntry entry : op.getOps()) {
+                 for (Map.Entry<String, AppOpsManager.AttributedOpEntry> attributedOpEntry :

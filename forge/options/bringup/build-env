@@ -1,0 +1,5 @@
+# Exported into the build environment while the option is on (see forge_export_option_env).
+# vendor/lineage/config/common.mk tests this with ifdef at parse time: it sets ro.adb.secure=0 and
+# skips PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG, so ro.debuggable stays 1 (adb root, logcatd and the
+# other PRODUCT_PACKAGES_DEBUG members). A := in product.mk is read too late for that ifdef.
+WITH_ADB_INSECURE=true

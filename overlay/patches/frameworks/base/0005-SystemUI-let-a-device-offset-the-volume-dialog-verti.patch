@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 18:38:21 -0400
+Subject: [PATCH] SystemUI: let a device offset the volume dialog vertically
+
+volume_dialog_gravity is an integer resource and its default of 21 is CENTER_VERTICAL|RIGHT, so the
+panel is centred on the screen's vertical midpoint. There is no way to move it from there: the root
+FrameLayout in volume_dialog.xml has no vertical margin to override, so a device whose volume rocker
+is not at the middle of the side cannot line the panel up with the keys the user just pressed.
+
+Add volume_dialog_offset_y, applied to the window's lp.y, which is an offset from whatever gravity
+computed. Default 0dp, so nothing changes anywhere unless a device overlays it. Negative moves the
+panel up.
+
+Read in initDialog() rather than cached, because initDialog() runs again on configuration change --
+caching it would leave a rotated panel at the offset computed for the other orientation, and a
+device can qualify the dimen with values-land if it needs different values.
+---
+ packages/SystemUI/res/values/dimens.xml                      | 5 +++++
+ .../src/com/android/systemui/volume/VolumeDialogImpl.java    | 5 +++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/packages/SystemUI/res/values/dimens.xml b/packages/SystemUI/res/values/dimens.xml
+index ceebab2b08ef..789b725d62a6 100644
+--- a/packages/SystemUI/res/values/dimens.xml
++++ b/packages/SystemUI/res/values/dimens.xml
+@@ -492,6 +492,11 @@
+ 
+     <dimen name="volume_dialog_panel_transparent_padding_horizontal">8dp</dimen>
+ 
++    <!-- Vertical offset of the volume dialog from the position volume_dialog_gravity gives it.
++         Negative moves it up. 0 keeps the stock behaviour, which is centred; a device whose volume
++         rocker is not at the middle of the side can overlay this to line the panel up with it. -->
++    <dimen name="volume_dialog_offset_y">0dp</dimen>
++
+     <dimen name="volume_dialog_panel_transparent_padding">20dp</dimen>
+ 
+     <dimen name="volume_dialog_ringer_rows_padding">7dp</dimen>
+diff --git a/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java b/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java
+index dd102620fdad..75c443845538 100644
+--- a/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/volume/VolumeDialogImpl.java
+@@ -589,6 +589,11 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
+             lp.gravity &= ~(Gravity.LEFT | Gravity.RIGHT);
+             lp.gravity |= mVolumePanelOnLeft ? Gravity.LEFT : Gravity.RIGHT;
+         }
++        // Offset from wherever the gravity put it; negative is up. Zero by default, so this is a
++        // no-op unless a device overlays the dimen. Read here rather than cached because
++        // initDialog() runs again on configuration change, which is where a rotation would
++        // otherwise strand the panel at a portrait offset.
++        lp.y = mContext.getResources().getDimensionPixelSize(R.dimen.volume_dialog_offset_y);
+         mWindow.setAttributes(lp);
+         mWindow.setLayout(WRAP_CONTENT, WRAP_CONTENT);
+ 

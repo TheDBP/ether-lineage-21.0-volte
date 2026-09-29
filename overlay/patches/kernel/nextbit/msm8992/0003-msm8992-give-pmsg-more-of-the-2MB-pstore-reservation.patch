@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 13:10:13 -0400
+Subject: [PATCH] msm8992: give pmsg more of the 2MB pstore reservation
+
+The pstore region is 2MB, split console 1M / dump-records / ftrace 64K /
+pmsg 512K. On a boot loop that pmsg ring wraps after a couple of cycles --
+boot 9 ran ~19 system_server restarts and the ring no longer contained the
+first crash, only the tail of the last cycle.
+
+Raises pmsg to 832K out of the space that was going to spare dump records
+(the remainder still leaves two 64K records, and we read kernel state from
+console-ramoops anyway, not from the oops dumps).
+
+Leaves ftrace at 64K rather than zeroing it: a zero-size zone is an untested
+path in this 3.10-era pstore_ram driver and the 64K is not worth the risk.
+
+This helps but does not solve the problem on its own -- see the device-side
+adb diagnostic patch, which is the real fix.
+---
+ arch/arm64/boot/dts/fih/nbq/msm8992-memory-pstore.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/fih/nbq/msm8992-memory-pstore.dtsi b/arch/arm64/boot/dts/fih/nbq/msm8992-memory-pstore.dtsi
+index ee6ba51000c..7e35b345985 100644
+--- a/arch/arm64/boot/dts/fih/nbq/msm8992-memory-pstore.dtsi
++++ b/arch/arm64/boot/dts/fih/nbq/msm8992-memory-pstore.dtsi
+@@ -20,7 +20,7 @@
+ 		android,ramoops-console-size = <0x100000>;
+ 		android,ramoops-record-size = <0x10000>;
+ 		android,ramoops-ftrace-size = <0x10000>;
+-		android,ramoops-pmsg-size = <0x80000>;
++		android,ramoops-pmsg-size = <0xD0000>;
+ 		android,ramoops-dump-oops = <0x1>;
+ 	};
+ };

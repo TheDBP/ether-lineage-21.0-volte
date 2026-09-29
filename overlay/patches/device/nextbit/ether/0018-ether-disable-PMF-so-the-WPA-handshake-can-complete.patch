@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: disable PMF so the WPA handshake can complete
+
+WiFi associates and the WPA 4-way handshake never completes on 20.0:
+
+    SupplicantStaNetworkHalAidlImpl:  RequirePmf: false
+    wpa_supplicant: wlan0: WPA: Selected AP supports MFP: require MFP
+    wpa_supplicant: wlan0: Authentication with <bssid> timed out.
+    wpa_supplicant: wlan0: WPA: 4-Way Handshake failed - pre-shared key may be incorrect
+
+The framework asks for RequirePmf=false, but the AOSP template sets a global pmf=1 (MFP optional) and
+wpa_supplicant upgrades that to *required* whenever the AP advertises MFP capability. The
+prima/qcacld driver on msm8992 does not handle PMF, so msg 3/4 never arrives and the handshake times
+out. "pre-shared key may be incorrect" is wpa_supplicant's generic timeout message, not a key
+mismatch -- it failed against a phone hotspot too.
+
+19.1 ships the same pmf=1 template and works, because it used the HIDL supplicant HAL; 20.0 uses
+AIDL, new in A13, where RequirePmf=false does not reach the network block as ieee80211w=0.
+
+Cost: no WPA3-SAE, which requires PMF. This driver cannot do WPA3 anyway.
+---
+ wifi/wpa_supplicant_overlay.conf | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/wifi/wpa_supplicant_overlay.conf b/wifi/wpa_supplicant_overlay.conf
+index d6ae451..902c6a1 100644
+--- a/wifi/wpa_supplicant_overlay.conf
++++ b/wifi/wpa_supplicant_overlay.conf
+@@ -4,3 +4,27 @@ tdls_external_control=1
+ bss_max_count=512
+ bss_no_flush_when_down=1
+ driver_param=use_p2p_group_interface=1
++
++# Disable 802.11w / PMF (Protected Management Frames).
++#
++# WiFi associates but the WPA 4-way handshake never completes on 20.0:
++#
++#   SupplicantStaNetworkHalAidlImpl:  RequirePmf: false
++#   wpa_supplicant: wlan0: WPA: Selected AP supports MFP: require MFP
++#   wpa_supplicant: wlan0: Authentication with <bssid> timed out.
++#   wpa_supplicant: wlan0: WPA: 4-Way Handshake failed - pre-shared key may be incorrect
++#   wpa_supplicant: wlan0: State: 4WAY_HANDSHAKE -> DISCONNECTED
++#
++# The framework asks for RequirePmf=false, but the AOSP template sets a global
++# pmf=1 (MFP optional) and wpa_supplicant upgrades that to *required* whenever
++# the AP advertises MFP capability. The prima/qcacld driver on msm8992 does not
++# handle PMF, so msg 3/4 never arrives and the handshake times out. The
++# "pre-shared key may be incorrect" line is wpa_supplicant's generic timeout
++# message, not an actual key mismatch -- it failed against a phone hotspot too.
++#
++# 19.1 ships the same pmf=1 template and works, because it used the HIDL
++# supplicant HAL; 20.0 uses AIDL (new in A13), where RequirePmf=false does not
++# reach the network block as ieee80211w=0.
++#
++# Cost: no WPA3-SAE, which requires PMF. This driver cannot do WPA3 anyway.
++pmf=0

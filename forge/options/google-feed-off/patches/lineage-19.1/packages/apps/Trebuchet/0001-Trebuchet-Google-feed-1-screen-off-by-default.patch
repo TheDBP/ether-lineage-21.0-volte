@@ -1,0 +1,45 @@
+From 4eea9a004cac5232f27862190eef3d8a0b13bec9 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 11:29:18 -0400
+Subject: [PATCH] Trebuchet: Google feed (-1 screen) off by default
+
+Swiping right from the home screen opens the Google feed unless both the runtime default and the
+preference default say otherwise; changing only one leaves the other re-enabling it.
+
+Rebased from the lineage-18.1 patch of the same name. The code is unchanged -- only the path moved:
+Launcher3 folded quickstep/recents_ui_overrides/src/ into quickstep/src/ after Android 11, which is
+why the 18.1 patch would not apply to 19.1 despite making the identical edit.
+---
+ .../com/android/launcher3/uioverrides/OverlayCallbackImpl.java  | 2 +-
+ res/xml/launcher_preferences.xml                                | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java b/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
+index 9000ab719d..dad45d9779 100644
+--- a/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
++++ b/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
+@@ -176,7 +176,7 @@ public class OverlayCallbackImpl
+ 
+     private LauncherClient.ClientOptions getClientOptions(SharedPreferences prefs) {
+         return new LauncherClient.ClientOptions(
+-                prefs.getBoolean(KEY_ENABLE_MINUS_ONE, true),
++                prefs.getBoolean(KEY_ENABLE_MINUS_ONE, false), // Google feed off by default
+                 true, /* enableHotword */
+                 true /* enablePrewarming */
+         );
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 907a56f1a9..cc50a5c04f 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -59,7 +59,7 @@
+         launcher:logIdOff="616" />
+ 
+     <SwitchPreference
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:key="pref_enable_minus_one"
+         android:summary="@string/pref_show_google_now_summary"
+         android:title="@string/title_show_google_app" />
+-- 
+2.53.0
+

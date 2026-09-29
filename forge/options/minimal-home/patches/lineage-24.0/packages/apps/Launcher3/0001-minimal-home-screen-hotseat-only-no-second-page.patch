@@ -1,0 +1,825 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:19:16 -0400
+Subject: [PATCH] minimal home screen: hotseat only, no second page
+
+One screen: the hotseat as that grid ships it, and the clock. The Google search widget, the
+Google folder, the Play shortcut and the whole second screen are gone.
+
+Rebuilt against lineage-24.0's Launcher3 rather than ported: the launcher was renamed from
+Trebuchet, and its stock layouts gained entries the 23.2 patch never saw (a Twelve now-playing
+widget, a Settings shortcut), so a context diff could not have applied. Each grid keeps its own
+hotseat -- they differ per size -- and the clock spans the grid's width.
+---
+ res/xml/default_workspace_4x5.xml | 116 ++----------------------------
+ res/xml/default_workspace_5x5.xml | 116 ++----------------------------
+ res/xml/default_workspace_5x6.xml | 116 ++----------------------------
+ res/xml/default_workspace_5x7.xml | 116 ++----------------------------
+ res/xml/default_workspace_5x8.xml |  22 +++---
+ res/xml/default_workspace_6x5.xml |  76 ++------------------
+ res/xml/default_workspace_6x6.xml | 116 ++----------------------------
+ 7 files changed, 32 insertions(+), 646 deletions(-)
+
+diff --git a/res/xml/default_workspace_4x5.xml b/res/xml/default_workspace_4x5.xml
+index 40c0344009..06cfe44ad5 100644
+--- a/res/xml/default_workspace_4x5.xml
++++ b/res/xml/default_workspace_4x5.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2009 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -58,106 +45,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
+-    <!-- Screen 0 -->
+-    <appwidget
+-        launcher:packageName="com.google.android.googlequicksearchbox"
+-        launcher:className="com.google.android.googlequicksearchbox.SearchWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="4"
+-        launcher:spanY="1" />
+-
++    <!-- Clock -->
+     <appwidget
+         launcher:packageName="com.android.deskclock"
+         launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="1"
+-        launcher:spanX="4"
+-        launcher:spanY="1" />
+-
+-    <!-- Google folder -->
+-    <!-- Google, Gmail, Maps, YouTube, Drive, YouTube Music, Play Movies, Duo, Photos -->
+-    <folder
+-        launcher:title="@string/google_folder_title"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="3">
+-        <favorite
+-            launcher:packageName="com.google.android.googlequicksearchbox"
+-            launcher:className="com.google.android.googlequicksearchbox.SearchActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.gm"
+-            launcher:className="com.google.android.gm.ConversationListActivityGmail"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.maps"
+-            launcher:className="com.google.android.maps.MapsActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.youtube"
+-            launcher:className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.docs"
+-            launcher:className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.youtube.music"
+-            launcher:className="com.google.android.apps.youtube.music.activities.MusicActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.videos"
+-            launcher:className="com.google.android.youtube.videos.EntryPoint"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.tachyon"
+-            launcher:className="com.google.android.apps.tachyon.MainActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.photos"
+-            launcher:className="com.google.android.apps.photos.home.HomeActivity"/>
+-    </folder>
+-
+-    <favorite
+-        launcher:screen="0"
+-        launcher:x="3"
+-        launcher:y="3"
+-        launcher:packageName="com.android.vending"
+-        launcher:className="com.android.vending.AssetBrowserActivity"/>
+-
+-    <!-- Screen 1 -->
+-    <appwidget
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.ui.widgets.NowPlayingAppWidgetProvider"
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="4"
+-        launcher:spanY="1" />
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_EMAIL;end" />
+-        <favorite launcher:uri="mailto:" />
+-    </resolve>
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="1"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
+-        <favorite launcher:uri="#Intent;type=images/*;end" />
+-    </resolve>
+-
+-    <favorite
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.MainActivity"
+-        launcher:screen="1"
+-        launcher:x="2"
+-        launcher:y="-1" />
+-
+-    <favorite
+-        launcher:packageName="com.android.settings"
+-        launcher:className="com.android.settings.Settings"
+-        launcher:screen="1"
+-        launcher:x="3"
+-        launcher:y="-1" />
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="4" launcher:spanY="2" />
+ 
+ </favorites>
+diff --git a/res/xml/default_workspace_5x5.xml b/res/xml/default_workspace_5x5.xml
+index 3dc72e61fb..0251c71945 100644
+--- a/res/xml/default_workspace_5x5.xml
++++ b/res/xml/default_workspace_5x5.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2009 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -66,106 +53,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
+-    <!-- Screen 0 -->
+-    <appwidget
+-        launcher:packageName="com.google.android.googlequicksearchbox"
+-        launcher:className="com.google.android.googlequicksearchbox.SearchWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
++    <!-- Clock -->
+     <appwidget
+         launcher:packageName="com.android.deskclock"
+         launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="1"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <!-- Google Folder -->
+-    <!-- Google, Gmail, Maps, YouTube, Drive, YouTube Music, Play Movies, Duo, Photos -->
+-    <folder
+-        launcher:title="@string/google_folder_title"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="4">
+-        <favorite
+-            launcher:packageName="com.google.android.googlequicksearchbox"
+-            launcher:className="com.google.android.googlequicksearchbox.SearchActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.gm"
+-            launcher:className="com.google.android.gm.ConversationListActivityGmail"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.maps"
+-            launcher:className="com.google.android.maps.MapsActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.youtube"
+-            launcher:className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.docs"
+-            launcher:className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.youtube.music"
+-            launcher:className="com.google.android.apps.youtube.music.activities.MusicActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.videos"
+-            launcher:className="com.google.android.youtube.videos.EntryPoint"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.tachyon"
+-            launcher:className="com.google.android.apps.tachyon.MainActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.photos"
+-            launcher:className="com.google.android.apps.photos.home.HomeActivity"/>
+-    </folder>
+-
+-    <favorite
+-        launcher:screen="0"
+-        launcher:x="4"
+-        launcher:y="4"
+-        launcher:packageName="com.android.vending"
+-        launcher:className="com.android.vending.AssetBrowserActivity"/>
+-
+-    <!-- Screen 1 -->
+-    <appwidget
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.ui.widgets.NowPlayingAppWidgetProvider"
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_EMAIL;end" />
+-        <favorite launcher:uri="mailto:" />
+-    </resolve>
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="1"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
+-        <favorite launcher:uri="#Intent;type=images/*;end" />
+-    </resolve>
+-
+-    <favorite
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.MainActivity"
+-        launcher:screen="1"
+-        launcher:x="2"
+-        launcher:y="-1" />
+-
+-    <favorite
+-        launcher:packageName="com.android.settings"
+-        launcher:className="com.android.settings.Settings"
+-        launcher:screen="1"
+-        launcher:x="3"
+-        launcher:y="-1" />
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="5" launcher:spanY="2" />
+ 
+ </favorites>
+diff --git a/res/xml/default_workspace_5x6.xml b/res/xml/default_workspace_5x6.xml
+index 915a448491..4b0f5d43be 100644
+--- a/res/xml/default_workspace_5x6.xml
++++ b/res/xml/default_workspace_5x6.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2009 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -66,106 +53,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
+-    <!-- Screen 0 -->
+-    <appwidget
+-        launcher:packageName="com.google.android.googlequicksearchbox"
+-        launcher:className="com.google.android.googlequicksearchbox.SearchWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
++    <!-- Clock -->
+     <appwidget
+         launcher:packageName="com.android.deskclock"
+         launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="1"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <!-- Google Folder -->
+-    <!-- Google, Gmail, Maps, YouTube, Drive, YouTube Music, Play Movies, Duo, Photos -->
+-    <folder
+-        launcher:title="@string/google_folder_title"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="5">
+-        <favorite
+-            launcher:packageName="com.google.android.googlequicksearchbox"
+-            launcher:className="com.google.android.googlequicksearchbox.SearchActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.gm"
+-            launcher:className="com.google.android.gm.ConversationListActivityGmail"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.maps"
+-            launcher:className="com.google.android.maps.MapsActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.youtube"
+-            launcher:className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.docs"
+-            launcher:className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.youtube.music"
+-            launcher:className="com.google.android.apps.youtube.music.activities.MusicActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.videos"
+-            launcher:className="com.google.android.youtube.videos.EntryPoint"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.tachyon"
+-            launcher:className="com.google.android.apps.tachyon.MainActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.photos"
+-            launcher:className="com.google.android.apps.photos.home.HomeActivity"/>
+-    </folder>
+-
+-    <favorite
+-        launcher:screen="0"
+-        launcher:x="4"
+-        launcher:y="5"
+-        launcher:packageName="com.android.vending"
+-        launcher:className="com.android.vending.AssetBrowserActivity"/>
+-
+-    <!-- Screen 1 -->
+-    <appwidget
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.ui.widgets.NowPlayingAppWidgetProvider"
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_EMAIL;end" />
+-        <favorite launcher:uri="mailto:" />
+-    </resolve>
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="1"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
+-        <favorite launcher:uri="#Intent;type=images/*;end" />
+-    </resolve>
+-
+-    <favorite
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.MainActivity"
+-        launcher:screen="1"
+-        launcher:x="2"
+-        launcher:y="-1" />
+-
+-    <favorite
+-        launcher:packageName="com.android.settings"
+-        launcher:className="com.android.settings.Settings"
+-        launcher:screen="1"
+-        launcher:x="3"
+-        launcher:y="-1" />
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="5" launcher:spanY="2" />
+ 
+ </favorites>
+diff --git a/res/xml/default_workspace_5x7.xml b/res/xml/default_workspace_5x7.xml
+index 428ea4ce52..4b0f5d43be 100644
+--- a/res/xml/default_workspace_5x7.xml
++++ b/res/xml/default_workspace_5x7.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2009 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -66,106 +53,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
+-    <!-- Screen 0 -->
+-    <appwidget
+-        launcher:packageName="com.google.android.googlequicksearchbox"
+-        launcher:className="com.google.android.googlequicksearchbox.SearchWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
++    <!-- Clock -->
+     <appwidget
+         launcher:packageName="com.android.deskclock"
+         launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="1"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <!-- Google Folder -->
+-    <!-- Google, Gmail, Maps, YouTube, Drive, YouTube Music, Play Movies, Duo, Photos -->
+-    <folder
+-        launcher:title="@string/google_folder_title"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="6">
+-        <favorite
+-            launcher:packageName="com.google.android.googlequicksearchbox"
+-            launcher:className="com.google.android.googlequicksearchbox.SearchActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.gm"
+-            launcher:className="com.google.android.gm.ConversationListActivityGmail"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.maps"
+-            launcher:className="com.google.android.maps.MapsActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.youtube"
+-            launcher:className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.docs"
+-            launcher:className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.youtube.music"
+-            launcher:className="com.google.android.apps.youtube.music.activities.MusicActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.videos"
+-            launcher:className="com.google.android.youtube.videos.EntryPoint"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.tachyon"
+-            launcher:className="com.google.android.apps.tachyon.MainActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.photos"
+-            launcher:className="com.google.android.apps.photos.home.HomeActivity"/>
+-    </folder>
+-
+-    <favorite
+-        launcher:screen="0"
+-        launcher:x="4"
+-        launcher:y="6"
+-        launcher:packageName="com.android.vending"
+-        launcher:className="com.android.vending.AssetBrowserActivity"/>
+-
+-    <!-- Screen 1 -->
+-    <appwidget
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.ui.widgets.NowPlayingAppWidgetProvider"
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_EMAIL;end" />
+-        <favorite launcher:uri="mailto:" />
+-    </resolve>
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="1"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
+-        <favorite launcher:uri="#Intent;type=images/*;end" />
+-    </resolve>
+-
+-    <favorite
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.MainActivity"
+-        launcher:screen="1"
+-        launcher:x="2"
+-        launcher:y="-1" />
+-
+-    <favorite
+-        launcher:packageName="com.android.settings"
+-        launcher:className="com.android.settings.Settings"
+-        launcher:screen="1"
+-        launcher:x="3"
+-        launcher:y="-1" />
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="5" launcher:spanY="2" />
+ 
+ </favorites>
+diff --git a/res/xml/default_workspace_5x8.xml b/res/xml/default_workspace_5x8.xml
+index b078cfd7f8..6c9923d160 100644
+--- a/res/xml/default_workspace_5x8.xml
++++ b/res/xml/default_workspace_5x8.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2021 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -73,4 +60,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
++    <!-- Clock -->
++    <appwidget
++        launcher:packageName="com.android.deskclock"
++        launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="5" launcher:spanY="2" />
++
+ </favorites>
+diff --git a/res/xml/default_workspace_6x5.xml b/res/xml/default_workspace_6x5.xml
+index f467df3b4f..4a95ac7c00 100644
+--- a/res/xml/default_workspace_6x5.xml
++++ b/res/xml/default_workspace_6x5.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2021 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -70,66 +57,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
+-    <!-- Screen 0 -->
+-    <appwidget
+-        launcher:packageName="com.google.android.googlequicksearchbox"
+-        launcher:className="com.google.android.googlequicksearchbox.SearchWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="1"
+-        launcher:y="0"
+-        launcher:spanX="4"
+-        launcher:spanY="1" />
+-
++    <!-- Clock -->
+     <appwidget
+         launcher:packageName="com.android.deskclock"
+         launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="1"
+-        launcher:y="1"
+-        launcher:spanX="4"
+-        launcher:spanY="1" />
+-
+-    <!-- Google Folder -->
+-    <!-- Google, Gmail, Maps, YouTube, Drive, YouTube Music, Play Movies, Duo, Photos -->
+-    <folder
+-        launcher:title="@string/google_folder_title"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="5">
+-        <favorite
+-            launcher:packageName="com.google.android.googlequicksearchbox"
+-            launcher:className="com.google.android.googlequicksearchbox.SearchActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.gm"
+-            launcher:className="com.google.android.gm.ConversationListActivityGmail"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.maps"
+-            launcher:className="com.google.android.maps.MapsActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.youtube"
+-            launcher:className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.docs"
+-            launcher:className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.youtube.music"
+-            launcher:className="com.google.android.apps.youtube.music.activities.MusicActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.videos"
+-            launcher:className="com.google.android.youtube.videos.EntryPoint"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.tachyon"
+-            launcher:className="com.google.android.apps.tachyon.MainActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.photos"
+-            launcher:className="com.google.android.apps.photos.home.HomeActivity"/>
+-    </folder>
+-
+-    <favorite
+-        launcher:screen="0"
+-        launcher:x="5"
+-        launcher:y="5"
+-        launcher:packageName="com.android.vending"
+-        launcher:className="com.android.vending.AssetBrowserActivity"/>
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="6" launcher:spanY="2" />
+ 
+ </favorites>
+diff --git a/res/xml/default_workspace_6x6.xml b/res/xml/default_workspace_6x6.xml
+index e0bad1cd1b..22857af495 100644
+--- a/res/xml/default_workspace_6x6.xml
++++ b/res/xml/default_workspace_6x6.xml
+@@ -1,18 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!-- Copyright (C) 2009 The Android Open Source Project
+-
+-     Licensed under the Apache License, Version 2.0 (the "License");
+-     you may not use this file except in compliance with the License.
+-     You may obtain a copy of the License at
+-
+-          http://www.apache.org/licenses/LICENSE-2.0
+-
+-     Unless required by applicable law or agreed to in writing, software
+-     distributed under the License is distributed on an "AS IS" BASIS,
+-     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-     See the License for the specific language governing permissions and
+-     limitations under the License.
+--->
++<!-- minimal-home: hotseat + clock only (Google search widget, folders, extra screens removed) -->
+ 
+ <favorites xmlns:launcher="http://schemas.android.com/apk/res-auto/com.android.launcher3">
+ 
+@@ -66,106 +53,11 @@
+         <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+     </resolve>
+ 
+-    <!-- Screen 0 -->
+-    <appwidget
+-        launcher:packageName="com.google.android.googlequicksearchbox"
+-        launcher:className="com.google.android.googlequicksearchbox.SearchWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
++    <!-- Clock -->
+     <appwidget
+         launcher:packageName="com.android.deskclock"
+         launcher:className="com.android.alarmclock.DigitalAppWidgetProvider"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="1"
+-        launcher:spanX="5"
+-        launcher:spanY="1" />
+-
+-    <!-- Google Folder -->
+-    <!-- Google, Gmail, Maps, YouTube, Drive, YouTube Music, Play Movies, Duo, Photos -->
+-    <folder
+-        launcher:title="@string/google_folder_title"
+-        launcher:screen="0"
+-        launcher:x="0"
+-        launcher:y="5">
+-        <favorite
+-            launcher:packageName="com.google.android.googlequicksearchbox"
+-            launcher:className="com.google.android.googlequicksearchbox.SearchActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.gm"
+-            launcher:className="com.google.android.gm.ConversationListActivityGmail"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.maps"
+-            launcher:className="com.google.android.maps.MapsActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.youtube"
+-            launcher:className="com.google.android.youtube.app.honeycomb.Shell$HomeActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.docs"
+-            launcher:className="com.google.android.apps.docs.app.NewMainProxyActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.youtube.music"
+-            launcher:className="com.google.android.apps.youtube.music.activities.MusicActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.videos"
+-            launcher:className="com.google.android.youtube.videos.EntryPoint"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.tachyon"
+-            launcher:className="com.google.android.apps.tachyon.MainActivity"/>
+-        <favorite
+-            launcher:packageName="com.google.android.apps.photos"
+-            launcher:className="com.google.android.apps.photos.home.HomeActivity"/>
+-    </folder>
+-
+-    <favorite
+-        launcher:screen="0"
+-        launcher:x="4"
+-        launcher:y="5"
+-        launcher:packageName="com.android.vending"
+-        launcher:className="com.android.vending.AssetBrowserActivity"/>
+-
+-    <!-- Screen 1 -->
+-    <appwidget
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.ui.widgets.NowPlayingAppWidgetProvider"
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="0"
+-        launcher:spanX="6"
+-        launcher:spanY="1" />
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="0"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_EMAIL;end" />
+-        <favorite launcher:uri="mailto:" />
+-    </resolve>
+-
+-    <resolve
+-        launcher:screen="1"
+-        launcher:x="1"
+-        launcher:y="-1" >
+-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
+-        <favorite launcher:uri="#Intent;type=images/*;end" />
+-    </resolve>
+-
+-    <favorite
+-        launcher:packageName="org.lineageos.twelve"
+-        launcher:className="org.lineageos.twelve.MainActivity"
+-        launcher:screen="1"
+-        launcher:x="2"
+-        launcher:y="-1" />
+-
+-    <favorite
+-        launcher:packageName="com.android.settings"
+-        launcher:className="com.android.settings.Settings"
+-        launcher:screen="1"
+-        launcher:x="3"
+-        launcher:y="-1" />
++        launcher:screen="0" launcher:x="0" launcher:y="0"
++        launcher:spanX="6" launcher:spanY="2" />
+ 
+ </favorites>
+-- 
+2.53.0
+

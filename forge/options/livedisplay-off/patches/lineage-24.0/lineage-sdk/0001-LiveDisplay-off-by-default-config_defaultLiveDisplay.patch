@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 22:28:20 -0400
+Subject: [PATCH] LiveDisplay off by default (config_defaultLiveDisplayMode 2
+ -> 0)
+
+Ports the ether default; key/semantics unchanged in lineage-22.2 (0 = MODE_OFF).
+---
+ lineage/res/res/values/config.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lineage/res/res/values/config.xml b/lineage/res/res/values/config.xml
+index 11005639..54485cdf 100644
+--- a/lineage/res/res/values/config.xml
++++ b/lineage/res/res/values/config.xml
+@@ -21,7 +21,7 @@
+     <integer name="config_nightColorTemperature">4800</integer>
+     <integer name="config_outdoorAmbientLux">12000</integer>
+     <integer name="config_outdoorAmbientLuxHysteresis">1500</integer>
+-    <integer name="config_defaultLiveDisplayMode">2</integer>
++    <integer name="config_defaultLiveDisplayMode">0</integer>
+ 
+     <!-- These values should map to the true min and max
+          that the backend is capable of adjusting to. This
+-- 
+2.53.0
+

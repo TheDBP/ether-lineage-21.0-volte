@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:23:38 -0400
+Subject: [PATCH] skip the LineageOS SetupWizard nag pages (recovery-update,
+ metrics/stats, backup)
+
+Three disableComponent calls in SetupWizardActivity.onCreate, the single startup hook before
+ACTION_LOAD. WizardManager skips any action whose component does not resolve, so the pages are
+stepped over.
+
+Rewritten for lineage-24.0 rather than ported: SetupWizard moved to app/src/main/ and converted
+to Kotlin, so the calls take ::class.java and the three activities now live in the system,
+settings and backup subpackages, each needing its own import.
+---
+ .../org/lineageos/setupwizard/SetupWizardActivity.kt  | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/app/src/main/java/org/lineageos/setupwizard/SetupWizardActivity.kt b/app/src/main/java/org/lineageos/setupwizard/SetupWizardActivity.kt
+index 35003a2..43c0c50 100644
+--- a/app/src/main/java/org/lineageos/setupwizard/SetupWizardActivity.kt
++++ b/app/src/main/java/org/lineageos/setupwizard/SetupWizardActivity.kt
+@@ -11,6 +11,9 @@ import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+ import android.os.Bundle
+ import android.util.Log
+ import androidx.appcompat.app.AppCompatActivity
++import org.lineageos.setupwizard.backup.RestoreIntroActivity
++import org.lineageos.setupwizard.settings.LineageSettingsActivity
++import org.lineageos.setupwizard.system.UpdateRecoveryActivity
+ import org.lineageos.setupwizard.util.SetupWizardUtils
+ import org.lineageos.setupwizard.wizardmanager.WizardManager
+ 
+@@ -26,6 +29,14 @@ class SetupWizardActivity : AppCompatActivity() {
+             return
+         }
+         SetupWizardUtils.enableComponent(this, WizardManager::class.java)
++
++        // skip the LineageOS nag pages: the recovery-update prompt, the "help improve
++        // LineageOS" metrics/stats opt-in, and the backup/restore intro. WizardManager skips
++        // any action whose component is disabled (queryIntentActivities returns empty), so the
++        // flow steps over them. This is the single startup hook before ACTION_LOAD.
++        SetupWizardUtils.disableComponent(this, UpdateRecoveryActivity::class.java)
++        SetupWizardUtils.disableComponent(this, LineageSettingsActivity::class.java)
++        SetupWizardUtils.disableComponent(this, RestoreIntroActivity::class.java)
+         val scriptUri =
+             when {
+                 SetupWizardUtils.isOwner() -> R.string.lineage_wizard_script_uri
+-- 
+2.53.0
+

@@ -1,0 +1,20 @@
+# default wallpaper -> teal-shag webp (drawable-nodpi); drop density PNGs so nodpi is used everywhere.
+copy default_wallpaper.webp vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-nodpi/default_wallpaper.webp
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-hdpi/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-nodpi/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-sw600dp-nodpi/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-sw720dp-nodpi/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-television/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-xhdpi/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-xxhdpi/default_wallpaper.png
+rm vendor/lineage/overlay/common/frameworks/base/core/res/res/drawable-xxxhdpi/default_wallpaper.png
+
+# Some devices set ro.config.wallpaper to a FILE path, because WallpaperManager reads that property
+# before falling back to the framework default_wallpaper drawable -- and the drawable in an
+# auto-generated framework-res RRO does not reliably reach the live wallpaper on first boot. On
+# those devices the drawable above is not enough on its own; whatever sits at the path below is
+# what you actually see. DEFAULT_WALLPAPER_FILE names it, and copy? skips devices that have no
+# such slot. Point it under vendor/extra/ (regenerated every run, owned by no project) and have the
+# device makefile $(wildcard) it -- never at a file inside a patched project, or every build leaves
+# that project dirty and refresh-patches.sh cannot tell the option's asset from the device's.
+copy? default_wallpaper.jpg ${DEFAULT_WALLPAPER_FILE}

@@ -1,0 +1,331 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 19:59:33 -0400
+Subject: [PATCH] ether: bring the modem up, and stop rild crashing on the way
+
+Two halves of one problem: this device has no working peripheral manager, and the radio depended on
+it for two separate things.
+
+First, rild crashed. BpPeripheralManager::registar() in the 2016 libperipheral_client.so
+stack-allocates two android::Parcel objects 0x68 bytes apart, because that was sizeof(Parcel) in
+2016. It is now at least 0x70 -- Parcel::Parcel() ends with "str xzr, [x0, #0x68]" -- and no ether
+branch sets BOARD_VNDK_VERSION, so the blob links against the current libbinder and that store lands
+exactly on registar's stack canary. It aborted in the prologue on every call, before any binder
+traffic. 100 tombstones, all rild, until init gave up restarting it.
+
+  Abort message: 'stack corruption detected (-fstack-protector)'
+  #02 libperipheral_client.so (BpPeripheralManager::registar)
+  #05 libril-qc-qmi-1.so (qmi_ril_peripheral_mng_init+608)
+  #07 libril-qc-qmi-1.so (RIL_Init+84)
+
+libshims_peripheral_client reports failure from the five pm_client_* entry points, shimmed onto
+libril-qc-qmi-1.so alone so pm-service, pm-proxy and liblbs_core keep the real library. Failure is
+true -- vendor.qcom.PeripheralManager never registers -- and it is a path the RIL was written for:
+qmi_ril_peripheral_mng_init tests the return with cbz, and its caller with cbnz, and skips the ESOC
+setup the Robin's internal modem does not have.
+
+Second, nobody booted the modem. That was peripheral manager's other job, and skipping the ESOC path
+does not restore it -- the subsystem was already never booting while rild was crash-looping at that
+same call. The whole radio stack then stalls waiting on a subsystem that is OFFLINE:
+
+  linux_qmi_qmux_io.c: Unable to open port id /dev/smdcntl0, error [110:Connection timed out]
+  qmi_client: unable to connect to server, errno=[2:No such file or directory], attempt=49
+
+ether_modem_hold opens /dev/subsys_modem, which is subsystem_get("modem"), and holds it. Verified by
+hand on the device: the subsystem goes ONLINE, PIL loads the firmware, and the rest follows without
+any other change -- smdcntl0 appears, the qmux sockets are created, and rild services RIL requests
+(qcril_qmi_nas_get_cell_info_list_ncl completed with 39).
+
+It is a separate service rather than something in the shim because /dev/subsys_modem is 0640 system
+system and rild is uid radio, so rild cannot open it -- sepolicy already allows it, DAC does not. It
+runs in class core so the modem is up before qmuxd's first open instead of after it has started
+retrying.
+
+Cellular is still untested; there is no SIM in the device. This makes the radio stack come up at all,
+which it never has on this branch.
+---
+ BoardConfig.mk                                |  1 +
+ device.mk                                     |  2 +
+ libshims/Android.mk                           | 11 +++
+ .../peripheral_client/peripheral_client.c     | 67 +++++++++++++++++
+ modem_hold/Android.mk                         | 27 +++++++
+ modem_hold/modem_hold.c                       | 72 +++++++++++++++++++
+ rootdir/init.target.rc                        |  5 ++
+ sepolicy/file_contexts                        |  3 +
+ sepolicy/modem_hold.te                        |  9 +++
+ 9 files changed, 197 insertions(+)
+ create mode 100644 libshims/peripheral_client/peripheral_client.c
+ create mode 100644 modem_hold/Android.mk
+ create mode 100644 modem_hold/modem_hold.c
+ create mode 100644 sepolicy/modem_hold.te
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index ad33875..fae95e7 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -161,6 +161,7 @@ BOARD_SEPOLICY_DIRS += \
+ # Shims
+ TARGET_LD_SHIM_LIBS := \
+     /system/vendor/lib64/libril-qc-qmi-1.so|libaudioclient_shim.so \
++    /system/vendor/lib64/libril-qc-qmi-1.so|libshims_peripheral_client.so \
+     /system/vendor/lib64/libmm-abl.so|libshims_powermanager.so
+ 
+ # WiFi
+diff --git a/device.mk b/device.mk
+index 9aef774..ec57fd6 100644
+--- a/device.mk
++++ b/device.mk
+@@ -41,6 +41,8 @@ PRODUCT_PACKAGES += \
+     audio.r_submix.default \
+     audio.usb.default \
+     libaudioclient_shim \
++    libshims_peripheral_client \
++    ether_modem_hold \
+     libqcompostprocbundle \
+     libqcomvisualizer \
+     libqcomvoiceprocessing
+diff --git a/libshims/Android.mk b/libshims/Android.mk
+index 1d2e6a9..d71aa0b 100644
+--- a/libshims/Android.mk
++++ b/libshims/Android.mk
+@@ -34,3 +34,14 @@ LOCAL_MODULE_TAGS := optional
+ LOCAL_SHARED_LIBRARIES := libpowermanager
+ 
+ include $(BUILD_SHARED_LIBRARY)
++
++include $(CLEAR_VARS)
++
++LOCAL_SRC_FILES := \
++    peripheral_client/peripheral_client.c
++
++LOCAL_MODULE := libshims_peripheral_client
++LOCAL_MODULE_TAGS := optional
++LOCAL_VENDOR_MODULE := true
++
++include $(BUILD_SHARED_LIBRARY)
+diff --git a/libshims/peripheral_client/peripheral_client.c b/libshims/peripheral_client/peripheral_client.c
+new file mode 100644
+index 0000000..670a30a
+--- /dev/null
++++ b/libshims/peripheral_client/peripheral_client.c
+@@ -0,0 +1,67 @@
++/*
++ * Copyright (C) 2026 The LineageOS Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++/*
++ * rild crash-loops without this, roughly every five seconds, forever.
++ *
++ * libperipheral_client.so is a 2016 blob. BpPeripheralManager::registar()
++ * stack-allocates two android::Parcel objects 0x68 bytes apart, because
++ * sizeof(android::Parcel) was 0x68 when it was compiled. On 13 it is at least
++ * 0x70: Parcel::Parcel() ends with "str xzr, [x0, #0x68]". The device has no
++ * VNDK (ro.vndk.version is empty, there is no vendor libbinder), so the blob
++ * links against the current libbinder and that store lands exactly on the
++ * stack canary of registar's own frame. The result is a guaranteed
++ * __stack_chk_fail in the function prologue, before any binder traffic:
++ *
++ *   Abort message: 'stack corruption detected (-fstack-protector)'
++ *   #02 libperipheral_client.so (BpPeripheralManager::registar)
++ *   #05 libril-qc-qmi-1.so (qmi_ril_peripheral_mng_init+608)
++ *   #07 libril-qc-qmi-1.so (RIL_Init+84)
++ *
++ * Peripheral manager coordinates power-up of an *external* modem over ESOC.
++ * The Robin's modem is internal -- libmdmdetect logs "ESOC framework not
++ * supported" and "Found internal modem: modem" -- and pm-service never
++ * registers its binder service at all ("Service vendor.qcom.PeripheralManager
++ * didn't start. Returning NULL"). There is nothing here to manage.
++ *
++ * So report failure, which is the honest answer and a path the RIL already
++ * handles: qmi_ril_peripheral_mng_init checks the return with "cbz w0" and
++ * logs an error otherwise, and its caller then does "cbnz w0" and skips the
++ * rest of the ESOC setup. RIL_Init continues instead of aborting.
++ *
++ * Shimmed onto libril-qc-qmi-1.so only, so pm-service, pm-proxy and
++ * liblbs_core keep the real library.
++ */
++
++int pm_client_register(void) {
++    return -1;
++}
++
++int pm_client_unregister(void) {
++    return -1;
++}
++
++int pm_client_connect(void) {
++    return -1;
++}
++
++int pm_client_disconnect(void) {
++    return -1;
++}
++
++int pm_client_event_acknowledge(void) {
++    return -1;
++}
+diff --git a/modem_hold/Android.mk b/modem_hold/Android.mk
+new file mode 100644
+index 0000000..a047a5f
+--- /dev/null
++++ b/modem_hold/Android.mk
+@@ -0,0 +1,27 @@
++#
++# Copyright (C) 2026 The LineageOS Project
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++LOCAL_PATH := $(call my-dir)
++
++include $(CLEAR_VARS)
++
++LOCAL_SRC_FILES := modem_hold.c
++LOCAL_MODULE := ether_modem_hold
++LOCAL_MODULE_TAGS := optional
++LOCAL_SHARED_LIBRARIES := liblog
++LOCAL_VENDOR_MODULE := true
++
++include $(BUILD_EXECUTABLE)
+diff --git a/modem_hold/modem_hold.c b/modem_hold/modem_hold.c
+new file mode 100644
+index 0000000..109840f
+--- /dev/null
++++ b/modem_hold/modem_hold.c
+@@ -0,0 +1,72 @@
++/*
++ * Copyright (C) 2026 The LineageOS Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++/*
++ * Boot the modem subsystem and keep it booted.
++ *
++ * Opening /dev/subsys_modem calls subsystem_get("modem") in the kernel, which
++ * loads mba.mbn and modem.mdt through PIL and brings the subsystem online. It
++ * stays online for exactly as long as some process holds that fd open. This
++ * program opens it and then does nothing else, forever.
++ *
++ * Nothing else on the device does this. On the stock ROM the job belonged to
++ * pm-service, the peripheral manager, which runs as system and brought
++ * peripherals up on behalf of clients like rild over binder. That path is gone
++ * here: libperipheral_client.so is ABI-broken against a modern libbinder (see
++ * libshims/peripheral_client), so no client can reach the peripheral manager,
++ * and vendor.qcom.PeripheralManager never registers in the first place.
++ *
++ * Without this, the whole radio stack stalls on a subsystem that never boots:
++ *
++ *   linux_qmi_qmux_io.c: Unable to open port id /dev/smdcntl0,
++ *                        error [110:Connection timed out]
++ *   qmi_client: unable to connect to server, errno=[2], attempt=49...
++ *
++ * because /dev/smdcntl* only carry traffic once the modem is up. With the
++ * subsystem held online, qmuxd opens smdcntl0, the qmux sockets appear, and
++ * rild services RIL requests normally.
++ *
++ * Runs in class core so the modem is up before qmuxd's first open rather than
++ * after it has already started timing out and retrying, and as user system
++ * because /dev/subsys_modem is 0640 system system -- rild is uid radio and
++ * cannot open it itself, which is why this is a separate service and not
++ * something folded into the RIL shim.
++ */
++
++#define LOG_TAG "ether_modem_hold"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <log/log.h>
++#include <string.h>
++#include <unistd.h>
++
++#define SUBSYS_MODEM "/dev/subsys_modem"
++
++int main(void) {
++    int fd = open(SUBSYS_MODEM, O_RDONLY | O_CLOEXEC);
++    if (fd < 0) {
++        ALOGE("open(%s) failed: %s", SUBSYS_MODEM, strerror(errno));
++        return 1;
++    }
++
++    ALOGI("holding %s open; modem subsystem stays online", SUBSYS_MODEM);
++
++    /* Releasing the fd powers the modem back down, so never exit. */
++    for (;;) {
++        pause();
++    }
++}
+diff --git a/rootdir/init.target.rc b/rootdir/init.target.rc
+index f612b35..e21080b 100644
+--- a/rootdir/init.target.rc
++++ b/rootdir/init.target.rc
+@@ -74,6 +74,11 @@ service per_mgr /vendor/bin/pm-service
+     group system
+     writepid /dev/cpuset/system-background/tasks
+ 
++service modem_hold /vendor/bin/ether_modem_hold
++    class core
++    user system
++    group system
++
+ service per_proxy /vendor/bin/pm-proxy
+     class core
+     user system
+diff --git a/sepolicy/file_contexts b/sepolicy/file_contexts
+index 9a1e309..3a3e621 100644
+--- a/sepolicy/file_contexts
++++ b/sepolicy/file_contexts
+@@ -34,3 +34,6 @@
+ # TimeKeep
+ /sys/devices/soc\.0/qpnp-rtc-8/rtc/rtc0(/.*)?                           u:object_r:sysfs_rtc:s0
+ /(system/vendor|vendor)/bin/timekeep                                    u:object_r:timekeep_exec:s0
++
++# Modem subsystem holder
++/(system/vendor|vendor)/bin/ether_modem_hold                             u:object_r:modem_hold_exec:s0
+diff --git a/sepolicy/modem_hold.te b/sepolicy/modem_hold.te
+new file mode 100644
+index 0000000..d49b39b
+--- /dev/null
++++ b/sepolicy/modem_hold.te
+@@ -0,0 +1,9 @@
++# Holds /dev/subsys_modem open so the modem subsystem stays booted.
++# See modem_hold/modem_hold.c for why this exists at all.
++type modem_hold, domain;
++type modem_hold_exec, exec_type, vendor_file_type, file_type;
++
++init_daemon_domain(modem_hold)
++
++# Opening this is subsystem_get("modem"); holding it keeps the modem online.
++allow modem_hold ssr_device:chr_file r_file_perms;

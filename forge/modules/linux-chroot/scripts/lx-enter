@@ -1,0 +1,61 @@
+#!/system/bin/sh
+# lx-enter -- mount what the chroot needs (idempotently) and enter it.
+#
+#   linux                 interactive login shell
+#   linux <cmd> [args...] run one command inside and exit
+#
+# Nothing is mounted at boot: this is all on demand, so a broken rootfs can never affect Android's
+# boot path. That is the main reason this ships as a Magisk module rather than baked into the ROM.
+set -u
+
+# Magisk's busybox is not on PATH in a plain `su` shell.
+command -v busybox >/dev/null 2>&1 || busybox() { /data/adb/magisk/busybox "$@"; }
+
+LXROOT="${LXROOT:-/data/linux}"
+SHELL_IN="${LXSHELL:-/bin/bash}"
+
+[ "$(id -u)" = "0" ] || { echo "!! must be root (su)"; exit 1; }
+[ -d "$LXROOT/etc" ] || { echo "!! no rootfs at $LXROOT -- run linux-setup first"; exit 1; }
+
+_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
+
+_bind() {  # $1 = source, $2 = target under $LXROOT
+  t="$LXROOT$2"
+  mkdir -p "$t" 2>/dev/null
+  _mounted "$t" || busybox mount --bind "$1" "$t" 2>/dev/null || echo "   .. could not bind $1"
+}
+
+_type() { # $1 = fstype, $2 = target under $LXROOT
+  t="$LXROOT$2"
+  mkdir -p "$t" 2>/dev/null
+  _mounted "$t" || busybox mount -t "$1" "$1" "$t" 2>/dev/null || echo "   .. could not mount $1"
+}
+
+_type proc /proc
+_type sysfs /sys
+_bind /dev /dev
+# devpts must be bound rather than mounted fresh: this kernel lacks
+# CONFIG_DEVPTS_MULTIPLE_INSTANCES, so a second instance is not available.
+_bind /dev/pts /dev/pts
+_mounted "$LXROOT/dev/shm" || { mkdir -p "$LXROOT/dev/shm"; busybox mount -t tmpfs -o nosuid,nodev tmpfs "$LXROOT/dev/shm" 2>/dev/null; }
+# Handy, and harmless if absent on a given device.
+[ -d /sdcard ] && _bind /sdcard /mnt/sdcard
+
+# SELinux. Android's policy has no domain for arbitrary glibc binaries, so some programs will be
+# denied even running as root. We deliberately do NOT weaken policy by default -- set LXPERMISSIVE=1
+# for a single session if you hit denials, and understand that it disables SELinux device-wide until
+# the next reboot.
+if [ "${LXPERMISSIVE:-0}" = "1" ]; then
+  echo ">> LXPERMISSIVE=1: setting SELinux permissive DEVICE-WIDE until reboot."
+  setenforce 0 2>/dev/null || echo "   .. setenforce failed"
+fi
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export HOME=/root TERM="${TERM:-xterm-256color}" LANG="${LANG:-C.UTF-8}"
+export PS1='\[\e[1;32m\]linux\[\e[0m\]:\w# '
+
+if [ "$#" -gt 0 ]; then
+  exec busybox chroot "$LXROOT" "$SHELL_IN" -lc "$*"
+else
+  exec busybox chroot "$LXROOT" "$SHELL_IN" -l
+fi

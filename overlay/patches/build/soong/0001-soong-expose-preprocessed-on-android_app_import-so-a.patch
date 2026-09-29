@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 13 Sep 2026 12:44:47 -0400
+Subject: [PATCH] soong: expose preprocessed on android_app_import, so a
+ presigned APK ships untouched
+
+A presigned android_app_import here has its JNI libraries and dex uncompressed and is then
+zipaligned. Each of those rewrites the archive, and an APK Signature Scheme v2 signature covers the
+whole file, so the signature no longer verifies. PackageManager rejects the package during the boot
+scan and logs nothing, so the build succeeds and the app is simply missing. Measured on this device:
+Firefox 127,545,689 -> 242,684,607 bytes and GoogleContacts 14,891,125 -> 19,776,651, both with
+their APK Sig Block gone, and neither installed.
+
+The mechanism to avoid it already exists in this file -- a.preprocessed is consulted in the three
+places that matter -- but the property was only exposed on android_test_import. Later Soong exposes
+it on android_app_import too; this is that backport.
+
+Also fixes the JNI guard, which required InstallInTestcases() before honouring preprocessed, and
+sets the flag before the JNI and dex steps read it rather than at the install-path switch below them.
+---
+ java/app_import.go | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/java/app_import.go b/java/app_import.go
+index 58c01a447..d5a1b3aa2 100644
+--- a/java/app_import.go
++++ b/java/app_import.go
+@@ -77,6 +77,13 @@ type AndroidAppImportProperties struct {
+ 	// be set for presigned modules.
+ 	Presigned *bool
+ 
++	// Whether the prebuilt apk can be installed without additional processing. Default is false.
++	// Backported from a later Soong: this platform only exposed it on android_test_import, so a
++	// presigned android_app_import had its JNI libs and dex uncompressed and was then zipaligned,
++	// which invalidates an APK Signature Scheme v2 signature and makes PackageManager reject the
++	// package at boot scan without logging anything.
++	Preprocessed *bool
++
+ 	// Name of the signing certificate lineage file or filegroup module.
+ 	Lineage *string `android:"path"`
+ 
+@@ -185,7 +192,7 @@ func (a *AndroidAppImport) uncompressEmbeddedJniLibs(
+ 	ctx android.ModuleContext, inputPath android.Path, outputPath android.OutputPath) {
+ 	// Test apps don't need their JNI libraries stored uncompressed. As a matter of fact, messing
+ 	// with them may invalidate pre-existing signature data.
+-	if ctx.InstallInTestcases() && (Bool(a.properties.Presigned) || a.preprocessed) {
++	if a.preprocessed || (ctx.InstallInTestcases() && Bool(a.properties.Presigned)) {
+ 		ctx.Build(pctx, android.BuildParams{
+ 			Rule:   android.Cp,
+ 			Output: outputPath,
+@@ -268,6 +275,11 @@ func (a *AndroidAppImport) generateAndroidBuildActions(ctx android.ModuleContext
+ 
+ 	// TODO: Install or embed JNI libraries
+ 
++	// Must be set before the JNI and dex steps below consult it.
++	if Bool(a.properties.Preprocessed) {
++		a.preprocessed = true
++	}
++
+ 	// Uncompress JNI libraries in the apk
+ 	jnisUncompressed := android.PathForModuleOut(ctx, "jnis-uncompressed", ctx.ModuleName()+".apk")
+ 	a.uncompressEmbeddedJniLibs(ctx, srcApk, jnisUncompressed.OutputPath)

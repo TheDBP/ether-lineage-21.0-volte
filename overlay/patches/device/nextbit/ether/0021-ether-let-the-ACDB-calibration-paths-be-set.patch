@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 22:04:03 -0400
+Subject: [PATCH] ether: let the ACDB calibration paths be set
+
+vendor_init is refused audio_prop, so the seven persist.audio.calfile* paths init.qcom.rc sets from
+this device's own ACDB data all read back empty and the audio HAL has been running on generic
+calibration since the port began:
+
+    avc: denied { set } for property=persist.audio.calfile0 scontext=u:r:vendor_init:s0
+                                                            tcontext=u:object_r:audio_prop:s0
+
+AOSP folded the exported_audio_prop type vendor_init used to hold back into audio_prop, so vendor rc
+files written against the old world stopped working silently. public/vendor_init.te already grants
+vendor_init a long list of other core property types and there is no neverallow against this one.
+
+Found by sweeping property *set* denials, which name the property where read denials do not.
+---
+ sepolicy/vendor_init.te | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/sepolicy/vendor_init.te b/sepolicy/vendor_init.te
+index 57d9d14..ec22c3b 100644
+--- a/sepolicy/vendor_init.te
++++ b/sepolicy/vendor_init.te
+@@ -15,3 +15,14 @@ allow vendor_init radio_data_file:file create_file_perms;
+ 
+ # copy_complete under the radio core data dir
+ allow vendor_init radio_core_data_file:file create_file_perms;
++
++# init.qcom.rc sets persist.audio.calfile0..6 to this device's own ACDB calibration
++# (NBQ_Speaker_cal.acdb, NBQ_Handset_cal.acdb, NBQ_Headset_cal.acdb and four more) and every one is
++# refused, so all seven read back empty and the audio HAL has been running on generic calibration:
++#   avc: denied { set } for property=persist.audio.calfile0 scontext=u:r:vendor_init:s0
++#                                                           tcontext=u:object_r:audio_prop:s0
++# AOSP used to grant vendor_init the separate exported_audio_prop type and folded it back into
++# audio_prop, which silently broke vendor rc files written against the old world. public/vendor_init.te
++# already grants vendor_init a long list of other core property types, and there is no neverallow
++# against this one.
++set_prop(vendor_init, audio_prop)

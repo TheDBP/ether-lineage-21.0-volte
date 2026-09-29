@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:11:27 -0400
+Subject: [PATCH] SetupWizard: preselect 3-button navigation
+
+The navigation page defaults to gestures, which draws a pill and never shows the
+nav-bar icons this image ships. Preselect 3-button; gestures stay one tap away.
+
+Same change as the 20.0/22.2/23.2 sets, against 24.0's layout: SetupWizard moved to
+app/src/main/ and the activity is Kotlin now, so the default is `selection` rather than
+`mSelection`. The layout itself is unchanged apart from its path.
+---
+ .../setupwizard/settings/NavigationSettingsActivity.kt        | 2 +-
+ app/src/main/res/layout/setup_navigation.xml                  | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/app/src/main/java/org/lineageos/setupwizard/settings/NavigationSettingsActivity.kt b/app/src/main/java/org/lineageos/setupwizard/settings/NavigationSettingsActivity.kt
+index f456dbc..bfb4bf4 100644
+--- a/app/src/main/java/org/lineageos/setupwizard/settings/NavigationSettingsActivity.kt
++++ b/app/src/main/java/org/lineageos/setupwizard/settings/NavigationSettingsActivity.kt
+@@ -27,7 +27,7 @@ import org.lineageos.setupwizard.util.SetupWizardUtils
+ 
+ class NavigationSettingsActivity : BaseSetupWizardActivity() {
+ 
+-    private var selection: String = NAV_BAR_MODE_GESTURAL_OVERLAY
++    private var selection: String = NAV_BAR_MODE_3BUTTON_OVERLAY
+ 
+     private lateinit var hideGesturalHint: CheckBox
+ 
+diff --git a/app/src/main/res/layout/setup_navigation.xml b/app/src/main/res/layout/setup_navigation.xml
+index 21c98c8..12e56af 100644
+--- a/app/src/main/res/layout/setup_navigation.xml
++++ b/app/src/main/res/layout/setup_navigation.xml
+@@ -37,7 +37,7 @@
+                         android:id="@+id/navigation_illustration"
+                         android:layout_width="match_parent"
+                         android:layout_height="wrap_content"
+-                        app:lottie_rawRes="@raw/lottie_system_nav_fully_gestural"
++                        app:lottie_rawRes="@raw/lottie_system_nav_3_button"
+                         app:lottie_autoPlay="true"
+                         app:lottie_loop="true" />
+ 
+@@ -49,12 +49,12 @@
+                         <RadioButton
+                             android:id="@+id/radio_gesture"
+                             android:text="@string/gesture_navigation"
+-                            android:checked="true"
+                             style="@style/SudRadioButton" />
+ 
+                         <RadioButton
+                             android:id="@+id/radio_sw_keys"
+                             android:text="@string/navbar_navigation"
++                            android:checked="true"
+                             style="@style/SudRadioButton" />
+ 
+                     </RadioGroup>
+-- 
+2.53.0
+

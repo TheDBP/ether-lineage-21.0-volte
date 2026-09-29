@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 4 Sep 2026 09:35:16 -0400
+Subject: [PATCH] lineage: restore B64_FAMILY (msm8992/msm8994) for the ether
+ port
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+lineage-20.0 removed the pre-UM legacy SoC families (B_FAMILY, B64_FAMILY, BR_FAMILY) from
+BoardConfigQcom.mk. The Nextbit Robin is msm8992, which matched B64_FAMILY on 18.1/19.1 and maps to
+QCOM_HARDWARE_VARIANT=msm8994 — msm8992 has no CAF tree of its own and shares msm8994's.
+
+Without this, QCOM_HARDWARE_VARIANT falls back to the board platform itself, QCOM_SOONG_NAMESPACE
+becomes hardware/qcom-caf/msm8992 (a directory that does not exist), and EVERY module in the
+msm8994 CAF trees is invisible — surfacing as a pile of 'missing libstagefrighthw / libqdMetaData'
+errors at ckati.
+
+Restores four things:
+  - B64_FAMILY := msm8992 msm8994
+  - QCOM_HARDWARE_VARIANT := msm8994 for that family (ahead of the UM chain)
+  - TARGET_USES_QCOM_BSP := true, tested by hardware/qcom-caf/msm8994/display/common.mk:32
+  - GRALLOC_USAGE_HW_2D (bit 10), which feeds SOONG_CONFIG_lineageGlobalVars_*
+
+Deliberately NOT restored: TARGET_USES_QCOM_BSP_LEGACY — zero references remain in the 20.0 tree,
+so it would be dead weight.
+---
+ config/BoardConfigQcom.mk | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/config/BoardConfigQcom.mk b/config/BoardConfigQcom.mk
+index 79e10ca9..fcfd66a3 100644
+--- a/config/BoardConfigQcom.mk
++++ b/config/BoardConfigQcom.mk
+@@ -12,6 +12,10 @@ TARO := taro #SM8450
+ PARROT := parrot #SM6450
+ KALAMA := kalama #SM8550
+ 
++# Restored for the ether (Nextbit Robin) port. lineage-20.0 dropped the pre-UM legacy families;
++# msm8992 (Snapdragon 808) has no CAF tree of its own and shares msm8994's (810).
++B64_FAMILY := msm8992 msm8994
++
+ UM_3_18_FAMILY := msm8996
+ UM_4_4_FAMILY := msm8998
+ UM_4_9_FAMILY := sdm845 sdm710
+@@ -132,8 +136,20 @@ ifeq ($(filter $(UM_PLATFORMS),$(TARGET_BOARD_PLATFORM)),)
+     SOONG_CONFIG_qtidisplay_displayconfig_enabled := true
+ endif
+ 
++# The legacy CAF display HAL tests this (hardware/qcom-caf/msm8994/display/common.mk:32).
++# NOTE: TARGET_USES_QCOM_BSP_LEGACY is deliberately NOT restored — nothing in the 20.0 tree
++# consumes it (0 references), so it would be dead weight.
++ifneq ($(filter $(B64_FAMILY),$(TARGET_BOARD_PLATFORM)),)
++    TARGET_USES_QCOM_BSP := true
++endif
++
+ TARGET_ADDITIONAL_GRALLOC_10_USAGE_BITS ?= 0
+ 
++# Mark GRALLOC_USAGE_HW_2D as valid gralloc bit on legacy platforms that support it
++ifneq ($(filter $(B64_FAMILY),$(TARGET_BOARD_PLATFORM)),)
++    TARGET_ADDITIONAL_GRALLOC_10_USAGE_BITS += | (1 << 10)
++endif
++
+ # Mark GRALLOC_USAGE_EXTERNAL_DISP as valid gralloc bit
+ TARGET_ADDITIONAL_GRALLOC_10_USAGE_BITS += | (1 << 13)
+ 
+@@ -159,7 +175,10 @@ ifneq ($(filter $(UM_5_10_FAMILY) $(UM_5_15_FAMILY),$(TARGET_BOARD_PLATFORM)),)
+     TARGET_GRALLOC_HANDLE_HAS_RESERVED_SIZE ?= true
+ endif
+ 
+-ifneq ($(filter $(UM_3_18_FAMILY),$(TARGET_BOARD_PLATFORM)),)
++ifneq ($(filter $(B64_FAMILY),$(TARGET_BOARD_PLATFORM)),)
++    MSM_VIDC_TARGET_LIST := $(B64_FAMILY)
++    QCOM_HARDWARE_VARIANT := msm8994
++else ifneq ($(filter $(UM_3_18_FAMILY),$(TARGET_BOARD_PLATFORM)),)
+     MSM_VIDC_TARGET_LIST := $(UM_3_18_FAMILY)
+     QCOM_HARDWARE_VARIANT := msm8996
+ else ifneq ($(filter $(UM_4_9_LEGACY_FAMILY),$(TARGET_BOARD_PLATFORM)),)

@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 14:40:28 -0400
+Subject: [PATCH] fulguris: bundle Fulguris as the browser, replacing Jelly
+
+vendor/lineage/prebuilts/fulguris module, installed unmodified and overriding Jelly, plus a
+guarded PRODUCT_PACKAGES line in config/common.mk. The APK is fetched by the fulguris option's
+fetch.sh (the current F-Droid build, signer-pinned); the module is a no-op without it.
+
+Make branch: the module file ships in the patch and carries LOCAL_OVERRIDES_PACKAGES, where the
+Soong branches get overrides in the Android.bp the fetcher writes.
+---
+ config/common.mk              |  7 +++++++
+ prebuilts/fulguris/.gitignore |  5 +++++
+ prebuilts/fulguris/Android.mk | 27 +++++++++++++++++++++++++++
+ 3 files changed, 39 insertions(+)
+ create mode 100644 prebuilts/fulguris/.gitignore
+ create mode 100644 prebuilts/fulguris/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 985e611c..3be04df0 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -121,6 +121,13 @@ PRODUCT_PACKAGES += \
+     LineageSetupWizard \
+     Updater
+ 
++# fulguris option: Fulguris as the browser, replacing Jelly (the module overrides it).
++# Guarded on the fetched APK so a build without the option (no APK) is unaffected;
++# require.sh fails the build if the option is on and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/fulguris/Fulguris.apk),)
++PRODUCT_PACKAGES += Fulguris
++endif
++
+ PRODUCT_COPY_FILES += \
+     vendor/lineage/prebuilt/common/etc/init/init.lineage-updater.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/init.lineage-updater.rc
+ 
+diff --git a/prebuilts/fulguris/.gitignore b/prebuilts/fulguris/.gitignore
+new file mode 100644
+index 00000000..6f5696ad
+--- /dev/null
++++ b/prebuilts/fulguris/.gitignore
+@@ -0,0 +1,5 @@
++# Written by the fulguris option (forge/prebuilt/fetch-fulguris.sh): the APK, and the native
++# libraries it unpacks beside it should a release ever pack them compressed.
++Fulguris.apk
++*.apk.download
++lib/
+diff --git a/prebuilts/fulguris/Android.mk b/prebuilts/fulguris/Android.mk
+new file mode 100644
+index 00000000..f49998c3
+--- /dev/null
++++ b/prebuilts/fulguris/Android.mk
+@@ -0,0 +1,27 @@
++LOCAL_PATH := $(call my-dir)
++# Fulguris (net.slions.fulguris.full.fdroid), PRESIGNED by its upstream. The APK is fetched,
++# signer-verified, by the fulguris option's fetch.sh and is gitignored, never committed. Defined
++# only when it is present; see config/common.mk.
++ifneq ($(wildcard $(LOCAL_PATH)/Fulguris.apk),)
++include $(CLEAR_VARS)
++LOCAL_MODULE := Fulguris
++LOCAL_MODULE_TAGS := optional
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
++LOCAL_BUILT_MODULE_STEM := package.apk
++LOCAL_CERTIFICATE := PRESIGNED
++# Replaces the stock browser. On Soong branches the fetcher writes overrides into Android.bp;
++# here it is the Make equivalent.
++LOCAL_OVERRIDES_PACKAGES := Jelly
++# Ship the APK byte for byte: without LOCAL_SDK_VERSION the build rewrites it, invalidating the
++# whole-file v2 signature, and PackageManager then drops the package at boot scan, silently.
++LOCAL_SDK_VERSION := current
++# Stored and aligned today, so this is empty. Decided per fetch, so a release that packs them
++# compressed is installed from here instead.
++LOCAL_PREBUILT_JNI_LIBS := $(patsubst $(LOCAL_PATH)/%,%,$(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_SRC_FILES := Fulguris.apk
++LOCAL_PRODUCT_MODULE := true
++LOCAL_DEX_PREOPT := false
++include $(BUILD_PREBUILT)
++endif
+-- 
+2.53.0
+

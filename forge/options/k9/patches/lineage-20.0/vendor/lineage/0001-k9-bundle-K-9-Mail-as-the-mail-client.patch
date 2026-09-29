@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 17 Sep 2026 17:34:14 -0400
+Subject: [PATCH] k9: bundle K-9 Mail as the mail client
+
+vendor/lineage/prebuilts/k9 module, installed unmodified, plus a guarded PRODUCT_PACKAGES line in
+config/common.mk. The APK is fetched by the k9 option's fetch.sh (the current F-Droid build,
+signer-pinned); the module is a no-op without it.
+
+Native libraries the fetcher unpacks beside the APK (when the APK packs them compressed) install
+through LOCAL_PREBUILT_JNI_LIBS from a wildcard; the <uses-library> check is off because the
+manifest moves with each fetch.
+---
+ config/common.mk        |  6 ++++++
+ prebuilts/k9/.gitignore |  5 +++++
+ prebuilts/k9/Android.mk | 31 +++++++++++++++++++++++++++++++
+ 3 files changed, 42 insertions(+)
+ create mode 100644 prebuilts/k9/.gitignore
+ create mode 100644 prebuilts/k9/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 985e611c..37a64ccf 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -174,6 +174,12 @@ PRODUCT_COPY_FILES += \
+ PRODUCT_PACKAGES += \
+     rsync
+ 
++# k9 option: K-9 Mail as the mail client. Guarded on the fetched APK so a build without the option
++# (no APK) is unaffected; require.sh fails the build if the option is on and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/k9/K9Mail.apk),)
++PRODUCT_PACKAGES += K9Mail
++endif
++
+ # Storage manager
+ PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
+     ro.storage_manager.enabled=true
+diff --git a/prebuilts/k9/.gitignore b/prebuilts/k9/.gitignore
+new file mode 100644
+index 00000000..f19094e0
+--- /dev/null
++++ b/prebuilts/k9/.gitignore
+@@ -0,0 +1,5 @@
++# Fetched by the k9 option (forge/prebuilt/fetch-k9.sh); never committed. lib/ holds the
++# native libraries it unpacks beside the APK when the APK packs them compressed.
++K9Mail.apk
++*.apk.download
++lib/
+diff --git a/prebuilts/k9/Android.mk b/prebuilts/k9/Android.mk
+new file mode 100644
+index 00000000..ec600804
+--- /dev/null
++++ b/prebuilts/k9/Android.mk
+@@ -0,0 +1,31 @@
++LOCAL_PATH := $(call my-dir)
++# K-9 Mail (com.fsck.k9), PRESIGNED by its upstream. The APK is fetched, signer-verified, by
++# the k9 option's fetch.sh and is gitignored, never committed. Defined only when it is present; see
++# config/common.mk.
++ifneq ($(wildcard $(LOCAL_PATH)/K9Mail.apk),)
++include $(CLEAR_VARS)
++LOCAL_MODULE := K9Mail
++LOCAL_MODULE_TAGS := optional
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
++LOCAL_BUILT_MODULE_STEM := package.apk
++LOCAL_CERTIFICATE := PRESIGNED
++# Ship the APK byte for byte. Without LOCAL_SDK_VERSION the build takes the rewriting path and
++# uncompresses the embedded libraries and dex, which invalidates the whole-file v2 signature; with
++# targetSdk 35 PackageManager then rejects the package at boot scan, silently. Setting it selects
++# do_not_alter_apk: copy, then check only. K-9 ships its dex compressed, so that check needs the
++# build/make patch that makes it a warning (the option's require.sh verifies it is applied).
++LOCAL_SDK_VERSION := current
++# PackageManager never extracts native libraries for a bundled system app and the linker cannot
++# dlopen a compressed zip entry, so when the APK packs them compressed fetch-k9.sh unpacks
++# lib/arm64-v8a/ next to it and these install as <app>/lib/arm64/*.so. Empty when it did not.
++LOCAL_PREBUILT_JNI_LIBS := $(patsubst $(LOCAL_PATH)/%,%,$(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++# The <uses-library> check is off: the APK is whatever F-Droid's current build is at fetch time, so
++# its manifest cannot be mirrored in LOCAL_OPTIONAL_USES_LIBRARIES here. The check guards dexpreopt,
++# which is off for this module anyway.
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_SRC_FILES := K9Mail.apk
++LOCAL_PRODUCT_MODULE := true
++LOCAL_DEX_PREOPT := false
++include $(BUILD_PREBUILT)
++endif
+-- 
+2.53.0
+

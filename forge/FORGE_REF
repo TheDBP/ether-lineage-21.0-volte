@@ -1,0 +1,7 @@
+# Pinned rom-forge commit vendored into forge/. Written by forge/tools/sync-forge.sh.
+# Update with: ./forge/tools/sync-forge.sh [ref]
+url=https://github.com/TheDBP/rom-forge.git
+ref=main
+commit=7cbab7abb6e7a88293dd301cb78621df57d9b236
+subject=README: ether moves to per-version repos, and the series is 75 patches not 50
+synced=2026-09-29T17:26:21Z

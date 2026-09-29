@@ -1,0 +1,109 @@
+From 2b4ce590aff1f9572d62080d1b2c0ce2f716651a Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 11:52:19 -0400
+Subject: [PATCH] =?UTF-8?q?ether:=20home-screen=20defaults=20=E2=80=94?=
+ =?UTF-8?q?=20no=20icon=20labels,=20no=20auto-add,=20rotation=20on?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Default Trebuchet to: no desktop icon labels (pref_desktop_show_labels), don't
+auto-add icons for newly installed apps (pref_add_icon_to_home), and allow home
+screen rotation (allow_rotation). Flip both the launcher_preferences.xml
+defaultValue AND the code fallback for each (xml default alone doesn't cover the
+first-boot read), and the allow_rotation bool resource (which both the pref and
+getAllowRotationDefaultValue consult).
+---
+ res/values/config.xml                                | 2 +-
+ res/xml/launcher_preferences.xml                     | 4 ++--
+ src/com/android/launcher3/BubbleTextView.java        | 6 +++---
+ src/com/android/launcher3/SessionCommitReceiver.java | 4 ++--
+ 4 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/res/values/config.xml b/res/values/config.xml
+index e5f9b4a4c..fba64cb4e 100644
+--- a/res/values/config.xml
++++ b/res/values/config.xml
+@@ -1,7 +1,7 @@
+ <resources>
+     <!-- Miscellaneous -->
+     <bool name="config_largeHeap">false</bool>
+-    <bool name="allow_rotation">false</bool>
++    <bool name="allow_rotation">true</bool>
+ 
+     <integer name="extracted_color_gradient_alpha">153</integer>
+ 
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 77474c46f..26d65685d 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -42,7 +42,7 @@
+         android:key="pref_add_icon_to_home"
+         android:title="@string/auto_add_shortcuts_label"
+         android:summary="@string/auto_add_shortcuts_description"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true" />
+ 
+     <SwitchPreference
+@@ -75,7 +75,7 @@
+     <SwitchPreference
+         android:key="pref_desktop_show_labels"
+         android:title="@string/desktop_show_labels"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true" />
+ 
+     <SwitchPreference
+diff --git a/src/com/android/launcher3/BubbleTextView.java b/src/com/android/launcher3/BubbleTextView.java
+index 57a5719fd..13549c769 100644
+--- a/src/com/android/launcher3/BubbleTextView.java
++++ b/src/com/android/launcher3/BubbleTextView.java
+@@ -177,7 +177,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, grid.iconTextSizePx);
+             setCompoundDrawablePadding(grid.iconDrawablePaddingPx);
+             defaultIconSize = grid.iconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_ALL_APPS) {
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, grid.allAppsIconTextSizePx);
+             setCompoundDrawablePadding(grid.allAppsIconDrawablePaddingPx);
+@@ -187,11 +187,11 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, grid.folderChildTextSizePx);
+             setCompoundDrawablePadding(grid.folderChildDrawablePaddingPx);
+             defaultIconSize = grid.folderChildIconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else {
+             // widget_selection or shortcut_popup
+             defaultIconSize = grid.iconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         }
+ 
+         mCenterVertically = a.getBoolean(R.styleable.BubbleTextView_centerVertically, false);
+diff --git a/src/com/android/launcher3/SessionCommitReceiver.java b/src/com/android/launcher3/SessionCommitReceiver.java
+index 89f0a3d28..046114f41 100644
+--- a/src/com/android/launcher3/SessionCommitReceiver.java
++++ b/src/com/android/launcher3/SessionCommitReceiver.java
+@@ -121,7 +121,7 @@ public class SessionCommitReceiver extends BroadcastReceiver {
+     }
+ 
+     public static boolean isEnabled(Context context) {
+-        return Utilities.getPrefs(context).getBoolean(ADD_ICON_PREFERENCE_KEY, true);
++        return Utilities.getPrefs(context).getBoolean(ADD_ICON_PREFERENCE_KEY, false);
+     }
+ 
+     public static void applyDefaultUserPrefs(final Context context) {
+@@ -136,7 +136,7 @@ public class SessionCommitReceiver extends BroadcastReceiver {
+             // If it is a fresh start, just apply the default value. We use prefs.isEmpty() to infer
+             // a fresh start as put preferences always contain some values corresponding to current
+             // grid.
+-            prefs.edit().putBoolean(ADD_ICON_PREFERENCE_KEY, true).apply();
++            prefs.edit().putBoolean(ADD_ICON_PREFERENCE_KEY, false).apply();
+         } else if (!prefs.contains(ADD_ICON_PREFERENCE_INITIALIZED_KEY)) {
+             new PrefInitTask(context).executeOnExecutor(Executors.THREAD_POOL_EXECUTOR);
+         }
+-- 
+2.53.0
+

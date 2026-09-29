@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 17 Sep 2026 17:34:14 -0400
+Subject: [PATCH] termoneplus: bundle TermOne Plus as the terminal emulator
+
+vendor/lineage/prebuilts/termoneplus module, installed unmodified with its native libraries beside
+it, plus a guarded PRODUCT_PACKAGES line in config/common.mk. The APK is fetched by the termoneplus
+option's fetch.sh (the current F-Droid build, signer-pinned); the module is a no-op without it.
+
+Native libraries the fetcher unpacks beside the APK (when the APK packs them compressed) install
+through LOCAL_PREBUILT_JNI_LIBS from a wildcard; the <uses-library> check is off because the
+manifest moves with each fetch.
+---
+ config/common.mk                 |  7 +++++++
+ prebuilts/termoneplus/.gitignore |  5 +++++
+ prebuilts/termoneplus/Android.mk | 30 ++++++++++++++++++++++++++++++
+ 3 files changed, 42 insertions(+)
+ create mode 100644 prebuilts/termoneplus/.gitignore
+ create mode 100644 prebuilts/termoneplus/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 985e611c..2c3c8c34 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -197,6 +197,13 @@ PRODUCT_PACKAGES += \
+ endif
+ endif
+ 
++# termoneplus option: TermOne Plus terminal emulator. Guarded on the fetched APK so a build without
++# the option (no APK) is unaffected; require.sh fails the build if the option is on and the APK is
++# missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/termoneplus/TermOnePlus.apk),)
++PRODUCT_PACKAGES += TermOnePlus
++endif
++
+ # SystemUI
+ PRODUCT_DEXPREOPT_SPEED_APPS += \
+     SystemUI
+diff --git a/prebuilts/termoneplus/.gitignore b/prebuilts/termoneplus/.gitignore
+new file mode 100644
+index 00000000..bdad95c7
+--- /dev/null
++++ b/prebuilts/termoneplus/.gitignore
+@@ -0,0 +1,5 @@
++# Fetched by the termoneplus option (forge/prebuilt/fetch-termoneplus.sh); never committed. lib/ holds the
++# native libraries it unpacks beside the APK when the APK packs them compressed.
++TermOnePlus.apk
++*.apk.download
++lib/
+diff --git a/prebuilts/termoneplus/Android.mk b/prebuilts/termoneplus/Android.mk
+new file mode 100644
+index 00000000..6ad6b62d
+--- /dev/null
++++ b/prebuilts/termoneplus/Android.mk
+@@ -0,0 +1,30 @@
++LOCAL_PATH := $(call my-dir)
++# TermOne Plus (com.termoneplus) terminal emulator, the F-Droid build, PRESIGNED by its upstream.
++# The APK is fetched, signer-verified, by the termoneplus option's fetch.sh and is gitignored,
++# never committed. Defined only when it is present; see config/common.mk.
++ifneq ($(wildcard $(LOCAL_PATH)/TermOnePlus.apk),)
++include $(CLEAR_VARS)
++LOCAL_MODULE := TermOnePlus
++LOCAL_MODULE_TAGS := optional
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
++LOCAL_BUILT_MODULE_STEM := package.apk
++LOCAL_CERTIFICATE := PRESIGNED
++# Ship the APK byte for byte. Without LOCAL_SDK_VERSION the build takes the rewriting path and
++# uncompresses the embedded libraries and dex, which invalidates the whole-file v2 signature;
++# PackageManager then rejects the package at boot scan, silently. Setting it selects
++# do_not_alter_apk: copy, then check only. TermOne Plus ships its dex compressed, so that check
++# needs the build/make patch that makes it a warning (the option's require.sh verifies it is applied).
++LOCAL_SDK_VERSION := current
++# PackageManager never extracts native libraries for a bundled system app and the linker cannot
++# dlopen a compressed entry out of the APK, so fetch-termoneplus.sh unpacks lib/arm64-v8a/ next to
++# it and these install as <app>/lib/arm64/*.so. Without them every launch dies in UnsatisfiedLinkError.
++LOCAL_PREBUILT_JNI_LIBS := $(patsubst $(LOCAL_PATH)/%,%,$(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++# The manifest declares uses-library required=false entries; they are not mirrored here, and the
++# check that compares them exists only to guard dexpreopt, which is off for this module.
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_SRC_FILES := TermOnePlus.apk
++LOCAL_PRODUCT_MODULE := true
++LOCAL_DEX_PREOPT := false
++include $(BUILD_PREBUILT)
++endif
+-- 
+2.53.0
+

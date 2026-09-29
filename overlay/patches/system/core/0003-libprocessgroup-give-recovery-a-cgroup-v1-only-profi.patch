@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 09:32:08 -0400
+Subject: [PATCH] libprocessgroup: give recovery a cgroup-v1-only profile too
+
+Recovery has its own descriptor file, cgroups.recovery.json, which I missed
+when converting cgroups.json to a v1-only layout. It declared nothing but the
+cgroup v2 root, so on this 3.10 kernel recovery could not boot at all:
+
+  libprocessgroup: Failed to make and chown /sys/fs/cgroup/uid_0: No such file
+  init: cpuset cgroup controller is not mounted!
+  init: Could not restart process 'ueventd': createProcessGroup(0, 330) failed
+  init: critical process 'ueventd' exited 4 times before boot completed
+  init: InitFatalReboot: signal 6
+
+The path in that error is the giveaway: '/sys/fs/cgroup/uid_0' is the v2 root,
+whereas the ROM (running the patched cgroups.json) fails as '/uid_0' with an
+empty base. Two different files, two different failures.
+
+Dropped the v2 root and declared cpuset as an Optional v1 controller, which
+also addresses init's 'cpuset cgroup controller is not mounted' complaint.
+With no v2 hierarchy the path is empty and createProcessGroupInternal's guard
+returns success, so ueventd starts.
+
+Worth noting the diagnostic value: recovery is a far smaller environment than
+the ROM and boots in seconds, so it is a much faster loop for shaking out
+early-init problems.
+---
+ libprocessgroup/profiles/cgroups.recovery.json | 16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/libprocessgroup/profiles/cgroups.recovery.json b/libprocessgroup/profiles/cgroups.recovery.json
+index e27525262..16fd55269 100644
+--- a/libprocessgroup/profiles/cgroups.recovery.json
++++ b/libprocessgroup/profiles/cgroups.recovery.json
+@@ -1,8 +1,12 @@
+ {
+-  "Cgroups2": {
+-    "Path": "/sys/fs/cgroup",
+-    "Mode": "0755",
+-    "UID": "root",
+-    "GID": "root"
+-  }
++  "Cgroups": [
++    {
++      "Controller": "cpuset",
++      "Path": "/dev/cpuset",
++      "Mode": "0755",
++      "UID": "root",
++      "GID": "root",
++      "Optional": true
++    }
++  ]
+ }

@@ -1,0 +1,6 @@
+id=linux_chroot
+name=Linux chroot (Ubuntu Base)
+version=v0.1
+versionCode=1
+author=rom-forge
+description=Runs a full glibc Linux userland in a chroot alongside Android. Rootfs lives in /data/linux (not in this module). Run `linux-setup` once, then `linux` to enter.

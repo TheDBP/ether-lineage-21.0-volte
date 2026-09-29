@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: rom-forge <rom-forge@users.noreply.github.com>
+Date: Sat, 5 Sep 2026 21:40:59 -0400
+Subject: [PATCH] soong: create generated_kernel_includes' genDir before
+ running headers_install
+
+RuleBuilder rm -rf's the module's genDir before invoking sbox and never
+re-creates it, so the kernel's Makefile:121 'cd $(KBUILD_OUTPUT)' check fails
+before headers_install runs:
+
+  Makefile:121: *** output directory "..." does not exist.  Stop.
+
+mkdir -p it first. The path stays absolute (KERNEL_BUILD_OUT_PREFIX): make -C
+chdirs into the kernel source tree, so a relative O= would resolve against that
+directory rather than the build top.
+---
+ build/soong/Android.bp | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/build/soong/Android.bp b/build/soong/Android.bp
+index 2029d7ec..015120ba 100644
+--- a/build/soong/Android.bp
++++ b/build/soong/Android.bp
+@@ -17,11 +17,16 @@ bootstrap_go_package {
+     pluginFor: ["soong_build"],
+ }
+ 
++// RuleBuilder rm -rf's this module's genDir before invoking sbox and never re-creates it, so
++// Kbuild's Makefile:121 'cd $(KBUILD_OUTPUT)' check dies before headers_install can run:
++//   Makefile:121: *** output directory "..." does not exist.  Stop.
++// mkdir -p it first. The path must stay ABSOLUTE (KERNEL_BUILD_OUT_PREFIX): make -C chdirs into
++// the kernel source tree, so a relative O= would resolve against that rather than the build top.
+ lineage_generator {
+     name: "generated_kernel_includes",
+ 
+     // The headers make command
+-    cmd: "$(PATH_OVERRIDE_SOONG) $(KERNEL_MAKE_CMD) $(KERNEL_MAKE_FLAGS) -C $(TARGET_KERNEL_SOURCE) O=$(KERNEL_BUILD_OUT_PREFIX)$(genDir) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) headers_install",
++    cmd: "mkdir -p $(KERNEL_BUILD_OUT_PREFIX)$(genDir) && $(PATH_OVERRIDE_SOONG) $(KERNEL_MAKE_CMD) $(KERNEL_MAKE_FLAGS) -C $(TARGET_KERNEL_SOURCE) O=$(KERNEL_BUILD_OUT_PREFIX)$(genDir) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) headers_install",
+ 
+     // Directories that can be imported by a cc_* module generated_headers property
+     export_include_dirs: [

@@ -1,0 +1,53 @@
+#!/system/bin/sh
+# lx-setup -- fetch and unpack an Ubuntu Base arm64 rootfs into $LXROOT.
+#
+# Ubuntu Base is used rather than a Docker/Termux image because it is an official, plain tarball:
+# no registry auth, no layer handling, and it is arm64-native so nothing needs qemu. Alpine would be
+# ~10x smaller but is musl, which breaks glibc-only binaries -- a poor default for a general-purpose
+# environment.
+set -u
+
+# Magisk's busybox is not on PATH in a plain `su` shell.
+command -v busybox >/dev/null 2>&1 || busybox() { /data/adb/magisk/busybox "$@"; }
+
+LXROOT="${LXROOT:-/data/linux}"
+URL="${LXURL:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz}"
+TARBALL="/data/local/tmp/ubuntu-base-arm64.tar.gz"
+
+[ "$(id -u)" = "0" ] || { echo "!! must be root (su)"; exit 1; }
+
+if [ -d "$LXROOT/etc" ] && [ "${LXFORCE:-0}" != 1 ]; then
+  echo ">> $LXROOT already looks populated. LXFORCE=1 to redo."; exit 0
+fi
+
+# /data is mounted nodev,nosuid on Android. That is fine here: we run as root so setuid is
+# unnecessary, and device nodes come from the bind-mounted /dev rather than from the rootfs.
+free_kb=$(df -k /data | awk 'NR==2{print $4}')
+[ "${free_kb:-0}" -lt 2097152 ] && echo ">> warning: less than 2 GB free in /data (${free_kb} KB)"
+
+echo ">> downloading Ubuntu Base ..."
+if command -v curl >/dev/null 2>&1; then curl -fL --progress-bar -o "$TARBALL" "$URL"
+else busybox wget -O "$TARBALL" "$URL"; fi || { echo "!! download failed"; exit 1; }
+
+echo ">> unpacking into $LXROOT ..."
+mkdir -p "$LXROOT" || exit 1
+# Numeric owners: Android's toybox tar has no user/group DB to map names against.
+busybox tar --numeric-owner -xzf "$TARBALL" -C "$LXROOT" || { echo "!! unpack failed"; exit 1; }
+rm -f "$TARBALL"
+
+# DNS. Android has no /etc/resolv.conf to copy, and `getprop net.dns1` is empty on modern releases
+# (per-network DNS lives in netd), so seed a resolver and let the user change it.
+[ -s "$LXROOT/etc/resolv.conf" ] || printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$LXROOT/etc/resolv.conf"
+grep -q localhost "$LXROOT/etc/hosts" 2>/dev/null || printf '127.0.0.1 localhost\n::1 localhost\n' > "$LXROOT/etc/hosts"
+echo "linux" > "$LXROOT/etc/hostname"
+
+# Android gives network access based on group membership (AID_INET=3003). Processes in the chroot
+# inherit our groups, but apt runs as _apt (uid 100) and would lose them -- so pin apt to root.
+mkdir -p "$LXROOT/etc/apt/apt.conf.d"
+cat > "$LXROOT/etc/apt/apt.conf.d/99-android" <<'EOA'
+APT::Sandbox::User "root";
+Acquire::AllowInsecureRepositories "false";
+EOA
+
+echo ">> done. Enter it with:  linux"
+echo "   first steps inside:  apt update && apt install -y sudo nano tmux"

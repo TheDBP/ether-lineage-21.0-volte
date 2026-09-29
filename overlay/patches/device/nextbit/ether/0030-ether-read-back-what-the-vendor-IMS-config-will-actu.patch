@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 23:34:46 -0400
+Subject: [PATCH] ether: read back what the vendor IMS config will actually
+ admit
+
+The vendor ImsConfigImpl validates every item against a fixed set and answers
+anything outside it with "Invalid API request for item", and its legacy-to-proto
+translator throws for items 17 and 28. So the accepted set is not the 7.1
+header's set: the proto items for VoWiFi-enabled have no legacy number at all,
+while the ePDG timers and WLAN handover thresholds do (legacy 60..64). Whether
+the modem holds usable values for those can only be found by asking.
+
+Sweep every item behind persist.ether.ims.configprobe, on its own thread since
+the vendor blocks on the modem without a timeout, and log refusals verbatim.
+
+Also log a non-zero setProvisionedValue return. The framework logs that it made
+the call, not what came back, so until now a refused item read as a completed
+set.
+---
+ .../lineageos/ims/bridge/ConfigWrapper.java   | 63 ++++++++++++++++++-
+ 1 file changed, 62 insertions(+), 1 deletion(-)
+
+diff --git a/ims-bridge/src/org/lineageos/ims/bridge/ConfigWrapper.java b/ims-bridge/src/org/lineageos/ims/bridge/ConfigWrapper.java
+index 88cbbd4..128a853 100644
+--- a/ims-bridge/src/org/lineageos/ims/bridge/ConfigWrapper.java
++++ b/ims-bridge/src/org/lineageos/ims/bridge/ConfigWrapper.java
+@@ -1,8 +1,11 @@
+ package org.lineageos.ims.bridge;
+ 
+ import android.os.RemoteException;
++import android.os.SystemProperties;
+ import android.util.Log;
+ 
++import java.util.concurrent.atomic.AtomicBoolean;
++
+ import org.codeaurora.ims.legacy.ImsConfigListener;
+ import org.codeaurora.ims.legacy.internal.IImsConfig;
+ 
+@@ -14,10 +17,62 @@ import org.codeaurora.ims.legacy.internal.IImsConfig;
+ public class ConfigWrapper extends com.android.ims.internal.IImsConfig.Stub {
+     private static final String TAG = ImsBridgeService.TAG;
+ 
++    /** Read every item the vendor stack admits, once per process. See maybeProbe(). */
++    private static final String PROBE_PROP = "persist.ether.ims.configprobe";
++    private static final AtomicBoolean sProbed = new AtomicBoolean();
++    private static final int PROBE_ITEM_MAX = 70;
++    /** The vendor types each item; asking for a string item as an int is refused, and vice versa. */
++    private static final int[] PROBE_STRING_ITEMS = { 0, 1, 12, 31, 54 };
++
+     private final IImsConfig mLegacy;
+ 
+     ConfigWrapper(IImsConfig legacy) {
+         mLegacy = legacy;
++        maybeProbe();
++    }
++
++    /**
++     * Ask the vendor stack for every provisioning item it might hold, and log what comes back.
++     *
++     * Its ImsConfigImpl validates the item against a fixed set and answers anything outside it with
++     * "Invalid API request for item", and its legacy-to-proto translator throws outright for items
++     * 17 and 28. So the accepted set is not the 7.1 header's set, and it cannot be guessed -- the
++     * proto items for VoWiFi-enabled have no legacy number at all, while the ePDG timers and WLAN
++     * handover thresholds do (legacy 60..64). Whether the modem holds usable values for those is
++     * only visible by asking for them one at a time. A refusal is as informative as a value, so
++     * both are logged verbatim rather than filtered.
++     *
++     * Off unless the property is set: this is one synchronous round trip to the modem per item.
++     * getConfigInterface() is called more than once per boot, hence the latch.
++     */
++    private void maybeProbe() {
++        if (!SystemProperties.getBoolean(PROBE_PROP, false)) {
++            return;
++        }
++        if (!sProbed.compareAndSet(false, true)) {
++            return;
++        }
++        // Its own thread. The vendor blocks on the modem with no timeout of its own, so one wedged
++        // item must not take feature creation down with it.
++        new Thread(() -> {
++            for (int item = 0; item <= PROBE_ITEM_MAX; item++) {
++                try {
++                    Log.i(TAG, "configprobe int " + item + " = "
++                            + mLegacy.getProvisionedValue(item));
++                } catch (Exception e) {
++                    Log.i(TAG, "configprobe int " + item + " threw " + e);
++                }
++            }
++            for (int item : PROBE_STRING_ITEMS) {
++                try {
++                    Log.i(TAG, "configprobe str " + item + " = "
++                            + mLegacy.getProvisionedStringValue(item));
++                } catch (Exception e) {
++                    Log.i(TAG, "configprobe str " + item + " threw " + e);
++                }
++            }
++            Log.i(TAG, "configprobe done");
++        }, "ims-configprobe").start();
+     }
+ 
+     @Override
+@@ -32,7 +87,13 @@ public class ConfigWrapper extends com.android.ims.internal.IImsConfig.Stub {
+ 
+     @Override
+     public int setProvisionedValue(int item, int value) throws RemoteException {
+-        return mLegacy.setProvisionedValue(item, value);
++        int rc = mLegacy.setProvisionedValue(item, value);
++        // 0 is SUCCESS; anything else is a refusal, and otherwise invisible -- the framework logs
++        // that it made the call, not what came back, so a rejected item reads as a completed set.
++        if (rc != 0) {
++            Log.w(TAG, "setProvisionedValue(" + item + ", " + value + ") refused, rc=" + rc);
++        }
++        return rc;
+     }
+ 
+     @Override

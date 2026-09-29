@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 02:51:20 -0400
+Subject: [PATCH] libprocessgroup: treat a missing cgroup hierarchy as a no-op,
+ not an error
+
+Second boot attempt got 4x further (14.5s vs 3.5s) but still ended in
+'bootstrap-apexd-failed'. With the cgroup v2 root removed from cgroups.json,
+the CGROUPV2_CONTROLLER_NAME lookups leave the hierarchy path empty, and
+createProcessGroupInternal then tries to create '/uid_0' on the read-only
+rootfs:
+
+  libprocessgroup: Failed to make and chown /uid_0: Read-only file system
+  init: Command 'start ueventd' ... failed: Could not start service:
+        createProcessGroup...
+  init: Service 'apexd-bootstrap' failed to start due to a fatal error
+
+The earlier read of these call sites was half right: they do not crash on an
+absent v2 root, but returning an error from createProcessGroup IS fatal to
+service startup, so 'degrades safely' was wrong.
+
+There is nothing to create when no hierarchy is configured, so return success
+instead. KillProcessGroup already copes -- the same boot logged 'Successfully
+killed process cgroup uid 0'.
+---
+ libprocessgroup/processgroup.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/libprocessgroup/processgroup.cpp b/libprocessgroup/processgroup.cpp
+index 267e62c67..fe6aa8d59 100644
+--- a/libprocessgroup/processgroup.cpp
++++ b/libprocessgroup/processgroup.cpp
+@@ -494,6 +494,19 @@ int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_process
+ 
+ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup,
+                                       bool activate_controllers) {
++    // ether/msm8992: no cgroup v2 hierarchy exists on this kernel (cgroup v2 landed in Linux 4.5;
++    // this is 3.10), so cgroups.json declares no Cgroups2 root and the CGROUPV2_CONTROLLER_NAME
++    // lookups in our callers leave `cgroup` empty. Without this guard ConvertUidToPath("") yields
++    // "/uid_0", MkdirAndChown then fails on the read-only rootfs, and the non-zero return is fatal
++    // to starting a service:
++    //   libprocessgroup: Failed to make and chown /uid_0: Read-only file system
++    //   init: Command 'start ueventd' ... failed: Could not start service: createProcessGroup...
++    // which takes down ueventd and apexd-bootstrap and reboots the device. There is nothing to
++    // create when there is no hierarchy, so report success and let the caller proceed.
++    if (cgroup.empty()) {
++        return 0;
++    }
++
+     auto uid_path = ConvertUidToPath(cgroup.c_str(), uid);
+ 
+     struct stat cgroup_stat;

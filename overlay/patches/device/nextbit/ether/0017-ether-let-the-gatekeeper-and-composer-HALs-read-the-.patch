@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Tue, 15 Sep 2026 22:05:38 -0400
+Subject: [PATCH] ether: let the gatekeeper and composer HALs read the
+ properties they poll
+
+gatekeeper reads a system_prop during startup; denied, it never registers IGatekeeper/default and
+system_server blocks on getService() forever -- the boot animation plays indefinitely with no crash
+and no reboot. The composer HAL polls the bootanim property; denied reads spin at several hundred
+per second for the whole hang.
+---
+ sepolicy/hal_gatekeeper_default.te        | 4 ++++
+ sepolicy/hal_graphics_composer_default.te | 3 +++
+ 2 files changed, 7 insertions(+)
+ create mode 100644 sepolicy/hal_gatekeeper_default.te
+ create mode 100644 sepolicy/hal_graphics_composer_default.te
+
+diff --git a/sepolicy/hal_gatekeeper_default.te b/sepolicy/hal_gatekeeper_default.te
+new file mode 100644
+index 0000000..82ed904
+--- /dev/null
++++ b/sepolicy/hal_gatekeeper_default.te
+@@ -0,0 +1,4 @@
++# The gatekeeper HAL reads a system_prop-typed property during startup. Without this the read is
++# denied, the HAL never registers IGatekeeper/default, and system_server blocks on getService()
++# forever -- the boot animation plays indefinitely with no crash and no reboot.
++get_prop(hal_gatekeeper_default, system_prop);
+diff --git a/sepolicy/hal_graphics_composer_default.te b/sepolicy/hal_graphics_composer_default.te
+new file mode 100644
+index 0000000..db7d574
+--- /dev/null
++++ b/sepolicy/hal_graphics_composer_default.te
+@@ -0,0 +1,3 @@
++# The composer HAL polls the boot animation property; denied reads spin at several hundred per
++# second and keep the CPU busy for the whole hang.
++get_prop(hal_graphics_composer_default, bootanim_system_prop);

@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 14:24:38 -0400
+Subject: [PATCH] Settings: do not poll VoNR on a radio that predates NR
+
+Opening SIM settings ANRs on msm8992. NrAdvancedCallingPreferenceController.init() creates its
+TelephonyCallback before any capability check, and onStart() registers it whenever it is non-null,
+so the callback runs even though getAvailabilityStatus() has already decided the preference is
+CONDITIONALLY_UNAVAILABLE. On the next call-state change it does
+onCallStateChanged -> updateState -> isChecked -> TelephonyManager.isVoNrEnabled().
+
+PhoneInterfaceManager.isVoNrEnabled hands the request to the phone's main thread and waits on its
+MainThreadRequest monitor with no timeout. A 2016 RIL has no IS_VONR_ENABLED to answer, so nothing
+completes the request: the binder thread waits forever, Settings' UI thread blocks behind it, and
+further binder threads pile up in the same wait. Confirmed from the ANR trace, with
+mHas5gCapability logged false on this device.
+
+Guard both the registration and isChecked(). This only affects devices with no NR in their
+supported radio access family, where the preference was already unavailable, so nothing that could
+work is turned off.
+---
+ .../NrAdvancedCallingPreferenceController.java     | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/src/com/android/settings/network/telephony/NrAdvancedCallingPreferenceController.java b/src/com/android/settings/network/telephony/NrAdvancedCallingPreferenceController.java
+index b585ecec6a..fe630b52db 100644
+--- a/src/com/android/settings/network/telephony/NrAdvancedCallingPreferenceController.java
++++ b/src/com/android/settings/network/telephony/NrAdvancedCallingPreferenceController.java
+@@ -125,6 +125,15 @@ public class NrAdvancedCallingPreferenceController extends TelephonyTogglePrefer
+         if (mTelephonyCallback == null) {
+             return;
+         }
++        if (!mHas5gCapability) {
++            // Nothing to watch for: without NR this controller is CONDITIONALLY_UNAVAILABLE, and
++            // the callback's only job is to re-read a VoNR setting that cannot apply. Registering
++            // anyway means onCallStateChanged -> updateState -> isChecked -> isVoNrEnabled() on the
++            // main thread, and on a radio that predates NR the RIL never answers
++            // IS_VONR_ENABLED: PhoneInterfaceManager.sendRequest waits on its MainThreadRequest
++            // monitor with no timeout, so the binder thread never returns and Settings ANRs.
++            return;
++        }
+         mTelephonyCallback.register(mTelephonyManager);
+     }
+ 
+@@ -162,6 +171,11 @@ public class NrAdvancedCallingPreferenceController extends TelephonyTogglePrefer
+ 
+     @Override
+     public boolean isChecked() {
++        if (!mHas5gCapability) {
++            // Belt and braces for the same blocking call: isChecked() is also reached from the
++            // ordinary preference path, and isVoNrEnabled() cannot be answered by a pre-NR RIL.
++            return false;
++        }
+         return mTelephonyManager.isVoNrEnabled();
+     }
+ 

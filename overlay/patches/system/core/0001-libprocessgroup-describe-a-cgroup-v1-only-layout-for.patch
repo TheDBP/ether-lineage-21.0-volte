@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 02:08:03 -0400
+Subject: [PATCH] libprocessgroup: describe a cgroup-v1-only layout for msm8992
+
+The 20.0 boot dies 3.5s in, and this is the primary cause:
+
+  libprocessgroup: Failed to mount cgroup v2: No such device
+  libprocessgroup: Failed to make and chown /sys/fs/cgroup/uid_0: No such
+                   file or directory
+  init: Service 'ueventd' failed to start due to a fatal error
+  init: Got shutdown_command 'reboot,bootloader,bootstrap-apexd-failed'
+
+cgroup v2 (the unified hierarchy, mounted as the 'cgroup2' filesystem type)
+arrived in Linux 4.5. This device runs 3.10, whose kernel/cgroup.c contains
+no cgroup2 support at all -- only the CGRP_ROOT_SANE_BEHAVIOR precursor. No
+config option can add it, so /sys/fs/cgroup can never be mounted here and
+every uid_/pid_ group created under it fails.
+
+The Cgroups2 section held exactly one controller, freezer. Since
+CONFIG_CGROUP_FREEZER=y and the kernel log shows the v1 freezer subsystem
+initialising, that controller is re-declared as a v1 cgroup at /dev/freezer
+rather than dropped. task_profiles.json refers to it by name ('Controller':
+'freezer'), not by hierarchy version, so FreezerState still resolves. Marked
+Optional so a mount failure degrades instead of aborting setup.
+
+The parser already tolerates this: cgroup_map_write.cpp guards the section
+with if (root.isMember("Cgroups2")), and the three CGROUPV2_CONTROLLER_NAME
+lookups in processgroup.cpp either test the return value or proceed with an
+empty path. None abort.
+
+Not done via /vendor/etc/cgroups.json: that file is MERGED into the platform
+descriptors rather than replacing them, so it can add entries but cannot
+remove the v2 root.
+
+Expect degraded process-group management -- KillProcessGroup and
+createProcessGroup fall back to an empty hierarchy path. That is the same
+trade already accepted for the missing eBPF: degrade rather than refuse to
+boot.
+---
+ libprocessgroup/profiles/cgroups.json | 22 +++++++++-------------
+ 1 file changed, 9 insertions(+), 13 deletions(-)
+
+diff --git a/libprocessgroup/profiles/cgroups.json b/libprocessgroup/profiles/cgroups.json
+index 3e4393df2..c82b6d3da 100644
+--- a/libprocessgroup/profiles/cgroups.json
++++ b/libprocessgroup/profiles/cgroups.json
+@@ -28,18 +28,14 @@
+       "UID": "root",
+       "GID": "system",
+       "Optional": true
++    },
++    {
++      "Controller": "freezer",
++      "Path": "/dev/freezer",
++      "Mode": "0755",
++      "UID": "system",
++      "GID": "system",
++      "Optional": true
+     }
+-  ],
+-  "Cgroups2": {
+-    "Path": "/sys/fs/cgroup",
+-    "Mode": "0775",
+-    "UID": "system",
+-    "GID": "system",
+-    "Controllers": [
+-      {
+-        "Controller": "freezer",
+-        "Path": "."
+-      }
+-    ]
+-  }
++  ]
+ }

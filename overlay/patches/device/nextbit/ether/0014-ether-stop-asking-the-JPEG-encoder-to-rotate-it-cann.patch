@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: stop asking the JPEG encoder to rotate -- it cannot
+
+needJpegRotation() returned true unconditionally, which broke every still capture.
+The hardware JPEG encoder does not implement rotation:
+
+  mm-still: QImageHW10Encoder::IsAvailable(): wont support rotation
+  mm-still: QImageHW10Encoder::New(): validation failed
+
+so requesting it disqualified the hardware encoder and fell back to software, which
+mishandles it: the saved JPEG came out with the sensor's dimensions transposed
+(a 4160x3120 stream stored as 3120x4160) with the frame data repeated in bands,
+while the preview -- never rotated -- was perfectly correct.
+
+It was also redundant. CAM_QCOM_FEATURE_PP_SUPERSET_HAL3 already includes
+CAM_QCOM_FEATURE_ROTATION and the CPP acts on it.
+---
+ camera/QCamera2/HAL3/QCamera3HWI.cpp | 33 +++++++++++++++++++++++++++-
+ 1 file changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/camera/QCamera2/HAL3/QCamera3HWI.cpp b/camera/QCamera2/HAL3/QCamera3HWI.cpp
+index 4eb494a..ccac2ca 100644
+--- a/camera/QCamera2/HAL3/QCamera3HWI.cpp
++++ b/camera/QCamera2/HAL3/QCamera3HWI.cpp
+@@ -7694,7 +7694,38 @@ bool QCamera3HardwareInterface::needReprocess(uint32_t postprocess_mask)
+  *==========================================================================*/
+ bool QCamera3HardwareInterface::needJpegRotation()
+ {
+-    return true;
++    /* Only ask the JPEG encoder to rotate if the post-processor cannot do it.
++     *
++     * This used to return true unconditionally, which broke every still
++     * capture on ether. The hardware JPEG encoder does not implement rotation:
++     *
++     *   mm-still: QImageHW10Encoder::IsAvailable(): wont support rotation
++     *   mm-still: QImageHW10Encoder::New(): validation failed
++     *   mm-still: preloadCodecLibs(): Use SW_CODEC_ONLY flag true
++     *
++     * so requesting rotation disqualified the hardware encoder and fell back to
++     * software, which mishandles it: the saved JPEG came out with the sensor's
++     * dimensions transposed (4160x3120 stream stored as 3120x4160) and the
++     * frame data repeated in bands, while the preview -- which is never rotated
++     * -- was perfectly correct.
++     *
++     * It was also redundant. CAM_QCOM_FEATURE_PP_SUPERSET_HAL3 includes
++     * CAM_QCOM_FEATURE_ROTATION and is applied to the postprocess mask, and the
++     * CPP really does act on it:
++     *
++     *   mm-camera: pproc_module_send_set_param_event: rotation:8, strmId:5
++     *
++     * So the frame was already being rotated upstream. The !needJpegRotation
++     * branches in QCamera3PostProc swap the source and destination dimensions
++     * to match exactly that case.
++     *
++     * Gate on the capability rather than hardcoding, matching upstream CAF.
++     */
++    if (!(gCamCapability[mCameraId]->qcom_supported_feature_mask &
++            CAM_QCOM_FEATURE_ROTATION)) {
++        return true;
++    }
++    return false;
+ }
+ 
+ /*===========================================================================

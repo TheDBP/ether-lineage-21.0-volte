@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: tag the build turbo (TARGET_UNOFFICIAL_BUILD_ID)
+
+Puts "turbo" in the zip filename and in ro.lineage.version so a custom build is
+identifiable at a glance. Overridable via TURBO_BUILD_ID, which is how the forge
+gives each preset a distinct tag (turbo, turbo-clean, turbo-robin).
+---
+ lineage_ether.mk | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lineage_ether.mk b/lineage_ether.mk
+index 404d91e..3bfbe48 100644
+--- a/lineage_ether.mk
++++ b/lineage_ether.mk
+@@ -3,6 +3,11 @@ TARGET_SCREEN_HEIGHT := 1080
+ TARGET_SCREEN_WIDTH := 1920
+ TARGET_BOOTANIMATION_HALF_RES := true
+ 
++# Build identity: tag the version "turbo" (-> ...-UNOFFICIAL-turbo-ether) so this custom build
++# is identifiable at a glance in the filename and in ro.lineage.version. Overridable via
++# TURBO_BUILD_ID so the build script can name variants distinctly (e.g. turbo vs turbo-clean).
++TARGET_UNOFFICIAL_BUILD_ID := $(if $(TURBO_BUILD_ID),$(TURBO_BUILD_ID),turbo)
++
+ # Inherit 64-bit configs
+ $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
+ 

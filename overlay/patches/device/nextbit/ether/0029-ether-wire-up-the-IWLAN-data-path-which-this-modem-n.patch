@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 17:34:34 -0400
+Subject: [PATCH] ether: wire up the IWLAN data path, which this modem never
+ uses
+
+persist.data.iwlan.enable is the QTI switch for the IWLAN data path an ePDG tunnel rides on; both
+netmgrd and qmuxd read it. Stock sets it on this device and this port did not carry it over.
+
+Kept even though Wi-Fi calling is switched off in 0037 and cannot work on this hardware. The wiring
+itself is correct and it is the reusable half of the work: a device whose modem does support ePDG
+inherits it by flipping config_device_wfc_ims_available, with no change here.
+
+What this modem actually does, recorded so nobody re-derives it. It stores and acknowledges the
+configuration -- wifi_call: 2, the WFC preference accepted, "response success" -- and then never
+attempts a tunnel. Its own EFS already carries epdg_fqdn ss.epdg.epc.mnc260.mcc310, the IKEv2
+parameters and a PDN policy permitting IWLAN for the ims bearer, so provisioning was never the gap;
+tcpdump on wlan0 across a full boot sees no ePDG DNS, no IKE and no ESP. A later modem build cannot
+be substituted either: it asks PIL for a 100 MB relocatable region against a 90 MB modem_mem
+reservation that cannot grow, because peripheral_mem ends exactly where modem_mem begins. The full
+account is VOLTE-BRINGUP.md section 8.
+---
+ device.mk | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/device.mk b/device.mk
+index 631c90f..1a67cc5 100644
+--- a/device.mk
++++ b/device.mk
+@@ -395,6 +395,18 @@ PRODUCT_PACKAGES += libshim_vtsurface
+ # want to avoid blocking the binder thread".
+ PRODUCT_PROPERTY_OVERRIDES += ro.telephony.block_binder_thread_on_incoming_calls=false
+ 
++# persist.data.iwlan.enable is the QTI switch for the IWLAN data path, which is what an ePDG tunnel
++# rides on. Stock sets it on this device and this port did not carry it over. Without it the modem
++# accepts the Wi-Fi calling configuration -- the log shows wifi_call: 2 and wfc_preference stored
++# and acknowledged -- and then never attempts to register, because the transport it would use is
++# switched off. netmgrd and qmuxd both read it.
++#
++# Not copied from stock's build.prop, despite being next to it there:
++#   persist.radio.app_hw_mbn_path -- nothing in this image reads it, and stock's value points at
++#     /firmware/image/modem_pr/..., which does not exist; the real tree is /firmware/image/mdm/....
++#   persist.radio.VT_CAM_INTERFACE -- video telephony is deliberately off (config_device_vt_available).
++PRODUCT_PROPERTY_OVERRIDES += persist.data.iwlan.enable=true
++
+ # nanopb 0.2.8, for libril-qc-qmi-1.so alone. See nanopb-0.2.8/Android.bp for why a second copy of
+ # nanopb has to exist at all.
+ PRODUCT_PACKAGES += libnanopb_legacy

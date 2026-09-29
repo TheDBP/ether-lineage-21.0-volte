@@ -1,0 +1,93 @@
+#!/system/bin/sh
+# lx-docker -- set up and run Docker inside the chroot.
+#
+#   lx-docker setup    install Docker + create the ext4 backing image (once)
+#   lx-docker start    mount the image and start dockerd in the background
+#   lx-docker stop     stop dockerd and unmount
+#   lx-docker status   what is running
+#
+# Two Android-specific problems this works around:
+#
+#  1. /data is f2fs, which Docker's overlay2 driver does not support as a backing filesystem. We
+#     put /var/lib/docker on a loop-mounted **ext4 image** instead. The alternative is the vfs
+#     driver, which works anywhere but copies every layer in full -- set LXDOCKER_VFS=1 for that.
+#
+#  2. Android's netd owns the iptables chains and reprograms them, so Docker's NAT rules for its
+#     bridge get flushed out from under it. We therefore start dockerd with --iptables=false and
+#     --bridge=none, and you run containers with --network=host. Bridge networking coexisting with
+#     netd is unsolved; do not expect port publishing (-p) to work.
+set -u
+
+# Magisk's busybox is not on PATH in a plain `su` shell.
+command -v busybox >/dev/null 2>&1 || busybox() { /data/adb/magisk/busybox "$@"; }
+
+LXROOT="${LXROOT:-/data/linux}"
+IMG="${LXDOCKER_IMG:-/data/linux-docker.img}"
+IMG_SIZE="${LXDOCKER_SIZE:-8G}"
+ENTER="/data/adb/modules/linux_chroot/scripts/lx-enter"
+
+[ "$(id -u)" = "0" ] || { echo "!! must be root (su)"; exit 1; }
+[ -d "$LXROOT/etc" ] || { echo "!! no rootfs -- run linux-setup first"; exit 1; }
+
+_in() { "$ENTER" "$@"; }
+_mounted() { grep -q " $1 " /proc/mounts 2>/dev/null; }
+
+case "${1:-}" in
+setup)
+  echo ">> installing Docker inside the chroot ..."
+  _in "apt update && apt install -y docker.io e2fsprogs iptables" || { echo "!! apt failed"; exit 1; }
+
+  if [ "${LXDOCKER_VFS:-0}" = "1" ]; then
+    echo ">> LXDOCKER_VFS=1: skipping the ext4 image, will use the vfs driver."
+  elif [ -f "$IMG" ]; then
+    echo ">> $IMG already exists, leaving it alone."
+  else
+    echo ">> creating $IMG_SIZE ext4 image at $IMG (sparse) ..."
+    busybox truncate -s "$IMG_SIZE" "$IMG" 2>/dev/null || dd if=/dev/zero of="$IMG" bs=1 count=0 seek="$IMG_SIZE" 2>/dev/null
+    LOOP="$(busybox losetup -f 2>/dev/null)"
+    [ -n "$LOOP" ] || { echo "!! no free loop device"; exit 1; }
+    busybox losetup "$LOOP" "$IMG" || { echo "!! losetup failed"; exit 1; }
+    # mkfs runs inside the chroot -- Android has no mkfs.ext4, but e2fsprogs is installed above and
+    # /dev is bind-mounted, so the loop node is visible in there.
+    _in "mkfs.ext4 -q -m 0 $LOOP" || { busybox losetup -d "$LOOP"; echo "!! mkfs failed"; exit 1; }
+    busybox losetup -d "$LOOP"
+    echo ">> image formatted."
+  fi
+  echo ">> setup done.  Next:  lx-docker start"
+  ;;
+
+start)
+  if [ "${LXDOCKER_VFS:-0}" != "1" ] && [ -f "$IMG" ]; then
+    T="$LXROOT/var/lib/docker"
+    mkdir -p "$T"
+    _mounted "$T" || busybox mount -o loop "$IMG" "$T" || { echo "!! could not mount $IMG"; exit 1; }
+    DRIVER="overlay2"
+  else
+    DRIVER="vfs"
+  fi
+  echo ">> starting dockerd (storage-driver=$DRIVER) ..."
+  # --iptables=false / --bridge=none: see the netd note at the top of this script.
+  _in "nohup dockerd --storage-driver=$DRIVER --iptables=false --bridge=none \
+        --exec-opt native.cgroupdriver=cgroupfs >/var/log/dockerd.log 2>&1 &" 
+  sleep 6
+  _in "docker info 2>&1 | head -20"
+  echo ""
+  echo ">> if that failed, the log is inside the chroot at /var/log/dockerd.log"
+  echo ">> run containers with --network=host (port publishing will not work)"
+  ;;
+
+stop)
+  _in "pkill dockerd; pkill containerd" 2>/dev/null
+  sleep 2
+  T="$LXROOT/var/lib/docker"
+  _mounted "$T" && busybox umount "$T" && echo ">> unmounted $T"
+  echo ">> stopped."
+  ;;
+
+status)
+  _in "pgrep -a dockerd || echo 'dockerd not running'"
+  _mounted "$LXROOT/var/lib/docker" && echo ">> $IMG mounted" || echo ">> docker image not mounted"
+  ;;
+
+*) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+esac

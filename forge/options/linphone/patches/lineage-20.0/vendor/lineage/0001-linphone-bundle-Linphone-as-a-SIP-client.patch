@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 14:09:43 -0400
+Subject: [PATCH] linphone: bundle Linphone as a SIP client
+
+vendor/lineage/prebuilts/linphone module, installed unmodified, plus a guarded PRODUCT_PACKAGES
+line in config/common.mk. The APK is fetched by the linphone option's fetch.sh (the current
+F-Droid build, signer-pinned); the module is a no-op without it.
+
+This is a SIP client, not VoLTE: it does not register with the carrier's IMS, so it carries no
+mobile number and cannot place emergency calls. On a device with no VoLTE it is the only voice
+path left over LTE data, and Android dropped its own SIP stack in 12.
+---
+ config/common.mk              |  7 +++++++
+ prebuilts/linphone/.gitignore |  5 +++++
+ prebuilts/linphone/Android.mk | 25 +++++++++++++++++++++++++
+ 3 files changed, 37 insertions(+)
+ create mode 100644 prebuilts/linphone/.gitignore
+ create mode 100644 prebuilts/linphone/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 985e611c..9f962827 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -71,6 +71,13 @@ PRODUCT_COPY_FILES += \
+ PRODUCT_COPY_FILES += \
+     frameworks/native/data/etc/android.software.sip.voip.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/android.software.sip.voip.xml
+ 
++# linphone option: Linphone, a SIP client, for voice over data where the device has no VoLTE.
++# Guarded on the fetched APK so a build without the option (no APK) is unaffected; require.sh
++# fails the build if the option is on and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/linphone/Linphone.apk),)
++PRODUCT_PACKAGES += Linphone
++endif
++
+ # Enable wireless Xbox 360 controller support
+ PRODUCT_COPY_FILES += \
+     frameworks/base/data/keyboards/Vendor_045e_Product_028e.kl:$(TARGET_COPY_OUT_PRODUCT)/usr/keylayout/Vendor_045e_Product_0719.kl
+diff --git a/prebuilts/linphone/.gitignore b/prebuilts/linphone/.gitignore
+new file mode 100644
+index 00000000..333a289e
+--- /dev/null
++++ b/prebuilts/linphone/.gitignore
+@@ -0,0 +1,5 @@
++# Written by the linphone option (forge/prebuilt/fetch-linphone.sh): the APK, and the native
++# libraries it unpacks beside it should a release ever pack them compressed.
++Linphone.apk
++*.apk.download
++lib/
+diff --git a/prebuilts/linphone/Android.mk b/prebuilts/linphone/Android.mk
+new file mode 100644
+index 00000000..1290e445
+--- /dev/null
++++ b/prebuilts/linphone/Android.mk
+@@ -0,0 +1,25 @@
++LOCAL_PATH := $(call my-dir)
++# Linphone (org.linphone), PRESIGNED by its upstream. The APK is fetched, signer-verified, by the
++# linphone option's fetch.sh and is gitignored, never committed. Defined only when it is present;
++# see config/common.mk.
++ifneq ($(wildcard $(LOCAL_PATH)/Linphone.apk),)
++include $(CLEAR_VARS)
++LOCAL_MODULE := Linphone
++LOCAL_MODULE_TAGS := optional
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
++LOCAL_BUILT_MODULE_STEM := package.apk
++LOCAL_CERTIFICATE := PRESIGNED
++# Ship the APK byte for byte: without LOCAL_SDK_VERSION the build rewrites it, which invalidates
++# the whole-file v2 signature and PackageManager then drops the package at boot scan, silently.
++LOCAL_SDK_VERSION := current
++# Stored and aligned in the APK today, so nothing is unpacked and this is empty. It is decided per
++# fetch, so a release that packs them compressed is installed from here instead.
++LOCAL_PREBUILT_JNI_LIBS := $(patsubst $(LOCAL_PATH)/%,%,$(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++# The <uses-library> check is off: the APK is whatever F-Droid's current build is at fetch time.
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_SRC_FILES := Linphone.apk
++LOCAL_PRODUCT_MODULE := true
++LOCAL_DEX_PREOPT := false
++include $(BUILD_PREBUILT)
++endif
+-- 
+2.53.0
+

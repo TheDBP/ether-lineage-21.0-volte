@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 22:03:45 -0400
+Subject: [PATCH] ether: volume panel by the keys
+
+Put the volume panel on the left, where this device's volume keys are, and raise it to meet them.
+The rocker sits at about 34% of screen height rather than the middle. -180dp was the first fit, from a
+homography onto a photo of the device; -150dp is the measured correction, taken from a photo with the
+panel and the keys in the same frame, which removes the fit error.
+
+def_volume_panel_on_left is a first-boot default only; Settings > System > Buttons still wins for
+anyone who changes it.
+---
+ .../base/packages/SystemUI/res/values/dimens.xml   | 14 ++++++++++++++
+ .../res/values/defaults.xml                        |  7 +++++++
+ 2 files changed, 21 insertions(+)
+ create mode 100644 overlay/frameworks/base/packages/SystemUI/res/values/dimens.xml
+ create mode 100644 overlay/lineage-sdk/packages/LineageSettingsProvider/res/values/defaults.xml
+
+diff --git a/overlay/frameworks/base/packages/SystemUI/res/values/dimens.xml b/overlay/frameworks/base/packages/SystemUI/res/values/dimens.xml
+new file mode 100644
+index 0000000..89a616c
+--- /dev/null
++++ b/overlay/frameworks/base/packages/SystemUI/res/values/dimens.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- The Robin's volume rocker is at roughly 31% of the screen's height, not the middle, so the
++         stock centred panel sits well below the keys being pressed. Measured by fitting a
++         homography from a photo of the device to screen coordinates using four on-screen landmarks:
++         the two buttons come out at y 505 and y 694 of 1920, midpoint 600. The panel's own centre
++         is 961 (it spans 607..1315).
++
++         -180dp was the first fit and overshot. Re-measured against a photo of the panel and the
++         keys in the same frame, which is a far better comparison than fitting the keys alone: the
++         panel came out 65 photo-px high against a panel height of 795 photo-px for 708 device px,
++         so 58 device px = 29dp too far. The keys are at device y 659, about 34% of the screen. -->
++    <dimen name="volume_dialog_offset_y">-150dp</dimen>
++</resources>
+diff --git a/overlay/lineage-sdk/packages/LineageSettingsProvider/res/values/defaults.xml b/overlay/lineage-sdk/packages/LineageSettingsProvider/res/values/defaults.xml
+new file mode 100644
+index 0000000..65e87f3
+--- /dev/null
++++ b/overlay/lineage-sdk/packages/LineageSettingsProvider/res/values/defaults.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- The volume keys are on the Robin's left edge, so put the panel on the same side. This is a
++         first-boot default only: it seeds the settings database when it is created, and anyone who
++         changes it under Settings > System > Buttons > "Show panel on left" keeps their choice. -->
++    <bool name="def_volume_panel_on_left">true</bool>
++</resources>

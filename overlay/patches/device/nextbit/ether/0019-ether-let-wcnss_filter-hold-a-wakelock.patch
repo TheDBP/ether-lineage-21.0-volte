@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 07:52:11 -0400
+Subject: [PATCH] ether: let wcnss_filter hold a wakelock
+
+The BT HCI relay runs as bluetooth with group wakelock and sepolicy already says
+wakelock_use(wcnss_filter), but /sys/power/wake_lock also demands CAP_BLOCK_SUSPEND
+and the service never asked init for it. Every wcnss_acquire_wakelock/release
+pair failed EPERM (about one a second, ~1000 log lines per 20 minutes) and BT traffic
+could not keep the SoC awake.
+---
+ rootdir/init.qcom.rc | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/rootdir/init.qcom.rc b/rootdir/init.qcom.rc
+index ceba47e..96d1aea 100644
+--- a/rootdir/init.qcom.rc
++++ b/rootdir/init.qcom.rc
+@@ -231,6 +231,8 @@ service start_hci_filter /vendor/bin/wcnss_filter
+     class late_start
+     user bluetooth
+     group bluetooth oem_2950 system wakelock
++    # /sys/power/wake_lock needs CAP_BLOCK_SUSPEND (the wakelock group alone is EPERM)
++    capabilities BLOCK_SUSPEND
+     disabled
+     writepid /dev/cpuset/system-background/tasks
+ 

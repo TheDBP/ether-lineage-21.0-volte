@@ -1,0 +1,28 @@
+From 010a95b54132acfa0d9a90965d24209112d03e9a Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 11:52:20 -0400
+Subject: [PATCH 2/2] ether: LiveDisplay off by default
+ (config_defaultLiveDisplayMode 2->0)
+
+Default LiveDisplay to OFF (MODE_OFF=0) instead of Auto (2). The QS tile is still
+shown by default (see the device SystemUI overlay), so it's one tap to enable.
+---
+ lineage/res/res/values/config.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lineage/res/res/values/config.xml b/lineage/res/res/values/config.xml
+index bfd4ba70..148b367a 100644
+--- a/lineage/res/res/values/config.xml
++++ b/lineage/res/res/values/config.xml
+@@ -28,7 +28,7 @@
+     <integer name="config_nightColorTemperature">4800</integer>
+     <integer name="config_outdoorAmbientLux">12000</integer>
+     <integer name="config_outdoorAmbientLuxHysteresis">1500</integer>
+-    <integer name="config_defaultLiveDisplayMode">2</integer>
++    <integer name="config_defaultLiveDisplayMode">0</integer>
+ 
+     <!-- These values should map to the true min and max
+          that the backend is capable of adjusting to. This
+-- 
+2.53.0
+

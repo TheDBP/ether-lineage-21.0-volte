@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 18 Sep 2026 09:57:11 -0400
+Subject: [PATCH] fulguris: bundle Fulguris as the browser, replacing Jelly
+
+vendor/lineage/prebuilts/fulguris module, installed unmodified and overriding Jelly, plus a guarded
+PRODUCT_PACKAGES line in config/common.mk. The APK is fetched by the fulguris option's fetch.sh
+(the current F-Droid build, signer-pinned); the module is a no-op without it.
+
+A WebView browser: the system WebView renders, so this replaces the shell, not the engine. It packs
+no native code today, but the wiring is decided per fetch like every app option -- Android.bp is
+written by the fetcher (gitignored), because skip_preprocessed_apk_checks has to match what each
+release packs, and libraries found compressed are unpacked beside the APK and installed by
+jni/Android.mk.
+---
+ config/common.mk                  |  9 +++++++++
+ prebuilts/fulguris/.gitignore     |  8 ++++++++
+ prebuilts/fulguris/jni/Android.mk | 28 ++++++++++++++++++++++++++++
+ 3 files changed, 45 insertions(+)
+ create mode 100644 prebuilts/fulguris/.gitignore
+ create mode 100644 prebuilts/fulguris/jni/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 5265427b..4458e7a8 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -133,6 +133,15 @@ PRODUCT_PACKAGES += \
+     Jelly
+ endif
+ 
++# fulguris option: Fulguris as the browser, replacing Jelly (the module overrides it).
++# Guarded on the fetched APK so a build without the option (no APK) is unaffected;
++# require.sh fails the build if the option is on and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/fulguris/Fulguris.apk),)
++PRODUCT_PACKAGES += Fulguris
++# Native libraries the fetcher unpacked beside the APK, one module each (prebuilts/fulguris/jni).
++PRODUCT_PACKAGES += $(patsubst %.so,Fulguris_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/fulguris/lib/arm64-v8a/*.so)))
++endif
++
+ ifeq ($(PRODUCT_IS_AUTOMOTIVE),)
+ PRODUCT_PACKAGES += \
+     LineageParts \
+diff --git a/prebuilts/fulguris/.gitignore b/prebuilts/fulguris/.gitignore
+new file mode 100644
+index 00000000..640cfa2c
+--- /dev/null
++++ b/prebuilts/fulguris/.gitignore
+@@ -0,0 +1,8 @@
++# Everything here but jni/ is written by the fulguris option (forge/prebuilt/fetch-fulguris.sh):
++# the APK, the native libraries it unpacks beside it should a release ever pack them compressed,
++# and the Soong module file, which it writes per fetch because skip_preprocessed_apk_checks must
++# match the APK.
++*.apk
++*.apk.download
++/lib/
++/Android.bp
+diff --git a/prebuilts/fulguris/jni/Android.mk b/prebuilts/fulguris/jni/Android.mk
+new file mode 100644
+index 00000000..bcc90f81
+--- /dev/null
++++ b/prebuilts/fulguris/jni/Android.mk
+@@ -0,0 +1,28 @@
++# Fulguris native libraries. The APK is installed byte for byte (see ../Android.bp, written by the
++# fetcher) and PackageManager does not extract native libraries for a bundled app, so if
++# fetch-fulguris.sh ever finds them compressed or unaligned in the APK it unpacks lib/arm64-v8a/
++# beside it, and these install as app/Fulguris/lib/arm64/. One Make module per library: the build
++# refuses ELF files in PRODUCT_COPY_FILES, and no Soong prebuilt type installs under app/. common.mk
++# adds the modules to PRODUCT_PACKAGES from the same wildcard. Fulguris ships no native code today,
++# so nothing here is defined; it costs nothing and catches the release that changes that.
++LOCAL_PATH := $(call my-dir)/..
++
++FULGURIS_JNI_LIBS := $(notdir $(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++
++define fulguris-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := Fulguris_jni_$(1:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(1:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := lib/arm64-v8a/$(1)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/app/Fulguris/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach lib,$(FULGURIS_JNI_LIBS),$(eval $(call fulguris-jni-module,$(lib))))
+-- 
+2.53.0
+

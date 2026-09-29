@@ -1,0 +1,44 @@
+From f1d5e691b63d46eaaf22be5396e47e99cb375f39 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 22:26:24 -0400
+Subject: [PATCH] skip the LineageOS SetupWizard nag pages
+ (recovery-update, metrics/stats, backup)
+
+A15 removed SetupWizardUtils.disableComponentsForMissingFeatures(); relocate the
+three disableComponent calls to SetupWizardActivity.onCreate() (the single startup
+hook before ACTION_LOAD). WizardManager skips any action whose component doesn't
+resolve, so the pages are stepped over. Ports the ether A11 customization.
+---
+ src/org/lineageos/setupwizard/SetupWizardActivity.java | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/org/lineageos/setupwizard/SetupWizardActivity.java b/src/org/lineageos/setupwizard/SetupWizardActivity.java
+index f50fb8a..96d8b8a 100644
+--- a/src/org/lineageos/setupwizard/SetupWizardActivity.java
++++ b/src/org/lineageos/setupwizard/SetupWizardActivity.java
+@@ -20,6 +20,7 @@ import android.util.Log;
+ 
+ import androidx.appcompat.app.AppCompatActivity;
+ 
++import org.lineageos.setupwizard.backup.RestoreIntroActivity;
+ import org.lineageos.setupwizard.util.SetupWizardUtils;
+ import org.lineageos.setupwizard.wizardmanager.WizardManager;
+ 
+@@ -37,6 +38,14 @@ public class SetupWizardActivity extends AppCompatActivity {
+             return;
+         }
+         SetupWizardUtils.enableComponent(this, WizardManager.class);
++        // skip the LineageOS nag pages — the recovery-update prompt, the "help improve
++        // LineageOS" metrics/stats opt-in, and the backup/restore intro. WizardManager skips any
++        // action whose component is disabled (queryIntentActivities returns empty), so the flow
++        // steps over them. (A15 removed the old SetupWizardUtils.disableComponentsForMissingFeatures
++        // hook; this is the equivalent single startup injection point, before ACTION_LOAD.)
++        SetupWizardUtils.disableComponent(this, UpdateRecoveryActivity.class);
++        SetupWizardUtils.disableComponent(this, LineageSettingsActivity.class);
++        SetupWizardUtils.disableComponent(this, RestoreIntroActivity.class);
+         Intent intent = new Intent(ACTION_LOAD);
+         Bundle wizardBundle = new Bundle();
+         if (SetupWizardUtils.isOwner()) {
+-- 
+2.43.0
+

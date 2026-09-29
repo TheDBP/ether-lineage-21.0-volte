@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:52:02 -0400
+Subject: [PATCH] lineage: restore -fuse-ld=lld in HOSTCFLAGS for pre-4.18
+ kernels
+
+The kernel headers step dies building its very first host tool:
+
+  clang-14: error: unable to execute command: Executable "ld" doesn't exist!
+  make[2]: *** [scripts/Makefile.host:118: scripts/basic/fixdep] Error 1
+
+/usr/bin/ld does exist in the build image; it is just not on the sbox
+sandbox PATH, so clang must be told to use lld instead. 20.0 does that via
+HOSTLDFLAGS -- but Kbuild only applies HOSTLDFLAGS to multi-object host
+targets (host-cmulti, scripts/Makefile.host:123). Single-C-file host tools
+like fixdep go through host-csingle at :115, which compiles and links in one
+clang invocation using $(hostc_flags) alone and never sees HOSTLDFLAGS.
+
+lineage-19.1 set -fuse-ld=lld in HOSTCFLAGS *and* HOSTLDFLAGS, which is why
+the identical kernel builds there. 20.0 kept only the HOSTLDFLAGS copy.
+Newer kernels do not care because they build fixdep differently; msm8992 is
+on 3.10.
+---
+ config/BoardConfigKernel.mk | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/config/BoardConfigKernel.mk b/config/BoardConfigKernel.mk
+index 4c2a268d..f4f5b59a 100644
+--- a/config/BoardConfigKernel.mk
++++ b/config/BoardConfigKernel.mk
+@@ -164,7 +164,15 @@ ifneq ($(KERNEL_NO_GCC), true)
+         endif
+     endif
+ 
+-    KERNEL_MAKE_FLAGS += CPATH="/usr/include:/usr/include/x86_64-linux-gnu" HOSTLDFLAGS="-L/usr/lib/x86_64-linux-gnu -L/usr/lib64 -fuse-ld=lld"
++    # -fuse-ld=lld must be in HOSTCFLAGS as well as HOSTLDFLAGS for pre-4.18 kernels. Kbuild
++    # builds single-file host tools (scripts/basic/fixdep) with host-csingle, which compiles and
++    # links in ONE clang invocation using only $(hostc_flags) -- see scripts/Makefile.host:115.
++    # HOSTLDFLAGS is applied by host-cmulti (:123) but never by host-csingle, so on msm8992's
++    # 3.10 kernel the flag never reaches the fixdep link and clang falls back to plain "ld",
++    # which is not on the sbox sandbox PATH:
++    #   clang-14: error: unable to execute command: Executable "ld" doesn't exist!
++    # lineage-19.1 set it in both; 20.0 dropped it from HOSTCFLAGS. Restored.
++    KERNEL_MAKE_FLAGS += CPATH="/usr/include:/usr/include/x86_64-linux-gnu" HOSTCFLAGS="-fuse-ld=lld" HOSTLDFLAGS="-L/usr/lib/x86_64-linux-gnu -L/usr/lib64 -fuse-ld=lld"
+ 
+     ifeq ($(KERNEL_ARCH),arm64)
+         # Add 32-bit GCC to PATH so that arm-linux-androidkernel-as is available for CONFIG_COMPAT_VDSO

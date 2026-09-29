@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Nextbit Robin nav-bar icon, redrawn from scratch as a VectorDrawable.
+
+     The Robin's three nav icons are one annulus cut three ways: a full ring for home, and a
+     180-degree arc for back and recents. Geometry was measured off the stock 49px xxhdpi art
+     (outer radius 24.5px, inner 14.4px) and rebuilt here on the 28dp viewport that SystemUI's
+     own ic_sysbar_* drawables use, so it scales to any density instead of upscaling a bitmap,
+     and takes ?attr/singleToneColor so it tints with the nav bar instead of being fixed white.
+-->
+<!-- upper arch -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+
+    <path
+        android:fillColor="?attr/singleToneColor"
+        android:pathData="M5.825,18.09 A8.175,8.175 0 0,1 22.18,18.09 L18.82,18.09 A4.825,4.825 0 0,0 9.175,18.09 Z" />
+</vector>

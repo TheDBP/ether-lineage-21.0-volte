@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:06:24 -0400
+Subject: [PATCH] Google feed (-1 screen) off by default
+
+Both the OverlayCallbackImpl runtime default and the launcher_preferences.xml pref
+default flipped true->false. Ports the ether change (sites unchanged in lineage-22.2).
+---
+ .../com/android/launcher3/uioverrides/OverlayCallbackImpl.java  | 2 +-
+ res/xml/launcher_preferences.xml                                | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java b/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
+index 43432000f2..31c6f69830 100644
+--- a/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
++++ b/quickstep/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
+@@ -182,7 +182,7 @@ public class OverlayCallbackImpl
+ 
+     private LauncherClient.ClientOptions getClientOptions(SharedPreferences prefs) {
+         return new LauncherClient.ClientOptions(
+-                prefs.getBoolean(KEY_ENABLE_MINUS_ONE, true),
++                prefs.getBoolean(KEY_ENABLE_MINUS_ONE, false), // Google feed off by default
+                 true, /* enableHotword */
+                 true /* enablePrewarming */
+         );
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 3ef7795214..77c1f9aa56 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -95,7 +95,7 @@
+         android:persistent="true" />
+ 
+     <SwitchPreferenceCompat
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:key="pref_enable_minus_one"
+         android:summary="@string/pref_show_google_now_summary"
+         android:title="@string/title_show_google_app" />
+-- 
+2.53.0
+

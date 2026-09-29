@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 20:38:09 -0400
+Subject: [PATCH] netlink: do not require IFA_FLAGS, which predates Linux 3.14
+
+This is what actually stops WiFi working on ether 20.0.
+
+RtNetlinkAddressMessage.parse() returns null when the IFA_FLAGS attribute is
+missing, on the stated assumption that it 'should always be present'. That
+holds only on kernels 3.14 and newer -- the attribute was added there. msm8992
+runs 3.10.108, whose include/uapi/linux/if_addr.h enum ends at IFA_MULTICAST
+with no IFA_FLAGS at all.
+
+So every RTM_NEWADDR the kernel sends is discarded as unparsable:
+
+  E IpClient.wlan0: [NetlinkTracker/wlan0] ERROR unparsable netlink msg:
+     50000000 14000000 ... 02188000 07000000 08000100 ........ ...
+                                                      ^^^^^^^^ the IPv4 address
+
+IpClient therefore never learns the interface acquired an address, so
+provisioning never completes, so WifiClientModeImpl never reports CONNECTED.
+ConnectivityService only calls createNativeNetwork() on CONNECTED, which is why
+netd kept logging 'no such netId' and why routes and DNS could not be
+installed. The network sat in CONNECTING until the 18-second timeout dropped
+it, having held a perfectly valid DHCP lease the whole time.
+
+Nothing threw and nothing crashed, which is why four rounds of chasing
+exceptions -- netd, BpfNetMaps, the stats parser -- each fixed a real bug
+without fixing this one. I had also seen these 'unparsable netlink msg' lines
+in earlier logs and dismissed them as cosmetic noise.
+
+The fix is to fall back to the 8 bits of flags already read from ifaddrmsg,
+which is precisely what a pre-3.14 kernel reports, rather than rejecting the
+message.
+---
+ .../util/netlink/RtNetlinkAddressMessage.java | 23 ++++++++++++++-----
+ 1 file changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/common/device/com/android/net/module/util/netlink/RtNetlinkAddressMessage.java b/common/device/com/android/net/module/util/netlink/RtNetlinkAddressMessage.java
+index f7b0d02f..4860d0e1 100644
+--- a/common/device/com/android/net/module/util/netlink/RtNetlinkAddressMessage.java
++++ b/common/device/com/android/net/module/util/netlink/RtNetlinkAddressMessage.java
+@@ -110,14 +110,25 @@ public class RtNetlinkAddressMessage extends NetlinkMessage {
+ 
+         // The first 8 bits of flags are in the ifaddrmsg.
+         addrMsg.mFlags = addrMsg.mIfaddrmsg.flags;
+-        // IFA_FLAGS. All the flags are in the IF_FLAGS attribute. This should always be present,
+-        // and will overwrite the flags set above.
++        // IFA_FLAGS holds the full 32-bit flags and overwrites the 8 bits above when present.
++        //
++        // It is NOT always present: the attribute was added in Linux 3.14, and a kernel older
++        // than that simply never sends it -- msm8992 runs 3.10, whose if_addr.h enum stops at
++        // IFA_MULTICAST. Treating its absence as a parse failure discards the entire
++        // RTM_NEWADDR message, so IpClient never learns the interface acquired an address.
++        // The visible symptom is WiFi that associates, completes a DHCP lease, and then sits
++        // in CONNECTING until the 18-second timeout drops it, with nothing logged but:
++        //
++        //   E IpClient.wlan0: [NetlinkTracker/wlan0] ERROR unparsable netlink msg: ...
++        //
++        // The 8 bits from ifaddrmsg assigned above are exactly what a pre-3.14 kernel reports,
++        // so falling back to them is the correct behaviour rather than a workaround.
+         byteBuffer.position(baseOffset);
+         nlAttr = StructNlAttr.findNextAttrOfType(IFA_FLAGS, byteBuffer);
+-        if (nlAttr == null) return null;
+-        final Integer value = nlAttr.getValueAsInteger();
+-        if (value == null) return null;
+-        addrMsg.mFlags = value;
++        if (nlAttr != null) {
++            final Integer value = nlAttr.getValueAsInteger();
++            if (value != null) addrMsg.mFlags = value;
++        }
+ 
+         return addrMsg;
+     }

@@ -1,0 +1,104 @@
+From 1c50a0224311139b717d4aa34ed79e551ee8707c Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Tue, 15 Sep 2026 07:36:58 -0400
+Subject: [PATCH] home screen defaults: no icon labels, no auto-add, rotation
+ on
+
+pref_add_icon_to_home and pref_desktop_show_labels default to false, in the
+preference XML and in the code paths that read them before the preference
+screen has ever been opened (SessionCommitReceiver, BubbleTextView).
+KEY_SHOW_DRAWER_LABELS stays true: labels are dropped from the workspace only.
+
+Rotation: config_allowRotation is a real bool on this branch, so flip it there
+instead of patching RotationHelper as the 20.0 port had to.
+---
+ res/values/lineage_config.xml                        |  2 +-
+ res/xml/launcher_preferences.xml                     |  4 ++--
+ src/com/android/launcher3/BubbleTextView.java        | 10 +++++-----
+ src/com/android/launcher3/SessionCommitReceiver.java |  2 +-
+ 4 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/res/values/lineage_config.xml b/res/values/lineage_config.xml
+index e7df3c7cdd..e2aa4c31cd 100644
+--- a/res/values/lineage_config.xml
++++ b/res/values/lineage_config.xml
+@@ -21,5 +21,5 @@
+     <bool name="config_appsListSortSections">false</bool>
+ 
+     <!-- Allow rotation by default -->
+-    <bool name="config_allowRotation">false</bool>
++    <bool name="config_allowRotation">true</bool>
+ </resources>
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index a2876d9dc1..52d695551e 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -40,7 +40,7 @@
+         android:key="pref_add_icon_to_home"
+         android:title="@string/auto_add_shortcuts_label"
+         android:summary="@string/auto_add_shortcuts_description"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true"
+         launcher:logIdOn="613"
+         launcher:logIdOff="614" />
+@@ -94,7 +94,7 @@
+     <SwitchPreferenceCompat
+         android:key="pref_desktop_show_labels"
+         android:title="@string/desktop_show_labels"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true" />
+ 
+     <SwitchPreferenceCompat
+diff --git a/src/com/android/launcher3/BubbleTextView.java b/src/com/android/launcher3/BubbleTextView.java
+index b71d5b2886..d587b914e6 100644
+--- a/src/com/android/launcher3/BubbleTextView.java
++++ b/src/com/android/launcher3/BubbleTextView.java
+@@ -264,7 +264,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
+             setCompoundDrawablePadding(mDeviceProfile.iconDrawablePaddingPx);
+             defaultIconSize = mDeviceProfile.iconSizePx;
+             setCenterVertically(mDeviceProfile.iconCenterVertically);
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_ALL_APPS || mDisplay == DISPLAY_PREDICTION_ROW
+                 || mDisplay == DISPLAY_SEARCH_RESULT_APP_ROW) {
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, mDeviceProfile.allAppsIconTextSizePx);
+@@ -276,21 +276,21 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, mDeviceProfile.folderChildTextSizePx);
+             setCompoundDrawablePadding(mDeviceProfile.folderChildDrawablePaddingPx);
+             defaultIconSize = mDeviceProfile.folderChildIconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_SEARCH_RESULT) {
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, mDeviceProfile.allAppsIconTextSizePx);
+             defaultIconSize = getResources().getDimensionPixelSize(R.dimen.search_row_icon_size);
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_SEARCH_RESULT_SMALL) {
+             defaultIconSize = getResources().getDimensionPixelSize(
+                     R.dimen.search_row_small_icon_size);
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_TASKBAR) {
+             defaultIconSize = mDeviceProfile.taskbarIconSize;
+         } else {
+             // widget_selection or shortcut_popup
+             defaultIconSize = mDeviceProfile.iconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         }
+ 
+ 
+diff --git a/src/com/android/launcher3/SessionCommitReceiver.java b/src/com/android/launcher3/SessionCommitReceiver.java
+index ea5eb8f284..b40bcc40ac 100644
+--- a/src/com/android/launcher3/SessionCommitReceiver.java
++++ b/src/com/android/launcher3/SessionCommitReceiver.java
+@@ -105,6 +105,6 @@ public class SessionCommitReceiver extends BroadcastReceiver {
+                 && UserCache.getInstance(context).getUserInfo(user).isPrivate()) {
+             return false;
+         }
+-        return LauncherPrefs.getPrefs(context).getBoolean(ADD_ICON_PREFERENCE_KEY, true);
++        return LauncherPrefs.getPrefs(context).getBoolean(ADD_ICON_PREFERENCE_KEY, false);
+     }
+ }

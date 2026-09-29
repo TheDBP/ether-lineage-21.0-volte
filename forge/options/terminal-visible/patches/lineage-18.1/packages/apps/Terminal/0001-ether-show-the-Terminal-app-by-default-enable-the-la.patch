@@ -1,0 +1,30 @@
+From af033319ba2406c7014b02eff3cfee71071077aa Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 12:00:00 +0000
+Subject: [PATCH] ether: show the Terminal app by default (enable the launcher)
+
+LineageOS ships the Terminal app with the whole <application> disabled
+(android:enabled="false"), so its launcher icon only appears after Developer
+Options -> "Local terminal". Enable it by default so Terminal is in the app
+drawer out of the box on this rooted power-user ROM. The "Local terminal" dev
+toggle still turns it back off if someone wants it hidden.
+---
+ AndroidManifest.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/AndroidManifest.xml b/AndroidManifest.xml
+index a9fb4e3..5abcdd0 100644
+--- a/AndroidManifest.xml
++++ b/AndroidManifest.xml
+@@ -33,7 +33,7 @@
+         android:icon="@mipmap/ic_launcher"
+         android:label="@string/app_label"
+         android:appCategory="productivity"
+-        android:enabled="false">
++        android:enabled="true">
+ 
+         <activity
+             android:name=".TerminalActivity"
+-- 
+2.53.0
+

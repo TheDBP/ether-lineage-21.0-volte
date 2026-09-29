@@ -1,0 +1,46 @@
+From f4ba27eb7c1f40d9fc50f9e67d04b533df5cab56 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 17:36:29 -0400
+Subject: [PATCH] teal-skin: seed a fixed teal (#009D94) Monet preset as the
+ default accent
+
+Seeds THEME_CUSTOMIZATION_OVERLAY_PACKAGES with a fixed teal system_palette and
+color_source=preset. A preset makes ThemeOverlayController skip wallpaper re-seeding, so the accent
+is teal out of the box and stays teal when the wallpaper changes.
+---
+ packages/SettingsProvider/res/values/defaults.xml            | 5 +++++
+ .../src/com/android/providers/settings/DatabaseHelper.java   | 4 ++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/packages/SettingsProvider/res/values/defaults.xml b/packages/SettingsProvider/res/values/defaults.xml
+index 8e6e251ff3f2..14c73378b21f 100644
+--- a/packages/SettingsProvider/res/values/defaults.xml
++++ b/packages/SettingsProvider/res/values/defaults.xml
+@@ -259,4 +259,12 @@
+     <!-- Default for Settings.Secure.ONE_HANDED_MODE_ACTIVATED -->
+     <bool name="def_one_handed_mode_activated">false</bool>
+ 
++
++    <!-- teal-skin: seed a teal (#009D94) Monet palette so the accent is teal out of the box. Note
++         what is NOT set: color_source. Setting it to "preset" would pin the accent, but it also
++         makes ThemeOverlayController skip wallpaper re-seeding, so changing the wallpaper would
++         never move the palette and the Wallpaper & Style colour options would look broken. Left
++         unset, the seed decides the first boot and the wallpaper drives it afterwards, and the
++         teal-wallpaper option ships a teal wallpaper, so the derived colour starts teal too. -->
++    <string name="def_theme_customization_overlay_packages" translatable="false">{\"android.theme.customization.system_palette\":\"009D94\",\"android.theme.customization.theme_style\":\"VIBRANT\"}</string>
+ </resources>
+diff --git a/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java b/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+index 6934fe5bb352..4a9b233eae77 100644
+--- a/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
++++ b/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+@@ -2383,6 +2383,10 @@ class DatabaseHelper extends SQLiteOpenHelper {
+ 
+             loadStringSetting(stmt, Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS,
+                         R.string.def_immersive_mode_confirmations);
++            // teal-skin: seed the fixed teal Monet preset (def_theme_customization_overlay_packages)
++            loadStringSetting(stmt, Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
++                        R.string.def_theme_customization_overlay_packages);
++
+ 
+             loadBooleanSetting(stmt, Settings.Secure.INSTALL_NON_MARKET_APPS,
+                     R.bool.def_install_non_market_apps);

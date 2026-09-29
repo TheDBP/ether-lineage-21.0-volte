@@ -1,0 +1,45 @@
+From cdc64e80d9dbac370fc08ca66d7f4c7fa1fda6ed Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 18:03:33 -0400
+Subject: [PATCH] lineage-sdk: default the advanced power menu
+ (ADVANCED_REBOOT) to on
+
+Same change as the 19.1 feature; only the surrounding context moved. The
+loadBooleanSetting block in LineageDatabaseHelper sat at line ~505 on 19.1
+and sits at ~406 on 20.0, and defaults.xml shifted correspondingly, so the
+19.1 patch no longer applied by context. Both target files and the
+def_volume_panel_on_left anchor still exist upstream on lineage-20.0, and
+LineageSettings.Secure.ADVANCED_REBOOT is still the key PowerMenuUtils reads,
+so the fix itself is unchanged: seed the setting to 1 at database load.
+---
+ packages/LineageSettingsProvider/res/values/defaults.xml       | 3 +++
+ .../org/lineageos/lineagesettings/LineageDatabaseHelper.java   | 2 ++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/packages/LineageSettingsProvider/res/values/defaults.xml b/packages/LineageSettingsProvider/res/values/defaults.xml
+index ec6309be..fc0e0934 100644
+--- a/packages/LineageSettingsProvider/res/values/defaults.xml
++++ b/packages/LineageSettingsProvider/res/values/defaults.xml
+@@ -28,6 +28,9 @@
+     <!-- Default for LineageSettings.Secure.VOLUME_PANEL_ON_LEFT -->
+     <bool name="def_volume_panel_on_left">false</bool>
+ 
++    <!-- Default for LineageSettings.Secure.ADVANCED_REBOOT (advanced power menu on by default) -->
++    <bool name="def_advanced_reboot">true</bool>
++
+     <!-- Default for LineageSettings.Secure.QS_SHOW_BRIGHTNESS_SLIDER -->
+     <bool name="def_qs_show_brightness_slider">true</bool>
+ 
+diff --git a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+index 829a5e50..c7851a14 100644
+--- a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
++++ b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+@@ -404,6 +404,8 @@ public class LineageDatabaseHelper extends SQLiteOpenHelper{
+ 
+             loadBooleanSetting(stmt, LineageSettings.Secure.VOLUME_PANEL_ON_LEFT,
+                     R.bool.def_volume_panel_on_left);
++            loadBooleanSetting(stmt, LineageSettings.Secure.ADVANCED_REBOOT,
++                    R.bool.def_advanced_reboot);
+ 
+             loadBooleanSetting(stmt, LineageSettings.Secure.QS_SHOW_BRIGHTNESS_SLIDER,
+                     R.bool.def_qs_show_brightness_slider);

@@ -1,0 +1,139 @@
+From cee3c63ce29b7eeaf0bf892dc8480a7172a404d9 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 18:06:20 -0400
+Subject: [PATCH] =?UTF-8?q?ether:=20home=20screen=20defaults=20=E2=80=94?=
+ =?UTF-8?q?=20no=20icon=20labels,=20no=20auto-add,=20rotation=20on?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Ported from the 19.1 feature. Three of the four changes are the same edit at
+shifted context; the rotation one had to be re-derived.
+
+Unchanged in substance:
+  - pref_add_icon_to_home defaultValue true->false, and the matching code
+    default in SessionCommitReceiver. That call is LauncherPrefs.getPrefs()
+    on 20.0 rather than Utilities.getPrefs(), which is why the 19.1 hunk
+    did not apply.
+  - pref_desktop_show_labels defaultValue true->false, and the five
+    KEY_SHOW_DESKTOP_LABELS code defaults in BubbleTextView. As on 19.1,
+    KEY_SHOW_DRAWER_LABELS is deliberately left at true: labels are dropped
+    on the home screen, kept in the app drawer.
+
+Re-derived: rotation. On 19.1 the default was the res/values/config.xml
+allow_rotation bool, which this feature flipped to true. A13 deleted that
+bool outright and computes the default in
+RotationHelper.getAllowRotationDefaultValue() as
+
+    originalSmallestWidth >= MIN_TABLET_WIDTH
+
+i.e. rotation defaults on for tablets only, so ether (a phone) would get
+false and there is no resource left to override. Made that return true and
+set the pref_allowRotation defaultValue to match, which reproduces the 19.1
+behaviour. Both are needed: LauncherPrefs.ALLOW_ROTATION takes its default
+from the RotationHelper call, while the settings UI reads the XML default.
+---
+ res/xml/launcher_preferences.xml                     |  6 +++---
+ src/com/android/launcher3/BubbleTextView.java        | 10 +++++-----
+ src/com/android/launcher3/SessionCommitReceiver.java |  2 +-
+ src/com/android/launcher3/states/RotationHelper.java |  5 ++++-
+ 4 files changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 15c06c322e..bb5c420acb 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -40,7 +40,7 @@
+         android:key="pref_add_icon_to_home"
+         android:title="@string/auto_add_shortcuts_label"
+         android:summary="@string/auto_add_shortcuts_description"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true"
+         launcher:logIdOn="613"
+         launcher:logIdOff="614" />
+@@ -53,7 +53,7 @@
+         android:key="pref_allowRotation"
+         android:title="@string/allow_rotation_title"
+         android:summary="@string/allow_rotation_desc"
+-        android:defaultValue="false"
++        android:defaultValue="true"
+         android:persistent="true"
+         launcher:logIdOn="615"
+         launcher:logIdOff="616" />
+@@ -87,7 +87,7 @@
+     <SwitchPreference
+         android:key="pref_desktop_show_labels"
+         android:title="@string/desktop_show_labels"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true" />
+ 
+     <SwitchPreference
+diff --git a/src/com/android/launcher3/BubbleTextView.java b/src/com/android/launcher3/BubbleTextView.java
+index 89e457bd06..02902e7c68 100644
+--- a/src/com/android/launcher3/BubbleTextView.java
++++ b/src/com/android/launcher3/BubbleTextView.java
+@@ -219,7 +219,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
+             setCompoundDrawablePadding(grid.iconDrawablePaddingPx);
+             defaultIconSize = grid.iconSizePx;
+             setCenterVertically(grid.isScalableGrid);
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_ALL_APPS) {
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, grid.allAppsIconTextSizePx);
+             setCompoundDrawablePadding(grid.allAppsIconDrawablePaddingPx);
+@@ -230,21 +230,21 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, grid.folderChildTextSizePx);
+             setCompoundDrawablePadding(grid.folderChildDrawablePaddingPx);
+             defaultIconSize = grid.folderChildIconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_SEARCH_RESULT) {
+             setTextSize(TypedValue.COMPLEX_UNIT_PX, grid.allAppsIconTextSizePx);
+             defaultIconSize = getResources().getDimensionPixelSize(R.dimen.search_row_icon_size);
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_SEARCH_RESULT_SMALL) {
+             defaultIconSize = getResources().getDimensionPixelSize(
+                     R.dimen.search_row_small_icon_size);
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         } else if (mDisplay == DISPLAY_TASKBAR) {
+             defaultIconSize = grid.iconSizePx;
+         } else {
+             // widget_selection or shortcut_popup
+             defaultIconSize = grid.iconSizePx;
+-            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, true);
++            mShouldShowLabel = prefs.getBoolean(KEY_SHOW_DESKTOP_LABELS, false);
+         }
+ 
+         mCenterVertically = a.getBoolean(R.styleable.BubbleTextView_centerVertically, false);
+diff --git a/src/com/android/launcher3/SessionCommitReceiver.java b/src/com/android/launcher3/SessionCommitReceiver.java
+index 50ad2be505..545dece251 100644
+--- a/src/com/android/launcher3/SessionCommitReceiver.java
++++ b/src/com/android/launcher3/SessionCommitReceiver.java
+@@ -98,6 +98,6 @@ public class SessionCommitReceiver extends BroadcastReceiver {
+     }
+ 
+     public static boolean isEnabled(Context context) {
+-        return LauncherPrefs.getPrefs(context).getBoolean(ADD_ICON_PREFERENCE_KEY, true);
++        return LauncherPrefs.getPrefs(context).getBoolean(ADD_ICON_PREFERENCE_KEY, false);
+     }
+ }
+diff --git a/src/com/android/launcher3/states/RotationHelper.java b/src/com/android/launcher3/states/RotationHelper.java
+index 7b4e2485ce..ef443c2097 100644
+--- a/src/com/android/launcher3/states/RotationHelper.java
++++ b/src/com/android/launcher3/states/RotationHelper.java
+@@ -55,7 +55,10 @@ public class RotationHelper implements OnSharedPreferenceChangeListener,
+         // original dimensions to determine if rotation is allowed of not.
+         float originalSmallestWidth = dpiFromPx(Math.min(info.currentSize.x, info.currentSize.y),
+                 DENSITY_DEVICE_STABLE);
+-        return originalSmallestWidth >= MIN_TABLET_WIDTH;
++        // ether: home-screen rotation is allowed on this phone by default. Upstream returns
++        // originalSmallestWidth >= MIN_TABLET_WIDTH, i.e. tablets only; on 19.1 the same
++        // default came from the res/values/config.xml allow_rotation bool, which A13 removed.
++        return true;
+     }
+ 
+     public static final int REQUEST_NONE = 0;

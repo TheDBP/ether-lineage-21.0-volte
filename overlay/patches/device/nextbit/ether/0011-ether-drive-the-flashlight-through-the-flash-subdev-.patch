@@ -1,0 +1,408 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 16:18:18 -0400
+Subject: [PATCH] ether: drive the flashlight through the flash subdev, not the
+ PMIC
+
+The torch has never emitted light on this port, while every write succeeded and the quick-settings
+tile reported it on. QCameraFlash writes /sys/class/leds/led:torch_*/brightness, which is the
+PMI8994 qpnp-flash-led block -- and that block is not what this board's LED is wired to. Those nodes
+exist only because QCOM's reference msm-pmi8994.dtsi is included; writing them programs the PMIC
+quite happily (module enable 0xd342 goes 0x00 -> 0x0f) and lights nothing, at any current. The
+earlier "the strobe gate is missing" reading of that register movement was fitting a story to the
+wrong chip: the flash-LED regulators on this board sit at use=0 anyway, because the DTS gives them
+regulator-name children and no -supply phandle.
+
+The actual part is a TI LM3646 on CCI (msm8992-camera-sensor-mtp-nbq.dtsi, compatible "ti,lm3646"),
+reached through the older of the two flash frameworks this kernel carries -- msm_led_flash.c, which
+takes VIDIOC_MSM_FLASH_LED_DATA_CFG with a flat msm_camera_led_cfg_t rather than msm_flash.c's
+VIDIOC_MSM_FLASH_CFG with its userspace pointers.
+
+So: INIT on initFlash, LOW/OFF on setFlashMode, RELEASE on deinitFlash. MSM_CAMERA_LED_INIT is what
+makes this usable without a camera session -- it brings up CCI, requests the FLASH_EN/FLASH_NOW
+gpios, moves pinctrl to active and writes the chip's init table -- and it hands back the per-LED
+maxima from the device tree, so the torch current is read out of the kernel instead of invented
+here. OFF has to precede RELEASE: the kernel refuses RELEASE unless led_state is still INIT.
+
+Finding the subdev is the fiddly part and two shortcuts are wrong. The index is not stable, so
+/dev/v4l-subdev9 works until a probe order changes and then programs something else. And
+entity.name from MEDIA_IOC_ENUM_ENTITIES is not the subdev name -- msm_sd_register overwrites it
+with the device node's own name -- so matching "msm_flash" there finds nothing; the real name
+survives only in /sys/class/video4linux/<node>/name, which this domain cannot read. Both frameworks
+also register under the same group_id. Hence: enumerate for group_id MSM_CAMERA_SUBDEV_FLASH, and
+settle which framework probed by which ioctl the subdev accepts.
+
+The LED_FIRST/LED_SECOND split in this API describes two independent PMIC channels, which is not
+this hardware; both LM3646 outputs are behind the one subdev, so the parameter is ignored and
+.second stays unused.
+
+This replaces the previous flashlight patch entirely. Its sepolicy label and ueventd permissions
+were for the PMIC sysfs nodes and are not needed: /dev/media* and /dev/v4l-subdev* are already open
+to this process, which is how the rest of the HAL finds its subdevs.
+---
+ camera/QCamera2/util/QCameraFlash.cpp | 287 ++++++++++++++++----------
+ 1 file changed, 175 insertions(+), 112 deletions(-)
+
+diff --git a/camera/QCamera2/util/QCameraFlash.cpp b/camera/QCamera2/util/QCameraFlash.cpp
+index ff30585..da93379 100644
+--- a/camera/QCamera2/util/QCameraFlash.cpp
++++ b/camera/QCamera2/util/QCameraFlash.cpp
+@@ -29,6 +29,10 @@
+ 
+ #include <stdio.h>
+ #include <fcntl.h>
++#include <string.h>
++#include <unistd.h>
++#include <errno.h>
++#include <sys/ioctl.h>
+ #include <linux/media.h>
+ #include <media/msmb_camera.h>
+ #include <media/msm_cam_sensor.h>
+@@ -39,8 +43,17 @@
+ 
+ #define STRING_LENGTH_OF_64_BIT_NUMBER 21
+ 
+-#define FLASH_PATH_FIRST "/sys/class/leds/led:torch_0/brightness"
+-#define FLASH_PATH_SECOND "/sys/class/leds/led:torch_1/brightness"
++
++/*
++ * qpnp-flash-led needs two writes, not one: brightness sets the current, strobe gates the output.
++ * Writing brightness alone leaves the LED dark while every write succeeds and the torch reports as
++ * on -- which is exactly what the quick-settings tile did: no error, no light. Confirmed against the
++ * driver's own reg_dump, where brightness alone leaves REG_0xd342=0x00 and REG_0xd347=0x40 while
++ * adding strobe moves them to 0x05 and 0xc0.
++ *
++ * Opened per call rather than held like the brightness fds: the torch is toggled by hand, so the
++ * cost is irrelevant beside leaving initFlash and the fd pair untouched.
++ */
+ 
+ volatile uint32_t gCamHal3LogLevel = 1;
+ 
+@@ -124,6 +137,114 @@ int32_t QCameraFlash::registerCallbacks(
+     return retVal;
+ }
+ 
++/* The Robin's flash is a TI LM3646 on the CCI bus (device/.../msm8992-camera-sensor-mtp-nbq.dtsi:
++ * compatible = "ti,lm3646", strobed by two PM8994 GPIOs). It is NOT the PMI8994 qpnp-flash-led
++ * block, whose /sys/class/leds/led:torch_* nodes this file used to write: those nodes exist only
++ * because QCOM's reference msm-pmi8994.dtsi is included, and nothing on this board is wired to
++ * them. Writing them programs the PMIC happily -- module enable 0xd342 goes 0x00 -> 0x0f -- and
++ * emits no light at any current, which is why the QS tile appeared to work while the LED stayed
++ * dark. The flash-LED regulators also sit at use=0 because the DTS has regulator-name children but
++ * no -supply phandle, so that block could not light even if it were wired.
++ *
++ * The LM3646 is reached through the older of the two flash frameworks this kernel carries.
++ * msm_led_flash.c takes VIDIOC_MSM_FLASH_LED_DATA_CFG with a flat msm_camera_led_cfg_t; the newer
++ * msm_flash.c takes VIDIOC_MSM_FLASH_CFG with a struct full of userspace pointers. They are not
++ * distinguishable by anything the media controller reports -- both register under group_id
++ * MSM_CAMERA_SUBDEV_FLASH -- so openFlashSubdev below settles it by which ioctl is accepted.
++ */
++static int flashCfg(int fd, enum msm_camera_led_config_t type,
++        struct msm_camera_led_cfg_t *cfgOut);
++
++static int openFlashSubdev(struct msm_camera_led_cfg_t *caps)
++{
++    /* Find the flash subdev through the media controller, the way the rest of this HAL finds its
++     * subdevs. Two things make the obvious shortcuts wrong:
++     *
++     *   - The index is not stable. Hardcoding /dev/v4l-subdev9 works until a driver's probe order
++     *     changes and then quietly programs something else.
++     *   - entity.name is NOT the subdev name. msm_sd_register overwrites it with the device node's
++     *     own name ("v4l-subdev9"), so matching on "msm_flash" here finds nothing. The subdev name
++     *     survives only in /sys/class/video4linux/<node>/name, which this domain cannot read.
++     *
++     * So match on group_id, which both flash frameworks set to MSM_CAMERA_SUBDEV_FLASH, and settle
++     * the ambiguity by trying the ioctl: msm_led_flash.c answers VIDIOC_MSM_FLASH_LED_DATA_CFG and
++     * msm_flash.c returns ENOTTY for it. Whichever framework probed on a given board, the one that
++     * accepts INIT is the one to talk to.
++     */
++    for (int m = 0; m < 8; m++) {
++        char mediaPath[32];
++        snprintf(mediaPath, sizeof(mediaPath), "/dev/media%d", m);
++        int mfd = open(mediaPath, O_RDWR | O_NONBLOCK);
++        if (mfd < 0) {
++            continue;
++        }
++
++        for (uint32_t id = 1; ; id++) {
++            struct media_entity_desc entity;
++            memset(&entity, 0, sizeof(entity));
++            entity.id = id;
++            if (ioctl(mfd, MEDIA_IOC_ENUM_ENTITIES, &entity) < 0) {
++                break;      /* end of the entity list on this media device */
++            }
++            if (entity.type != MEDIA_ENT_T_V4L2_SUBDEV ||
++                    entity.group_id != MSM_CAMERA_SUBDEV_FLASH) {
++                continue;
++            }
++
++            char devPath[64];
++            snprintf(devPath, sizeof(devPath), "/dev/%s", entity.name);
++            int fd = open(devPath, O_RDWR | O_NONBLOCK);
++            if (fd < 0) {
++                ALOGE("%s: cannot open flash subdev %s: %s",
++                        __func__, devPath, strerror(errno));
++                continue;
++            }
++
++            /* INIT is what makes the torch usable without a camera session: it brings up CCI,
++             * requests the FLASH_EN/FLASH_NOW/FLASH_RESET gpios, moves pinctrl to the active state
++             * and writes the chip's init register table. It also fills the cfg with the per-LED
++             * maxima from the device tree, so the torch current used later is whatever this board
++             * declares rather than a number invented here. */
++            if (flashCfg(fd, MSM_CAMERA_LED_INIT, caps) < 0) {
++                close(fd);
++                continue;
++            }
++
++            CDBG("%s: flash subdev is %s (media%d entity %u)",
++                    __func__, devPath, m, id);
++            close(mfd);
++            return fd;
++        }
++        close(mfd);
++    }
++
++    ALOGE("%s: no media entity in group MSM_CAMERA_SUBDEV_FLASH accepted INIT", __func__);
++    return -1;
++}
++
++static int flashCfg(int fd, enum msm_camera_led_config_t type,
++        struct msm_camera_led_cfg_t *cfgOut)
++{
++    struct msm_camera_led_cfg_t cfg;
++    memset(&cfg, 0, sizeof(cfg));
++    cfg.cfgtype = type;
++    if (cfgOut != NULL && type == MSM_CAMERA_LED_LOW) {
++        memcpy(cfg.torch_current, cfgOut->torch_current, sizeof(cfg.torch_current));
++    }
++    if (ioctl(fd, VIDIOC_MSM_FLASH_LED_DATA_CFG, &cfg) < 0) {
++        ALOGE("%s: flash cfgtype %d failed: %s", __func__, type, strerror(errno));
++        return -errno;
++    }
++    if (cfgOut != NULL && type == MSM_CAMERA_LED_INIT) {
++        *cfgOut = cfg;   /* INIT returns the DT max currents */
++    }
++    return 0;
++}
++
++/* Torch currents as reported by MSM_CAMERA_LED_INIT, per camera. */
++static struct msm_camera_led_cfg_t gFlashCaps[MM_CAMERA_MAX_NUM_SENSORS];
++
++
+ /*===========================================================================
+  * FUNCTION   : initFlash
+  *
+@@ -144,8 +265,6 @@ int32_t QCameraFlash::registerCallbacks(
+  *==========================================================================*/
+ int32_t QCameraFlash::initFlash(const int camera_id)
+ {
+-    int32_t retVal = 0;
+-
+     if (camera_id < 0 || camera_id >= MM_CAMERA_MAX_NUM_SENSORS) {
+         ALOGE("%s: Invalid camera id: %d", __func__, camera_id);
+         return -EINVAL;
+@@ -155,129 +274,78 @@ int32_t QCameraFlash::initFlash(const int camera_id)
+         ALOGE("%s: No flash available for camera id: %d",
+                 __func__,
+                 camera_id);
+-        retVal = -EINVAL;
+-    } else if (m_cameraOpen[camera_id]) {
++        return -EINVAL;
++    }
++
++    if (m_cameraOpen[camera_id]) {
+         ALOGE("%s: Camera in use for camera id: %d",
+                 __func__,
+                 camera_id);
+-        retVal = -EBUSY;
+-    }
+-
+-    if (retVal < 0) {
+-        return retVal;
++        return -EBUSY;
+     }
+ 
+     if (m_flashFds[camera_id].first >= 0) {
+-        CDBG("First flash led is already inited for camera id: %d",
+-                camera_id);
+-    } else {
+-        m_flashFds[camera_id].first = open(FLASH_PATH_FIRST, O_RDWR);
+-        if (m_flashFds[camera_id].first < 0) {
+-            ALOGE("%s: Unable to open node '%s'",
+-                    __func__,
+-                    FLASH_PATH_FIRST);
+-            retVal = -EBUSY;
+-        }
++        CDBG("Flash is already inited for camera id: %d", camera_id);
++        return 0;
+     }
+ 
+-    if (m_flashFds[camera_id].second >= 0) {
+-        CDBG("Second flash led is already inited for camera id: %d",
+-                camera_id);
+-    } else {
+-        m_flashFds[camera_id].second = open(FLASH_PATH_SECOND, O_RDWR);
+-        if (m_flashFds[camera_id].second < 0) {
+-            ALOGE("%s: Unable to open node '%s'",
+-                    __func__,
+-                    FLASH_PATH_SECOND);
+-            retVal = -EBUSY;
+-        }
++    int fd = openFlashSubdev(&gFlashCaps[camera_id]);
++    if (fd < 0) {
++        return -ENODEV;
+     }
+ 
+-    /* wait for PMIC to init */
+-    usleep(5000);
+-
+-    CDBG("%s: X, retVal = %d", __func__, retVal);
+-    return retVal;
++    /* Both LM3646 outputs hang off this one subdev, so .second stays unused. The LED_FIRST /
++     * LED_SECOND split in this API describes two independent PMIC channels, which is not this
++     * hardware; splitting it here would just mean issuing the same ioctl twice. */
++    m_flashFds[camera_id].first = fd;
++    CDBG("%s: torch maxima %d/%d mA", __func__,
++            gFlashCaps[camera_id].torch_current[0],
++            gFlashCaps[camera_id].torch_current[1]);
++    return 0;
+ }
+ 
+-/*===========================================================================
+- * FUNCTION   : setFlashMode
+- *
+- * DESCRIPTION: Turn on or off the flash associated with a given handle.
+- *              This function is blocking until the operation completes or
+- *              fails.
+- *
+- * PARAMETERS :
+- *   @camera_id  : Camera id of the flash
+- *   @on         : Whether to turn flash on (true) or off (false)
+- *   @flashLed   : LED identifier
+- *
+- * RETURN     :
+- *   0        : success
+- *   -EINVAL  : No camera present at camera_id, or it is not inited.
+- *   -EALREADY: Flash is already in requested state
+- *==========================================================================*/
+ int32_t QCameraFlash::setFlashMode(const int camera_id, const bool mode, flashLed led)
+ {
+-    int32_t retVal = 0;
+-    int32_t count = 0;
+-    char buffer[16];
++    /* `led` is ignored: see initFlash. One chip, one ioctl, both emitters. */
++    (void)led;
+ 
+     if (camera_id < 0 || camera_id >= MM_CAMERA_MAX_NUM_SENSORS) {
+         ALOGE("%s: Invalid camera id: %d", __func__, camera_id);
+-        retVal = -EINVAL;
+-    } else if (mode == m_flashOn[camera_id]) {
++        return -EINVAL;
++    }
++
++    if (mode == m_flashOn[camera_id]) {
+         CDBG("%s: flash %d is already in requested state: %d",
+                 __func__,
+                 camera_id,
+                 mode);
+-        retVal = -EALREADY;
++        return -EALREADY;
+     }
+ 
+-    if (retVal < 0) {
+-        return retVal;
++    if (m_flashFds[camera_id].first < 0) {
++        ALOGE("%s: called for uninited flash: %d", __func__, camera_id);
++        return -EINVAL;
+     }
+ 
+-    if (led == LED_FIRST || led == LED_DUAL) {
+-        if (m_flashFds[camera_id].first < 0) {
+-            ALOGE("%s: called for uninited first flash: %d", __func__, camera_id);
+-            retVal = -EINVAL;
+-        } else {
+-            if (mode) {
+-                int bytes = snprintf(buffer, sizeof(buffer), "70");
+-                count = write(m_flashFds[camera_id].first, buffer, (size_t)bytes);
+-            } else {
+-                int bytes = snprintf(buffer, sizeof(buffer), "0");
+-                count = write(m_flashFds[camera_id].first, buffer, (size_t)bytes);
+-            }
+-
+-            if (count <= 0)
+-                ALOGE("%s: Unable to change first flash mode to %d for camera id: %d",
+-                        __func__, mode, camera_id);
+-            else
+-                m_flashOn[camera_id] = mode;
+-        }
++    /* LOW is torch, HIGH is the capture strobe. The kernel clamps the requested current to the DT
++     * maximum, and the lm3646 handler falls back to 120 mA if the whole request comes to zero, so
++     * asking for the maximum is both safe and the brightest the board allows. */
++    int32_t rc;
++    if (mode) {
++        rc = flashCfg(m_flashFds[camera_id].first, MSM_CAMERA_LED_LOW,
++                &gFlashCaps[camera_id]);
++    } else {
++        rc = flashCfg(m_flashFds[camera_id].first, MSM_CAMERA_LED_OFF, NULL);
+     }
+ 
+-    if (led == LED_SECOND || led == LED_DUAL) {
+-        if (m_flashFds[camera_id].second < 0) {
+-            ALOGE("%s: called for uninited second flash: %d", __func__, camera_id);
+-            retVal = -EINVAL;
+-        } else {
+-            if (mode) {
+-                int bytes = snprintf(buffer, sizeof(buffer), "70");
+-                count = write(m_flashFds[camera_id].second, buffer, (size_t)bytes);
+-            } else {
+-                int bytes = snprintf(buffer, sizeof(buffer), "0");
+-                count = write(m_flashFds[camera_id].second, buffer, (size_t)bytes);
+-            }
+-
+-            if (count <= 0)
+-                ALOGE("%s: Unable to change second flash mode to %d for camera id: %d",
+-                    __func__, mode, camera_id);
+-        }
++    if (rc < 0) {
++        ALOGE("%s: Unable to change flash mode to %d for camera id: %d",
++                __func__, mode, camera_id);
++        return rc;
+     }
+-    return retVal;
++
++    m_flashOn[camera_id] = mode;
++    return 0;
+ }
+ 
+ /*===========================================================================
+@@ -305,21 +373,16 @@ int32_t QCameraFlash::deinitFlash(const int camera_id)
+ 
+     if (m_flashFds[camera_id].first < 0) {
+         ALOGE("%s: called deinitFlash for uninited flash", __func__);
+-        retVal = -EINVAL;
+-    } else {
+-        setFlashMode(camera_id, false, LED_FIRST);
+-        close(m_flashFds[camera_id].first);
+-        m_flashFds[camera_id].first = -1;
++        return -EINVAL;
+     }
+ 
+-    if (m_flashFds[camera_id].second < 0) {
+-        ALOGE("%s: called deinitFlash for uninited flash", __func__);
+-        retVal = -EINVAL;
+-    } else {
+-        setFlashMode(camera_id, false, LED_SECOND);
+-        close(m_flashFds[camera_id].second);
+-        m_flashFds[camera_id].second = -1;
+-    }
++    /* OFF before RELEASE: RELEASE drops FLASH_EN/FLASH_NOW and tears CCI down, and the kernel
++     * refuses it outright unless led_state is still INIT, so leaving the torch lit here would
++     * strand the chip powered with no way back short of a reprobe. */
++    setFlashMode(camera_id, false, LED_FIRST);
++    flashCfg(m_flashFds[camera_id].first, MSM_CAMERA_LED_RELEASE, NULL);
++    close(m_flashFds[camera_id].first);
++    m_flashFds[camera_id].first = -1;
+ 
+     return retVal;
+ }

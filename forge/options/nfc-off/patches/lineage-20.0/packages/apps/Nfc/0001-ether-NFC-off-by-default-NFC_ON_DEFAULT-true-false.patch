@@ -1,0 +1,27 @@
+From 4302c9e32959a57af76d53e454768ea9ccef423a Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 11:52:51 -0400
+Subject: [PATCH] ether: NFC off by default (NFC_ON_DEFAULT true->false)
+
+Default NFC to OFF on first boot (NfcService.NFC_ON_DEFAULT). The QS tile is shown
+by default (device SystemUI overlay), so it's one tap to enable.
+---
+ src/com/android/nfc/NfcService.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/com/android/nfc/NfcService.java b/src/com/android/nfc/NfcService.java
+index 5e117ddd..a7d4f39f 100644
+--- a/src/com/android/nfc/NfcService.java
++++ b/src/com/android/nfc/NfcService.java
+@@ -126,7 +126,7 @@ public class NfcService implements DeviceHostListener {
+     public static final String PREF = "NfcServicePrefs";
+ 
+     static final String PREF_NFC_ON = "nfc_on";
+-    static final boolean NFC_ON_DEFAULT = true;
++    static final boolean NFC_ON_DEFAULT = false;
+     static final String PREF_NDEF_PUSH_ON = "ndef_push_on";
+     static final boolean NDEF_PUSH_ON_DEFAULT = false;
+     static final String PREF_SECURE_NFC_ON = "secure_nfc_on";
+-- 
+2.53.0
+

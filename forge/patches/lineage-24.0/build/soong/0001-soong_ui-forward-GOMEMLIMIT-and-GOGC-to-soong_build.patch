@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 20 Sep 2026 04:22:42 -0400
+Subject: [PATCH] soong_ui: forward GOMEMLIMIT and GOGC to soong_build
+
+soong_build is launched with `env -i`, so a memory limit set in the shell
+never reaches it and its heap grows to twice the live graph (the GOGC=100
+default). On a 24.0 tree that is ~60 GB for a device with a 32-bit second
+arch, which is the whole of a 30 GB machine plus its swap. Pass the two Go
+runtime memory knobs through when the invoking environment sets them.
+---
+ ui/build/soong.go | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/ui/build/soong.go b/ui/build/soong.go
+index 4521b4abe..ef8175895 100644
+--- a/ui/build/soong.go
++++ b/ui/build/soong.go
+@@ -215,6 +215,14 @@ func (pb PrimaryBuilderFactory) primaryBuilderInvocation(config Config) bootstra
+ 
+ 	commonArgs = append(commonArgs, "-l", filepath.Join(pb.config.FileListDir(), "Android.bp.list"))
+ 	invocationEnv := make(map[string]string)
++	// soong_build runs under `env -i`, so the Go runtime's memory knobs set in the shell never
++	// reach it and its heap grows to the GOGC default of twice the live set. Forward them: they
++	// are the only way to hold a ~30 GB live graph inside a small machine's RAM+swap.
++	for _, k := range []string{"GOMEMLIMIT", "GOGC"} {
++		if v, ok := pb.config.Environment().Get(k); ok && v != "" {
++			invocationEnv[k] = v
++		}
++	}
+ 	if pb.debugPort != "" {
+ 		//debug mode
+ 		commonArgs = append(commonArgs, "--delve_listen", pb.debugPort,

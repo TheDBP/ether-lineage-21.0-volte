@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:37:05 -0400
+Subject: [PATCH] lineage: add msm8992/msm8994 to QCOM_BOARD_PLATFORMS
+
+Companion to the B64_FAMILY restore. That patch fixed CAF tree selection in
+config/BoardConfigQcom.mk; this fixes is-vendor-board-platform, which is a
+different variable in a different file (build/core/vendor/qcom_boards.mk) and
+was still missing every pre-UM platform.
+
+The failure mode is quiet, which is what makes it worth calling out: modules
+gated on $(call is-vendor-board-platform,QCOM) are simply never defined, so
+there is no error where the gating happens. It only surfaces at the end of
+the makefile parse as 'includes non-existent modules in PRODUCT_PACKAGES',
+naming libbt-vendor, android.hardware.power-service-qti and friends with no
+hint as to why they vanished.
+---
+ build/core/vendor/qcom_boards.mk | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/build/core/vendor/qcom_boards.mk b/build/core/vendor/qcom_boards.mk
+index 33b6ecb5..4f49c819 100644
+--- a/build/core/vendor/qcom_boards.mk
++++ b/build/core/vendor/qcom_boards.mk
+@@ -15,6 +15,20 @@ TARO := taro #SM8450
+ PARROT := parrot #SM6450
+ KALAMA := kalama #SM8550
+ 
++# B64 Family — restored for the ether (Nextbit Robin) port.
++# lineage-20.0 dropped every pre-UM legacy family from this list. msm8992 is not in
++# QCOM_BOARD_PLATFORMS, so $(call is-vendor-board-platform,QCOM) returns false, which
++# silently gates out whole components rather than erroring: libbt-vendor (Bluetooth),
++# android.hardware.power-service-qti (the power HAL the perf tuning drives), and the
++# QCOM data/crypto pieces. They then surface only as "non-existent modules in
++# PRODUCT_PACKAGES" at the very end of the makefile parse.
++#
++# This is separate from the B64_FAMILY restore in config/BoardConfigQcom.mk: that one
++# selects the CAF hardware variant (msm8992 shares msm8994's trees), while this list
++# is what is-vendor-board-platform tests. Both are needed.
++QCOM_BOARD_PLATFORMS += msm8992
++QCOM_BOARD_PLATFORMS += msm8994
++
+ # UM Family
+ QCOM_BOARD_PLATFORMS += msm8937
+ QCOM_BOARD_PLATFORMS += msm8953

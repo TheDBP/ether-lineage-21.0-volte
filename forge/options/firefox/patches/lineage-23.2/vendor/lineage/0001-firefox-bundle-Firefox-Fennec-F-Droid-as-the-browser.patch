@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 17 Sep 2026 17:34:14 -0400
+Subject: [PATCH] firefox: bundle Firefox (Fennec F-Droid) as the browser,
+ replacing Jelly
+
+vendor/lineage/prebuilts/firefox module, installed unmodified with its native libraries beside it
+and overriding Jelly, plus a guarded PRODUCT_PACKAGES line in config/common.mk. The APK is fetched
+by the firefox option's fetch.sh (the current F-Droid build, signer-pinned); the module is a no-op
+without it.
+
+Soong branch: the patch ships no module file. Android.bp is written by the fetcher (gitignored),
+because skip_preprocessed_apk_checks has to match what each release of the APK packs, and an APK
+whose native libraries are compressed gets them unpacked beside it and installed by jni/Android.mk.
+---
+ config/common.mk                 |  9 +++++++++
+ prebuilts/firefox/.gitignore     |  8 ++++++++
+ prebuilts/firefox/jni/Android.mk | 27 +++++++++++++++++++++++++++
+ 3 files changed, 44 insertions(+)
+ create mode 100644 prebuilts/firefox/.gitignore
+ create mode 100644 prebuilts/firefox/jni/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 3b68625..d8b6bf7 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -305,3 +305,12 @@ include vendor/lineage/config/version.mk
+ 
+ -include $(WORKSPACE)/build_env/image-auto-bits.mk
+ -include vendor/lineage/config/partner_gms.mk
++
++# firefox option: Firefox (Fennec F-Droid) as the browser, replacing Jelly. Guarded on the fetched
++# APK so a build without the option (no APK) is unaffected; require.sh fails the build if the
++# option is on and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/firefox/Firefox.apk),)
++PRODUCT_PACKAGES += Firefox
++# Native libraries the fetcher unpacked beside the APK, one module each (prebuilts/firefox/jni).
++PRODUCT_PACKAGES += $(patsubst %.so,Firefox_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/firefox/lib/arm64-v8a/*.so)))
++endif
+diff --git a/prebuilts/firefox/.gitignore b/prebuilts/firefox/.gitignore
+new file mode 100644
+index 0000000..46b3739
+--- /dev/null
++++ b/prebuilts/firefox/.gitignore
+@@ -0,0 +1,8 @@
++# Everything here but jni/ is written by the firefox option (forge/prebuilt/fetch-firefox.sh):
++# the APK, the native libraries it unpacks beside it when the APK packs them compressed, and the
++# Soong module file, which it writes per fetch because skip_preprocessed_apk_checks must match
++# the APK.
++*.apk
++*.apk.download
++/lib/
++/Android.bp
+diff --git a/prebuilts/firefox/jni/Android.mk b/prebuilts/firefox/jni/Android.mk
+new file mode 100644
+index 0000000..798ed99
+--- /dev/null
++++ b/prebuilts/firefox/jni/Android.mk
+@@ -0,0 +1,27 @@
++# Firefox native libraries. The APK is installed byte for byte (see ../Android.bp, written by the
++# fetcher) and PackageManager does not extract native libraries for a bundled app, so when
++# fetch-firefox.sh finds them compressed or unaligned in the APK it unpacks lib/arm64-v8a/ beside it,
++# and these install as app/Firefox/lib/arm64/. One Make module per library: the build refuses ELF
++# files in PRODUCT_COPY_FILES, and no Soong prebuilt type installs under app/. common.mk adds the
++# modules to PRODUCT_PACKAGES from the same wildcard. Nothing is defined when nothing was unpacked.
++LOCAL_PATH := $(call my-dir)/..
++
++FIREFOX_JNI_LIBS := $(notdir $(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++
++define firefox-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := Firefox_jni_$(1:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(1:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := lib/arm64-v8a/$(1)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/app/Firefox/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach lib,$(FIREFOX_JNI_LIBS),$(eval $(call firefox-jni-module,$(lib))))
+-- 
+2.53.0
+

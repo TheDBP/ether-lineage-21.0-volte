@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 17:35:04 -0400
+Subject: [PATCH] SystemUI: a torch failure should grey the tile out, not kill
+ the shell
+
+FlashlightControllerImpl catches CameraAccessException around
+CameraManager.setTorchMode() and nothing else. But setTorchMode() converts a service-side
+refusal into an unchecked IllegalArgumentException, and the call runs on a background
+executor, so any such refusal is a fatal uncaught exception on that thread:
+
+    FATAL EXCEPTION: SysUiBg
+    java.lang.IllegalArgumentException: setTorchMode:2394: Camera "0" has no flashlight
+        at FlashlightControllerImpl$$ExternalSyntheticLambda0.run
+
+Tapping the tile then restarts SystemUI. Reached here on a device whose camera HAL reports a
+flash unit in its static metadata -- dumpsys media.camera says "Has a flash unit: true" -- but
+whose HAL returns an error when actually asked to light it; cameraserver maps that to -ENOSYS
+and prints the misleading "has no flashlight".
+
+Catch RuntimeException as well and report it the same way as an access error. A HAL that
+declines to light the torch is a device-support problem, and the tile already has a path for
+that: dispatchError() greys it out.
+---
+ .../statusbar/policy/FlashlightControllerImpl.java        | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightControllerImpl.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightControllerImpl.java
+index 5dcafb37f57e..c00658d27ddd 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightControllerImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/FlashlightControllerImpl.java
+@@ -135,6 +135,14 @@ public class FlashlightControllerImpl implements FlashlightController {
+                     } catch (CameraAccessException e) {
+                         Log.e(TAG, "Couldn't set torch mode", e);
+                         dispatchError();
++                    } catch (RuntimeException e) {
++                        // setTorchMode() turns a service-side refusal into an unchecked
++                        // IllegalArgumentException, and this runs on a background executor, so
++                        // anything not caught here takes SystemUI down with it. A HAL that
++                        // declines to light the torch is a device-support problem; it should
++                        // grey the tile out, not restart the shell.
++                        Log.e(TAG, "Couldn't set torch mode", e);
++                        dispatchError();
+                     }
+                 }
+             }

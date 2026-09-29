@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 14:41:19 -0400
+Subject: [PATCH] connectbot: bundle ConnectBot as an SSH client
+
+vendor/lineage/prebuilts/connectbot module, installed unmodified, plus a guarded PRODUCT_PACKAGES
+line in config/common.mk. The APK is fetched by the connectbot option's fetch.sh (the current
+F-Droid build, signer-pinned); the module is a no-op without it.
+
+Lineage already ships the OpenSSH binaries, so this is not about reaching a host at all -- it is
+saved hosts, key generation and an agent, and port forwarding, without a terminal in the way.
+---
+ config/common.mk                    |  9 +++++++++
+ prebuilts/connectbot/.gitignore     |  8 ++++++++
+ prebuilts/connectbot/jni/Android.mk | 26 ++++++++++++++++++++++++++
+ 3 files changed, 43 insertions(+)
+ create mode 100644 prebuilts/connectbot/.gitignore
+ create mode 100644 prebuilts/connectbot/jni/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 64b433bd..a87b380b 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -175,6 +175,15 @@ PRODUCT_PACKAGES += \
+     setcap \
+     vim
+ 
++# connectbot option: ConnectBot, an SSH client: saved hosts, keys and port forwarding.
++# Guarded on the fetched APK so a build without the option (no APK) is unaffected; require.sh
++# fails the build if the option is on and the APK is missing.# Native libraries the fetcher unpacked beside the APK, if any, install as one module each
++# (prebuilts/connectbot/jni).
++ifneq ($(wildcard vendor/lineage/prebuilts/connectbot/ConnectBot.apk),)
++PRODUCT_PACKAGES += ConnectBot
++PRODUCT_PACKAGES += $(patsubst %.so,ConnectBot_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/connectbot/lib/arm64-v8a/*.so)))
++endif
++
+ PRODUCT_PACKAGES += \
+     nano_recovery
+ 
+diff --git a/prebuilts/connectbot/.gitignore b/prebuilts/connectbot/.gitignore
+new file mode 100644
+index 00000000..9c7f01f4
+--- /dev/null
++++ b/prebuilts/connectbot/.gitignore
+@@ -0,0 +1,8 @@
++# Everything here but jni/ is written by the connectbot option (forge/prebuilt/fetch-connectbot.sh):
++# the APK, the native libraries it unpacks beside it should a release ever pack them compressed,
++# and the Soong module file, which it writes per fetch because skip_preprocessed_apk_checks must
++# match the APK.
++*.apk
++*.apk.download
++/lib/
++/Android.bp
+diff --git a/prebuilts/connectbot/jni/Android.mk b/prebuilts/connectbot/jni/Android.mk
+new file mode 100644
+index 00000000..71f7d8ae
+--- /dev/null
++++ b/prebuilts/connectbot/jni/Android.mk
+@@ -0,0 +1,26 @@
++# ConnectBot native libraries. The APK is installed byte for byte (see ../Android.bp, written by the
++# fetcher) and PackageManager does not extract native libraries for a bundled app, so if
++# fetch-connectbot.sh ever finds them compressed or unaligned it unpacks lib/arm64-v8a/ beside it and
++# these install as app/ConnectBot/lib/arm64/. ConnectBot stores them aligned today, so nothing here is
++# defined; it costs nothing and catches the release that changes that.
++LOCAL_PATH := $(call my-dir)/..
++
++CONNECTBOT_JNI_LIBS := $(notdir $(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++
++define connectbot-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := ConnectBot_jni_$(1:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(1:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := lib/arm64-v8a/$(1)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/app/ConnectBot/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach lib,$(CONNECTBOT_JNI_LIBS),$(eval $(call connectbot-jni-module,$(lib))))
+-- 
+2.53.0
+

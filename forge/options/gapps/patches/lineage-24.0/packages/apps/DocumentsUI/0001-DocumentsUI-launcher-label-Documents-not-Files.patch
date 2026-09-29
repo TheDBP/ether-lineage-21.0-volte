@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 13:53:07 -0400
+Subject: [PATCH] DocumentsUI: launcher label Documents, not Files
+
+With Google Files installed two launcher entries read "Files". The launcher entry
+is renamed rather than the package removed or hidden: DocumentsUI is the Storage
+Access Framework provider behind every file picker, and its launcher entry is an
+activity-alias no overlay can disable. A vendor RRO on launcher_label is refused
+(STATE_NO_IDMAP): the string is not in DocumentsUI's <overlayable> list. Reusing
+chip_title_documents keeps the label translated.
+---
+ res/values/strings.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/values/strings.xml b/res/values/strings.xml
+index b02d7d050..f1c4c5439 100644
+--- a/res/values/strings.xml
++++ b/res/values/strings.xml
+@@ -49,7 +49,7 @@
+     <string name="summary_consent_remind_later_button">Not now</string>
+ 
+     <!-- Title of the documents application [CHAR LIMIT=32] -->
+-    <string name="launcher_label">@string/files_label</string>
++    <string name="launcher_label">@string/chip_title_documents</string>
+ 
+     <!-- Action bar title prompting user to choose a location to open a document from [CHAR LIMIT=32] -->
+     <string name="title_open">Open from</string>
+-- 
+2.53.0
+

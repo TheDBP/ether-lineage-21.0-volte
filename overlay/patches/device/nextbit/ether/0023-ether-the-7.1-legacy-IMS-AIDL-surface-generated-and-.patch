@@ -1,0 +1,1081 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 17:22:52 -0400
+Subject: [PATCH] ether: the 7.1 legacy IMS AIDL surface, generated and
+ verified on the wire
+
+ims.apk implements com.android.ims.internal.IImsService, the pre-P IMS binding Android 9 deleted.
+frameworks/opt/telephony still carries the compat path (ImsServiceControllerCompat,
+MmTelFeatureCompatAdapter) behind android.telephony.ims.compat.ImsService, so the gap is one
+translation layer, not a rewrite. This is the interface surface that layer talks through; the bridge
+itself is the next patch.
+
+The interfaces live in org.codeaurora.ims.legacy, matching the rename already applied to the rebuilt
+apk. Method ORDER is load-bearing: AIDL numbers transactions by declaration order, and the far end is
+stock's compiled 2016 code that cannot be recompiled to agree with us. Hand-transcribing 148
+transactions is exactly where a silent, hardware-only failure comes from, so gen-legacy-aidl.py reads
+method order from each $Stub's TRANSACTION_ constants and signatures from the interface's descriptors.
+
+All fourteen interfaces: IImsCallSession (28 transactions), IImsCallSessionListener (30), IImsUt (18),
+IImsVideoCallProvider (11), IImsRegistrationListener (11), IImsConfig (9), IImsUtListener (7),
+IImsVideoCallCallback (7), ImsConfigListener (4), IImsService (16), and four two-method ones.
+
+verify-legacy-aidl.sh checks the BUILT apk -- not the .aidl source -- against the stock binary: all 14
+match on every transaction code and descriptor, and IImsService numbers open=1 through
+getMultiEndpointInterface=16 as 7.1 does. The verifier is negative-tested; corrupting one code fails
+it.
+
+Seven parcelables come with it. Their wire order is not their declaration order --
+ImsCallForwardInfo writes condition, status, toA, number, timeSeconds, serviceClass -- and
+ImsConferenceState marshals a map as size then String/Bundle pairs.
+
+aidl/android/view/Surface.aidl declares a framework parcelable that has no .aidl of its own; the
+platform resolves it through framework.aidl, which a device module does not get.
+---
+ ims-bridge/Android.bp                         | 38 ++++++++++++
+ ims-bridge/AndroidManifest.xml                | 40 +++++++++++++
+ ims-bridge/aidl/android/view/Surface.aidl     |  9 +++
+ .../ims/legacy/ImsCallForwardInfo.aidl        |  3 +
+ .../codeaurora/ims/legacy/ImsCallProfile.aidl |  3 +
+ .../ims/legacy/ImsConferenceState.aidl        |  3 +
+ .../ims/legacy/ImsConfigListener.aidl         | 16 +++++
+ .../codeaurora/ims/legacy/ImsReasonInfo.aidl  |  3 +
+ .../org/codeaurora/ims/legacy/ImsSsInfo.aidl  |  3 +
+ .../ims/legacy/ImsStreamMediaProfile.aidl     |  3 +
+ .../legacy/ImsSuppServiceNotification.aidl    |  3 +
+ .../ims/legacy/internal/IImsCallSession.aidl  | 45 ++++++++++++++
+ .../internal/IImsCallSessionListener.aidl     | 48 +++++++++++++++
+ .../ims/legacy/internal/IImsConfig.aidl       | 22 +++++++
+ .../ims/legacy/internal/IImsEcbm.aidl         | 15 +++++
+ .../ims/legacy/internal/IImsEcbmListener.aidl | 14 +++++
+ .../IImsExternalCallStateListener.aidl        | 14 +++++
+ .../legacy/internal/IImsMultiEndpoint.aidl    | 15 +++++
+ .../internal/IImsRegistrationListener.aidl    | 25 ++++++++
+ .../ims/legacy/internal/IImsService.aidl      | 38 ++++++++++++
+ .../ims/legacy/internal/IImsUt.aidl           | 32 ++++++++++
+ .../ims/legacy/internal/IImsUtListener.aidl   | 24 ++++++++
+ .../internal/IImsVideoCallCallback.aidl       | 20 +++++++
+ .../internal/IImsVideoCallProvider.aidl       | 27 +++++++++
+ .../ims/legacy/ImsCallForwardInfo.java        | 49 +++++++++++++++
+ .../codeaurora/ims/legacy/ImsCallProfile.java | 59 +++++++++++++++++++
+ .../ims/legacy/ImsConferenceState.java        | 49 +++++++++++++++
+ .../codeaurora/ims/legacy/ImsReasonInfo.java  | 49 +++++++++++++++
+ .../org/codeaurora/ims/legacy/ImsSsInfo.java  | 33 +++++++++++
+ .../ims/legacy/ImsStreamMediaProfile.java     | 41 +++++++++++++
+ .../legacy/ImsSuppServiceNotification.java    | 54 +++++++++++++++++
+ 31 files changed, 797 insertions(+)
+ create mode 100644 ims-bridge/Android.bp
+ create mode 100644 ims-bridge/AndroidManifest.xml
+ create mode 100644 ims-bridge/aidl/android/view/Surface.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallForwardInfo.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallProfile.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConferenceState.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConfigListener.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsReasonInfo.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSsInfo.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsStreamMediaProfile.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSuppServiceNotification.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSession.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSessionListener.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsConfig.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbm.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbmListener.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsExternalCallStateListener.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsMultiEndpoint.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsRegistrationListener.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsService.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUt.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUtListener.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallCallback.aidl
+ create mode 100644 ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallProvider.aidl
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsCallForwardInfo.java
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsCallProfile.java
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsConferenceState.java
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsReasonInfo.java
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsSsInfo.java
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsStreamMediaProfile.java
+ create mode 100644 ims-bridge/src/org/codeaurora/ims/legacy/ImsSuppServiceNotification.java
+
+diff --git a/ims-bridge/Android.bp b/ims-bridge/Android.bp
+new file mode 100644
+index 0000000..2946254
+--- /dev/null
++++ b/ims-bridge/Android.bp
+@@ -0,0 +1,38 @@
++//
++// ImsBridge -- lets the modern telephony stack talk to ether's 7.1 ims.apk.
++//
++// platform_apis because everything it touches is @hide: android.telephony.ims.compat.*,
++// com.android.ims.internal.*, android.os.ServiceManager.
++//
++// certificate "platform" because it shares android.uid.phone with ims.apk.
++//
++package {
++    default_applicable_licenses: ["Android-Apache-2.0"],
++}
++
++android_app {
++    name: "ImsBridge",
++
++    srcs: [
++        "src/**/*.java",
++        "aidl/**/*.aidl",
++    ],
++
++    aidl: {
++        local_include_dirs: ["aidl"],
++        // The 7.1 interfaces take framework parcelables -- Surface, VideoProfile and its nested
++        // CameraCapabilities -- whose .aidl declarations live in the platform, not with us.
++        include_dirs: [
++            "frameworks/base/core/java",
++            "frameworks/base/telecomm/java",
++        ],
++    },
++
++    platform_apis: true,
++    certificate: "platform",
++    privileged: true,
++
++    optimize: {
++        enabled: false,
++    },
++}
+diff --git a/ims-bridge/AndroidManifest.xml b/ims-bridge/AndroidManifest.xml
+new file mode 100644
+index 0000000..ba13a60
+--- /dev/null
++++ b/ims-bridge/AndroidManifest.xml
+@@ -0,0 +1,40 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="org.lineageos.ims.bridge"
++    android:sharedUserId="android.uid.phone">
++
++    <!--
++      READ_PRIVILEGED_PHONE_STATE and MODIFY_PHONE_STATE are deliberately NOT declared. Both are
++      signature|privileged, and a priv-app that requests one without a matching entry in a
++      privapp-permissions allowlist makes PackageManagerService throw at systemReady  -  which kills
++      system_server before boot completes, on every boot, with the apk itself as the only clue.
++
++      They are also unnecessary: this shares android.uid.phone, so it already runs with the phone
++      process's granted permissions, and the bridge makes no permission-guarded calls of its own.
++      If a future wrapper genuinely needs one, add it here AND to a privapp-permissions allowlist
++      in the device tree, together.
++    -->
++    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
++
++    <application
++        android:label="IMS Bridge"
++        android:directBootAware="true"
++        android:persistent="true">
++
++        <!--
++          ImsResolver looks for this action, requires the service to be protected by
++          BIND_IMS_SERVICE, and reads the MMTEL_FEATURE metadata to learn what the service offers.
++          Miss any of the three and it is skipped without a useful log line.
++        -->
++        <service
++            android:name=".ImsBridgeService"
++            android:directBootAware="true"
++            android:exported="true"
++            android:permission="android.permission.BIND_IMS_SERVICE">
++            <intent-filter>
++                <action android:name="android.telephony.ims.compat.ImsService" />
++            </intent-filter>
++            <meta-data android:name="android.telephony.ims.MMTEL_FEATURE" android:value="true" />
++        </service>
++    </application>
++</manifest>
+diff --git a/ims-bridge/aidl/android/view/Surface.aidl b/ims-bridge/aidl/android/view/Surface.aidl
+new file mode 100644
+index 0000000..e456650
+--- /dev/null
++++ b/ims-bridge/aidl/android/view/Surface.aidl
+@@ -0,0 +1,9 @@
++package android.view;
++
++/*
++ * android.view.Surface is a framework parcelable with no .aidl of its own -- the platform resolves
++ * it through framework.aidl's preprocessed parcelable list, which a device module does not get.
++ * Declaring it here only tells aidl "this is a parcelable"; the real class still comes from the
++ * framework at runtime.
++ */
++parcelable Surface;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallForwardInfo.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallForwardInfo.aidl
+new file mode 100644
+index 0000000..fefe97e
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallForwardInfo.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsCallForwardInfo;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallProfile.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallProfile.aidl
+new file mode 100644
+index 0000000..3edb805
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsCallProfile.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsCallProfile;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConferenceState.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConferenceState.aidl
+new file mode 100644
+index 0000000..b499129
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConferenceState.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsConferenceState;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConfigListener.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConfigListener.aidl
+new file mode 100644
+index 0000000..73becca
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsConfigListener.aidl
+@@ -0,0 +1,16 @@
++package org.codeaurora.ims.legacy;
++
++
++/**
++ * The 7.1 com.android.ims.internal.ImsConfigListener, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface ImsConfigListener {
++    void onGetFeatureResponse(int arg0, int arg1, int arg2, int arg3);
++    void onSetFeatureResponse(int arg0, int arg1, int arg2, int arg3);
++    void onGetVideoQuality(int arg0, int arg1);
++    void onSetVideoQuality(int arg0);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsReasonInfo.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsReasonInfo.aidl
+new file mode 100644
+index 0000000..78195ad
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsReasonInfo.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsReasonInfo;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSsInfo.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSsInfo.aidl
+new file mode 100644
+index 0000000..1ca05a8
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSsInfo.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsSsInfo;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsStreamMediaProfile.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsStreamMediaProfile.aidl
+new file mode 100644
+index 0000000..712a90e
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsStreamMediaProfile.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsStreamMediaProfile;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSuppServiceNotification.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSuppServiceNotification.aidl
+new file mode 100644
+index 0000000..ca6f92a
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/ImsSuppServiceNotification.aidl
+@@ -0,0 +1,3 @@
++package org.codeaurora.ims.legacy;
++
++parcelable ImsSuppServiceNotification;
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSession.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSession.aidl
+new file mode 100644
+index 0000000..e2ca448
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSession.aidl
+@@ -0,0 +1,45 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.os.Message;
++import org.codeaurora.ims.legacy.ImsCallProfile;
++import org.codeaurora.ims.legacy.ImsStreamMediaProfile;
++import org.codeaurora.ims.legacy.internal.IImsCallSessionListener;
++import org.codeaurora.ims.legacy.internal.IImsVideoCallProvider;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsCallSession, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsCallSession {
++    void close();
++    String getCallId();
++    ImsCallProfile getCallProfile();
++    ImsCallProfile getLocalCallProfile();
++    ImsCallProfile getRemoteCallProfile();
++    String getProperty(String arg0);
++    int getState();
++    boolean isInCall();
++    void setListener(IImsCallSessionListener arg0);
++    void setMute(boolean arg0);
++    void start(String arg0, in ImsCallProfile arg1);
++    void startConference(in String[] arg0, in ImsCallProfile arg1);
++    void accept(int arg0, in ImsStreamMediaProfile arg1);
++    void reject(int arg0);
++    void terminate(int arg0);
++    void hold(in ImsStreamMediaProfile arg0);
++    void resume(in ImsStreamMediaProfile arg0);
++    void merge();
++    void update(int arg0, in ImsStreamMediaProfile arg1);
++    void extendToConference(in String[] arg0);
++    void inviteParticipants(in String[] arg0);
++    void removeParticipants(in String[] arg0);
++    void sendDtmf(char arg0, in Message arg1);
++    void startDtmf(char arg0);
++    void stopDtmf();
++    void sendUssd(String arg0);
++    IImsVideoCallProvider getVideoCallProvider();
++    boolean isMultiparty();
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSessionListener.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSessionListener.aidl
+new file mode 100644
+index 0000000..939a719
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsCallSessionListener.aidl
+@@ -0,0 +1,48 @@
++package org.codeaurora.ims.legacy.internal;
++
++import org.codeaurora.ims.legacy.ImsCallProfile;
++import org.codeaurora.ims.legacy.ImsConferenceState;
++import org.codeaurora.ims.legacy.ImsReasonInfo;
++import org.codeaurora.ims.legacy.ImsStreamMediaProfile;
++import org.codeaurora.ims.legacy.ImsSuppServiceNotification;
++import org.codeaurora.ims.legacy.internal.IImsCallSession;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsCallSessionListener, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsCallSessionListener {
++    void callSessionProgressing(IImsCallSession arg0, in ImsStreamMediaProfile arg1);
++    void callSessionStarted(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionStartFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionTerminated(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionHeld(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionHoldFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionHoldReceived(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionResumed(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionResumeFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionResumeReceived(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionMergeStarted(IImsCallSession arg0, IImsCallSession arg1, in ImsCallProfile arg2);
++    void callSessionMergeComplete(IImsCallSession arg0);
++    void callSessionMergeFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionUpdated(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionUpdateFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionUpdateReceived(IImsCallSession arg0, in ImsCallProfile arg1);
++    void callSessionConferenceExtended(IImsCallSession arg0, IImsCallSession arg1, in ImsCallProfile arg2);
++    void callSessionConferenceExtendFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionConferenceExtendReceived(IImsCallSession arg0, IImsCallSession arg1, in ImsCallProfile arg2);
++    void callSessionInviteParticipantsRequestDelivered(IImsCallSession arg0);
++    void callSessionInviteParticipantsRequestFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionRemoveParticipantsRequestDelivered(IImsCallSession arg0);
++    void callSessionRemoveParticipantsRequestFailed(IImsCallSession arg0, in ImsReasonInfo arg1);
++    void callSessionConferenceStateUpdated(IImsCallSession arg0, in ImsConferenceState arg1);
++    void callSessionUssdMessageReceived(IImsCallSession arg0, int arg1, String arg2);
++    void callSessionHandover(IImsCallSession arg0, int arg1, int arg2, in ImsReasonInfo arg3);
++    void callSessionHandoverFailed(IImsCallSession arg0, int arg1, int arg2, in ImsReasonInfo arg3);
++    void callSessionTtyModeReceived(IImsCallSession arg0, int arg1);
++    void callSessionMultipartyStateChanged(IImsCallSession arg0, boolean arg1);
++    void callSessionSuppServiceReceived(IImsCallSession arg0, in ImsSuppServiceNotification arg1);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsConfig.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsConfig.aidl
+new file mode 100644
+index 0000000..0a15722
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsConfig.aidl
+@@ -0,0 +1,22 @@
++package org.codeaurora.ims.legacy.internal;
++
++import org.codeaurora.ims.legacy.ImsConfigListener;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsConfig, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsConfig {
++    int getProvisionedValue(int arg0);
++    String getProvisionedStringValue(int arg0);
++    int setProvisionedValue(int arg0, int arg1);
++    int setProvisionedStringValue(int arg0, String arg1);
++    void getFeatureValue(int arg0, int arg1, ImsConfigListener arg2);
++    void setFeatureValue(int arg0, int arg1, int arg2, ImsConfigListener arg3);
++    boolean getVolteProvisioned();
++    void getVideoQuality(ImsConfigListener arg0);
++    void setVideoQuality(int arg0, ImsConfigListener arg1);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbm.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbm.aidl
+new file mode 100644
+index 0000000..73bc54a
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbm.aidl
+@@ -0,0 +1,15 @@
++package org.codeaurora.ims.legacy.internal;
++
++import org.codeaurora.ims.legacy.internal.IImsEcbmListener;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsEcbm, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsEcbm {
++    void setListener(IImsEcbmListener arg0);
++    void exitEmergencyCallbackMode();
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbmListener.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbmListener.aidl
+new file mode 100644
+index 0000000..f8135a1
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsEcbmListener.aidl
+@@ -0,0 +1,14 @@
++package org.codeaurora.ims.legacy.internal;
++
++
++/**
++ * The 7.1 com.android.ims.internal.IImsEcbmListener, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsEcbmListener {
++    void enteredECBM();
++    void exitedECBM();
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsExternalCallStateListener.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsExternalCallStateListener.aidl
+new file mode 100644
+index 0000000..fbb8ff2
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsExternalCallStateListener.aidl
+@@ -0,0 +1,14 @@
++package org.codeaurora.ims.legacy.internal;
++
++import java.util.List;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsExternalCallStateListener, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsExternalCallStateListener {
++    void onImsExternalCallStateUpdate(in List arg0);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsMultiEndpoint.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsMultiEndpoint.aidl
+new file mode 100644
+index 0000000..6e5b5f4
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsMultiEndpoint.aidl
+@@ -0,0 +1,15 @@
++package org.codeaurora.ims.legacy.internal;
++
++import org.codeaurora.ims.legacy.internal.IImsExternalCallStateListener;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsMultiEndpoint, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsMultiEndpoint {
++    void setListener(IImsExternalCallStateListener arg0);
++    void requestImsExternalCallStateInfo();
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsRegistrationListener.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsRegistrationListener.aidl
+new file mode 100644
+index 0000000..85d7525
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsRegistrationListener.aidl
+@@ -0,0 +1,25 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.net.Uri;
++import org.codeaurora.ims.legacy.ImsReasonInfo;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsRegistrationListener, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsRegistrationListener {
++    void registrationConnected();
++    void registrationProgressing();
++    void registrationConnectedWithRadioTech(int arg0);
++    void registrationProgressingWithRadioTech(int arg0);
++    void registrationDisconnected(in ImsReasonInfo arg0);
++    void registrationResumed();
++    void registrationSuspended();
++    void registrationServiceCapabilityChanged(int arg0, int arg1);
++    void registrationFeatureCapabilityChanged(int arg0, in int[] arg1, in int[] arg2);
++    void voiceMessageCountUpdate(int arg0);
++    void registrationAssociatedUriChanged(in Uri[] arg0);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsService.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsService.aidl
+new file mode 100644
+index 0000000..38d6949
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsService.aidl
+@@ -0,0 +1,38 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.app.PendingIntent;
++import android.os.Message;
++import org.codeaurora.ims.legacy.ImsCallProfile;
++import org.codeaurora.ims.legacy.internal.IImsCallSession;
++import org.codeaurora.ims.legacy.internal.IImsCallSessionListener;
++import org.codeaurora.ims.legacy.internal.IImsConfig;
++import org.codeaurora.ims.legacy.internal.IImsEcbm;
++import org.codeaurora.ims.legacy.internal.IImsMultiEndpoint;
++import org.codeaurora.ims.legacy.internal.IImsRegistrationListener;
++import org.codeaurora.ims.legacy.internal.IImsUt;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsService, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsService {
++    int open(int arg0, int arg1, in PendingIntent arg2, IImsRegistrationListener arg3);
++    void close(int arg0);
++    boolean isConnected(int arg0, int arg1, int arg2);
++    boolean isOpened(int arg0);
++    void setRegistrationListener(int arg0, IImsRegistrationListener arg1);
++    void addRegistrationListener(int arg0, int arg1, IImsRegistrationListener arg2);
++    ImsCallProfile createCallProfile(int arg0, int arg1, int arg2);
++    IImsCallSession createCallSession(int arg0, in ImsCallProfile arg1, in IImsCallSessionListener arg2);
++    IImsCallSession getPendingCallSession(int arg0, String arg1);
++    IImsUt getUtInterface(int arg0);
++    IImsConfig getConfigInterface(int arg0);
++    void turnOnIms(int arg0);
++    void turnOffIms(int arg0);
++    IImsEcbm getEcbmInterface(int arg0);
++    void setUiTTYMode(int arg0, int arg1, in Message arg2);
++    IImsMultiEndpoint getMultiEndpointInterface(int arg0);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUt.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUt.aidl
+new file mode 100644
+index 0000000..829fd88
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUt.aidl
+@@ -0,0 +1,32 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.os.Bundle;
++import org.codeaurora.ims.legacy.internal.IImsUtListener;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsUt, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsUt {
++    void close();
++    int queryCallBarring(int arg0);
++    int queryCallForward(int arg0, String arg1);
++    int queryCallWaiting();
++    int queryCLIR();
++    int queryCLIP();
++    int queryCOLR();
++    int queryCOLP();
++    int transact(in Bundle arg0);
++    int updateCallBarring(int arg0, int arg1, in String[] arg2);
++    int updateCallForward(int arg0, int arg1, String arg2, int arg3, int arg4);
++    int updateCallWaiting(boolean arg0, int arg1);
++    int updateCLIR(int arg0);
++    int updateCLIP(boolean arg0);
++    int updateCOLR(int arg0);
++    int updateCOLP(boolean arg0);
++    void setListener(IImsUtListener arg0);
++    int queryCFForServiceClass(int arg0, String arg1, int arg2);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUtListener.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUtListener.aidl
+new file mode 100644
+index 0000000..9db7e0f
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsUtListener.aidl
+@@ -0,0 +1,24 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.os.Bundle;
++import org.codeaurora.ims.legacy.ImsCallForwardInfo;
++import org.codeaurora.ims.legacy.ImsReasonInfo;
++import org.codeaurora.ims.legacy.ImsSsInfo;
++import org.codeaurora.ims.legacy.internal.IImsUt;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsUtListener, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsUtListener {
++    void utConfigurationUpdated(IImsUt arg0, int arg1);
++    void utConfigurationUpdateFailed(IImsUt arg0, int arg1, in ImsReasonInfo arg2);
++    void utConfigurationQueried(IImsUt arg0, int arg1, in Bundle arg2);
++    void utConfigurationQueryFailed(IImsUt arg0, int arg1, in ImsReasonInfo arg2);
++    void utConfigurationCallBarringQueried(IImsUt arg0, int arg1, in ImsSsInfo[] arg2);
++    void utConfigurationCallForwardQueried(IImsUt arg0, int arg1, in ImsCallForwardInfo[] arg2);
++    void utConfigurationCallWaitingQueried(IImsUt arg0, int arg1, in ImsSsInfo[] arg2);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallCallback.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallCallback.aidl
+new file mode 100644
+index 0000000..1d4bbaa
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallCallback.aidl
+@@ -0,0 +1,20 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.telecom.VideoProfile;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsVideoCallCallback, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsVideoCallCallback {
++    void receiveSessionModifyRequest(in VideoProfile arg0);
++    void receiveSessionModifyResponse(int arg0, in VideoProfile arg1, in VideoProfile arg2);
++    void handleCallSessionEvent(int arg0);
++    void changePeerDimensions(int arg0, int arg1);
++    void changeCallDataUsage(long arg0);
++    void changeCameraCapabilities(in VideoProfile.CameraCapabilities arg0);
++    void changeVideoQuality(int arg0);
++}
+diff --git a/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallProvider.aidl b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallProvider.aidl
+new file mode 100644
+index 0000000..e59658f
+--- /dev/null
++++ b/ims-bridge/aidl/org/codeaurora/ims/legacy/internal/IImsVideoCallProvider.aidl
+@@ -0,0 +1,27 @@
++package org.codeaurora.ims.legacy.internal;
++
++import android.net.Uri;
++import android.telecom.VideoProfile;
++import android.view.Surface;
++import org.codeaurora.ims.legacy.internal.IImsVideoCallCallback;
++
++/**
++ * The 7.1 com.android.ims.internal.IImsVideoCallProvider, renamed.
++ *
++ * GENERATED by gen-legacy-aidl.py from the stock 7.1 binary -- do not hand-edit.
++ * Method order is transcribed from that binary's TRANSACTION_ constants and sets the
++ * transaction codes; the far end cannot be recompiled to agree with a different order.
++ */
++interface IImsVideoCallProvider {
++    void setCallback(IImsVideoCallCallback arg0);
++    void setCamera(String arg0);
++    void setPreviewSurface(in Surface arg0);
++    void setDisplaySurface(in Surface arg0);
++    void setDeviceOrientation(int arg0);
++    void setZoom(float arg0);
++    void sendSessionModifyRequest(in VideoProfile arg0, in VideoProfile arg1);
++    void sendSessionModifyResponse(in VideoProfile arg0);
++    void requestCameraCapabilities();
++    void requestCallDataUsage();
++    void setPauseImage(in Uri arg0);
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsCallForwardInfo.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsCallForwardInfo.java
+new file mode 100644
+index 0000000..7ce256d
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsCallForwardInfo.java
+@@ -0,0 +1,49 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Parcel;
++import android.os.Parcelable;
++
++/**
++ * The 7.1 com.android.ims.ImsCallForwardInfo, renamed.
++ *
++ * Wire order is NOT declaration order: condition, status, toA, number, timeSeconds, serviceClass.
++ */
++public class ImsCallForwardInfo implements Parcelable {
++    public int mCondition;
++    public int mStatus;
++    public int mToA;
++    public String mNumber;
++    public int mTimeSeconds;
++    public int mServiceClass;
++
++    public ImsCallForwardInfo() { }
++
++    private ImsCallForwardInfo(Parcel in) {
++        mCondition = in.readInt();
++        mStatus = in.readInt();
++        mToA = in.readInt();
++        mNumber = in.readString();
++        mTimeSeconds = in.readInt();
++        mServiceClass = in.readInt();
++    }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(mCondition);
++        out.writeInt(mStatus);
++        out.writeInt(mToA);
++        out.writeString(mNumber);
++        out.writeInt(mTimeSeconds);
++        out.writeInt(mServiceClass);
++    }
++
++    public static final Creator<ImsCallForwardInfo> CREATOR = new Creator<ImsCallForwardInfo>() {
++        @Override
++        public ImsCallForwardInfo createFromParcel(Parcel in) { return new ImsCallForwardInfo(in); }
++        @Override
++        public ImsCallForwardInfo[] newArray(int size) { return new ImsCallForwardInfo[size]; }
++    };
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsCallProfile.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsCallProfile.java
+new file mode 100644
+index 0000000..8e0a57b
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsCallProfile.java
+@@ -0,0 +1,59 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Bundle;
++import android.os.Parcel;
++import android.os.Parcelable;
++
++/**
++ * The 7.1 com.android.ims.ImsCallProfile, renamed.
++ *
++ * mRestrictCause is an instance field on 7.1 but is NOT written to the parcel there, so it is not
++ * written here either. Adding it would desynchronise every subsequent read.
++ */
++public class ImsCallProfile implements Parcelable {
++    public int mServiceType;
++    public int mCallType;
++    public int mRestrictCause;
++    public Bundle mCallExtras;
++    public ImsStreamMediaProfile mMediaProfile;
++
++    public ImsCallProfile() {
++        mCallExtras = new Bundle();
++        mMediaProfile = new ImsStreamMediaProfile();
++    }
++
++    public ImsCallProfile(int serviceType, int callType) {
++        mServiceType = serviceType;
++        mCallType = callType;
++        mCallExtras = new Bundle();
++        mMediaProfile = new ImsStreamMediaProfile();
++    }
++
++    private ImsCallProfile(Parcel in) { readFromParcel(in); }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(mServiceType);
++        out.writeInt(mCallType);
++        out.writeParcelable(mCallExtras, 0);
++        out.writeParcelable(mMediaProfile, 0);
++    }
++
++    private void readFromParcel(Parcel in) {
++        mServiceType = in.readInt();
++        mCallType = in.readInt();
++        mCallExtras = in.readParcelable(Bundle.class.getClassLoader(), Bundle.class);
++        mMediaProfile = in.readParcelable(
++                ImsStreamMediaProfile.class.getClassLoader(), ImsStreamMediaProfile.class);
++    }
++
++    public static final Creator<ImsCallProfile> CREATOR = new Creator<ImsCallProfile>() {
++        @Override
++        public ImsCallProfile createFromParcel(Parcel in) { return new ImsCallProfile(in); }
++        @Override
++        public ImsCallProfile[] newArray(int size) { return new ImsCallProfile[size]; }
++    };
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsConferenceState.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsConferenceState.java
+new file mode 100644
+index 0000000..c84b621
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsConferenceState.java
+@@ -0,0 +1,49 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Bundle;
++import android.os.Parcel;
++import android.os.Parcelable;
++
++import java.util.HashMap;
++import java.util.Map;
++
++/**
++ * The 7.1 com.android.ims.ImsConferenceState, renamed.
++ *
++ * One field, but not a flat one: the map is written as a size followed by key/value pairs, each a
++ * String and a Parcelable Bundle. Anything else on the wire desynchronises the read.
++ */
++public class ImsConferenceState implements Parcelable {
++    public HashMap<String, Bundle> mParticipants = new HashMap<String, Bundle>();
++
++    public ImsConferenceState() { }
++
++    private ImsConferenceState(Parcel in) {
++        int size = in.readInt();
++        mParticipants = new HashMap<String, Bundle>();
++        for (int i = 0; i < size; i++) {
++            String key = in.readString();
++            Bundle value = in.readParcelable(Bundle.class.getClassLoader(), Bundle.class);
++            mParticipants.put(key, value);
++        }
++    }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(mParticipants.size());
++        for (Map.Entry<String, Bundle> e : mParticipants.entrySet()) {
++            out.writeString(e.getKey());
++            out.writeParcelable(e.getValue(), 0);
++        }
++    }
++
++    public static final Creator<ImsConferenceState> CREATOR = new Creator<ImsConferenceState>() {
++        @Override
++        public ImsConferenceState createFromParcel(Parcel in) { return new ImsConferenceState(in); }
++        @Override
++        public ImsConferenceState[] newArray(int size) { return new ImsConferenceState[size]; }
++    };
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsReasonInfo.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsReasonInfo.java
+new file mode 100644
+index 0000000..ac2be99
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsReasonInfo.java
+@@ -0,0 +1,49 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Parcel;
++import android.os.Parcelable;
++
++/**
++ * The 7.1 com.android.ims.ImsReasonInfo, renamed. Three instance fields; the other 88 members of
++ * the original are constants and carry no wire presence. Order matches 7.1 writeToParcel exactly --
++ * this has to marshal identically to the copy inside ims.apk or every call across the bridge
++ * silently mis-reads.
++ */
++public class ImsReasonInfo implements Parcelable {
++    public int mCode;
++    public int mExtraCode;
++    public String mExtraMessage;
++
++    public ImsReasonInfo() { }
++
++    public ImsReasonInfo(int code, int extraCode, String extraMessage) {
++        mCode = code;
++        mExtraCode = extraCode;
++        mExtraMessage = extraMessage;
++    }
++
++    private ImsReasonInfo(Parcel in) { readFromParcel(in); }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(mCode);
++        out.writeInt(mExtraCode);
++        out.writeString(mExtraMessage);
++    }
++
++    private void readFromParcel(Parcel in) {
++        mCode = in.readInt();
++        mExtraCode = in.readInt();
++        mExtraMessage = in.readString();
++    }
++
++    public static final Creator<ImsReasonInfo> CREATOR = new Creator<ImsReasonInfo>() {
++        @Override
++        public ImsReasonInfo createFromParcel(Parcel in) { return new ImsReasonInfo(in); }
++        @Override
++        public ImsReasonInfo[] newArray(int size) { return new ImsReasonInfo[size]; }
++    };
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsSsInfo.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsSsInfo.java
+new file mode 100644
+index 0000000..968b282
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsSsInfo.java
+@@ -0,0 +1,33 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Parcel;
++import android.os.Parcelable;
++
++/** The 7.1 com.android.ims.ImsSsInfo, renamed. Wire order is mStatus then mIcbNum. */
++public class ImsSsInfo implements Parcelable {
++    public int mStatus;
++    public String mIcbNum;
++
++    public ImsSsInfo() { }
++
++    private ImsSsInfo(Parcel in) {
++        mStatus = in.readInt();
++        mIcbNum = in.readString();
++    }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(mStatus);
++        out.writeString(mIcbNum);
++    }
++
++    public static final Creator<ImsSsInfo> CREATOR = new Creator<ImsSsInfo>() {
++        @Override
++        public ImsSsInfo createFromParcel(Parcel in) { return new ImsSsInfo(in); }
++        @Override
++        public ImsSsInfo[] newArray(int size) { return new ImsSsInfo[size]; }
++    };
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsStreamMediaProfile.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsStreamMediaProfile.java
+new file mode 100644
+index 0000000..5aa1e19
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsStreamMediaProfile.java
+@@ -0,0 +1,41 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Parcel;
++import android.os.Parcelable;
++
++/** The 7.1 com.android.ims.ImsStreamMediaProfile, renamed. Four ints, in 7.1's order. */
++public class ImsStreamMediaProfile implements Parcelable {
++    public int mAudioQuality;
++    public int mAudioDirection;
++    public int mVideoQuality;
++    public int mVideoDirection;
++
++    public ImsStreamMediaProfile() { }
++
++    private ImsStreamMediaProfile(Parcel in) { readFromParcel(in); }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(mAudioQuality);
++        out.writeInt(mAudioDirection);
++        out.writeInt(mVideoQuality);
++        out.writeInt(mVideoDirection);
++    }
++
++    private void readFromParcel(Parcel in) {
++        mAudioQuality = in.readInt();
++        mAudioDirection = in.readInt();
++        mVideoQuality = in.readInt();
++        mVideoDirection = in.readInt();
++    }
++
++    public static final Creator<ImsStreamMediaProfile> CREATOR = new Creator<ImsStreamMediaProfile>() {
++        @Override
++        public ImsStreamMediaProfile createFromParcel(Parcel in) { return new ImsStreamMediaProfile(in); }
++        @Override
++        public ImsStreamMediaProfile[] newArray(int size) { return new ImsStreamMediaProfile[size]; }
++    };
++}
+diff --git a/ims-bridge/src/org/codeaurora/ims/legacy/ImsSuppServiceNotification.java b/ims-bridge/src/org/codeaurora/ims/legacy/ImsSuppServiceNotification.java
+new file mode 100644
+index 0000000..4d7eb27
+--- /dev/null
++++ b/ims-bridge/src/org/codeaurora/ims/legacy/ImsSuppServiceNotification.java
+@@ -0,0 +1,54 @@
++package org.codeaurora.ims.legacy;
++
++import android.os.Parcel;
++import android.os.Parcelable;
++
++/**
++ * The 7.1 com.android.ims.ImsSuppServiceNotification, renamed.
++ *
++ * Wire order: notificationType, code, index, type, number, history.
++ */
++public class ImsSuppServiceNotification implements Parcelable {
++    public int notificationType;
++    public int code;
++    public int index;
++    public int type;
++    public String number;
++    public String[] history;
++
++    public ImsSuppServiceNotification() { }
++
++    private ImsSuppServiceNotification(Parcel in) {
++        notificationType = in.readInt();
++        code = in.readInt();
++        index = in.readInt();
++        type = in.readInt();
++        number = in.readString();
++        history = in.createStringArray();
++    }
++
++    @Override
++    public int describeContents() { return 0; }
++
++    @Override
++    public void writeToParcel(Parcel out, int flags) {
++        out.writeInt(notificationType);
++        out.writeInt(code);
++        out.writeInt(index);
++        out.writeInt(type);
++        out.writeString(number);
++        out.writeStringArray(history);
++    }
++
++    public static final Creator<ImsSuppServiceNotification> CREATOR =
++            new Creator<ImsSuppServiceNotification>() {
++        @Override
++        public ImsSuppServiceNotification createFromParcel(Parcel in) {
++            return new ImsSuppServiceNotification(in);
++        }
++        @Override
++        public ImsSuppServiceNotification[] newArray(int size) {
++            return new ImsSuppServiceNotification[size];
++        }
++    };
++}

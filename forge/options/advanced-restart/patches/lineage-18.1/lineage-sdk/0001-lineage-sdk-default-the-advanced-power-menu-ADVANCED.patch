@@ -1,0 +1,41 @@
+From b3f76ffcd32da957f42f95f51000988f2cce9345 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Tue, 1 Sep 2026 21:05:00 +0000
+Subject: [PATCH] lineage-sdk: default the advanced power menu
+ (ADVANCED_REBOOT) to on
+---
+ packages/LineageSettingsProvider/res/values/defaults.xml       | 3 +++
+ .../org/lineageos/lineagesettings/LineageDatabaseHelper.java   | 3 +++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/packages/LineageSettingsProvider/res/values/defaults.xml b/packages/LineageSettingsProvider/res/values/defaults.xml
+index 489365a4..6691be9d 100644
+--- a/packages/LineageSettingsProvider/res/values/defaults.xml
++++ b/packages/LineageSettingsProvider/res/values/defaults.xml
+@@ -32,6 +32,9 @@
+     <!-- Default for LineageSettings.Secure.ADVANCED_MODE -->
+     <bool name="def_advanced_mode">true</bool>
+ 
++    <!-- Default for LineageSettings.Secure.ADVANCED_REBOOT (advanced power menu on by default) -->
++    <bool name="def_advanced_reboot">true</bool>
++
+     <!-- Default for LineageSettings.Secure.STATS_COLLECTION -->
+     <bool name="def_stats_collection">false</bool>
+ 
+diff --git a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+index 24ce1e1f..f0f3a275 100644
+--- a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
++++ b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+@@ -533,6 +533,9 @@ public class LineageDatabaseHelper extends SQLiteOpenHelper{
+             loadBooleanSetting(stmt, LineageSettings.Secure.ADVANCED_MODE,
+                     R.bool.def_advanced_mode);
+ 
++            loadBooleanSetting(stmt, LineageSettings.Secure.ADVANCED_REBOOT,
++                    R.bool.def_advanced_reboot);
++
+             loadBooleanSetting(stmt, LineageSettings.Secure.STATS_COLLECTION,
+                     R.bool.def_stats_collection);
+ 
+-- 
+2.53.0
+

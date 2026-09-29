@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 14:38:49 -0400
+Subject: [PATCH] ether: do not block on incoming-call delivery (legacy IMS
+ deadlocks the main thread)
+
+ImsPhoneCallTracker.onIncomingCall defaults to executeAndWait(), i.e.
+CompletableFuture.runAsync(task, mExecutor).join(), and the production constructor injects
+phone.getContext().getMainExecutor(). A modern ImsService calls onIncomingCall on a binder thread,
+where blocking costs nothing -- hence ro.telephony.block_binder_thread_on_incoming_calls. The pre-P
+compat layer delivers it from MmTelFeatureCompatAdapter's ACTION_IMS_INCOMING_CALL broadcast
+receiver, which runs on the main thread, so join() waits for a task that only the waiting thread can
+run. Self-deadlock.
+
+Everything after that is downstream. PhoneInterfaceManager.sendRequest posts to the main thread and
+waits with no timeout, so every unrelated telephony call hangs too: that is why Settings ANRed on
+isVoNrEnabled, and why several binder threads were parked on MainThreadRequest monitors. Eventually
+TelephonyConnectionService could not execute, the phone process was killed for ANR, and the next
+call failed with 'Phone is null, OUT_OF_SERVICE'.
+
+Confirmed from the ANR trace: com.android.phone main thread in CompletableFuture.join under
+executeAndWait <- onIncomingCall <- notifyIncomingCallSession <- MmTelFeatureCompatAdapter$2.onReceive.
+
+AOSP supplies the switch and its else branch names the case: 'for legacy IMS we want to avoid
+blocking the binder thread'.
+---
+ device.mk | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/device.mk b/device.mk
+index be7e1db..631c90f 100644
+--- a/device.mk
++++ b/device.mk
+@@ -377,6 +377,24 @@ PRODUCT_PACKAGES += ImsBridge
+ # VT natives can dlopen and ImsVideoGlobals.init() can run. See BoardConfig.mk TARGET_LD_SHIM_LIBS.
+ PRODUCT_PACKAGES += libshim_vtsurface
+ 
++# Incoming-call delivery must not block, because on the compat path it blocks the MAIN thread.
++#
++# ImsPhoneCallTracker.onIncomingCall defaults to executeAndWait(), which is
++# CompletableFuture.runAsync(task, mExecutor).join(), and mExecutor is
++# phone.getContext().getMainExecutor(). A modern ImsService calls onIncomingCall on a binder thread,
++# so blocking it is harmless -- hence the property name. The pre-P compat layer instead delivers it
++# from MmTelFeatureCompatAdapter's ACTION_IMS_INCOMING_CALL broadcast receiver, which runs on the
++# main thread, so join() waits for a task that can only run on the thread doing the waiting.
++#
++# com.android.phone's main thread then never returns. Every PhoneInterfaceManager.sendRequest posts
++# to that thread and waits without a timeout, so unrelated telephony calls hang too -- that is what
++# made Settings ANR on isVoNrEnabled -- and eventually TelephonyConnectionService cannot execute,
++# the phone process is killed for ANR, and the next call fails with "Phone is null, OUT_OF_SERVICE".
++#
++# AOSP provides exactly this switch, and its else-branch comment names the case: "for legacy IMS we
++# want to avoid blocking the binder thread".
++PRODUCT_PROPERTY_OVERRIDES += ro.telephony.block_binder_thread_on_incoming_calls=false
++
+ # nanopb 0.2.8, for libril-qc-qmi-1.so alone. See nanopb-0.2.8/Android.bp for why a second copy of
+ # nanopb has to exist at all.
+ PRODUCT_PACKAGES += libnanopb_legacy

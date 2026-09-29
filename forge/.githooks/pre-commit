@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block the pipefail + grep -q/head SIGPIPE trap (tools/check-sigpipe.sh).
+# Enable once per clone:  git config core.hooksPath .githooks
+exec "$(git rev-parse --show-toplevel)/tools/check-sigpipe.sh"

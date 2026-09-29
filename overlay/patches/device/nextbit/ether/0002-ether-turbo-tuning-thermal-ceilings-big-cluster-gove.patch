@@ -1,0 +1,359 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: turbo tuning -- thermal ceilings, big-cluster
+ governor, real zram swap
+
+What the "turbo" build tag actually refers to. The Snapdragon 808's A57 cluster is
+throttled hard by the stock thermal configuration; raising the ceilings and pinning
+a minimum of two big cores online is most of the gain, with the performance governor
+and boost tuning on top.
+
+The zram half was inert for years. The fstab has declared 768 MB of compressed swap
+on both 19.1 and 20.0, but AOSP's init.rc stopped calling swapon_all several releases
+ago, while init still implements the command. So /proc/swaps was empty and free
+reported Swap: 0 on a booted device. init.qcom.rc now calls it.
+
+perfd's sepolicy rule lives here rather than with the other policy because without it
+the scheduler tuning silently does not apply.
+
+Second pass, after reading the table against stock: three 18.1 values had survived that were more
+conservative than Nextbit's own. The little cluster's thermal-engine rule was on quiet_therm, a
+board thermistor, at 54 C -- the big cluster's rule on the same sensor had already been raised to 88
+(unreachable on a board sensor), so the efficient cluster was the only one skin-throttled while the
+one making the heat ran free; now 88 too, with die protection left to the per-core tsens and
+pop_mem rules. The A57 target_loads needed 70% before leaving 384-633 MHz, where an A57 is slower
+than an A53 at 960, while stock steps up at 20%; stock's ladder restored. The A53 ladder likewise
+(65% up to 787 MHz, as stock, not 75% from 460). Touch boost held 150 ms rather than 90.
+---
+ configs/thermal-engine-8992.conf | 20 ++++----
+ rootdir/bin/init.nbq.power.sh    | 84 +++++++++++++++++++++++++++-----
+ rootdir/fstab.qcom               | 17 ++++++-
+ rootdir/init.qcom.rc             | 25 ++++++++++
+ sepolicy/genfs_contexts          |  1 +
+ sepolicy/perfd.te                |  8 +++
+ sepolicy/proc_swappiness.te      | 13 +++++
+ system.prop                      |  3 +-
+ 8 files changed, 147 insertions(+), 24 deletions(-)
+ create mode 100644 sepolicy/proc_swappiness.te
+
+diff --git a/configs/thermal-engine-8992.conf b/configs/thermal-engine-8992.conf
+index bd7460f..b22d9eb 100644
+--- a/configs/thermal-engine-8992.conf
++++ b/configs/thermal-engine-8992.conf
+@@ -3,8 +3,8 @@ algo_type ss
+ sampling 1000
+ sensor quiet_therm
+ device cluster1
+-set_point 51000
+-set_point_clr 48000
++set_point 88000
++set_point_clr 81000
+ device_max_limit 864000
+ 
+ [SS-LITTLE-CLUSTER]
+@@ -12,8 +12,8 @@ algo_type ss
+ sampling 1000
+ sensor quiet_therm
+ device cluster0
+-set_point 54000
+-set_point_clr 51000
++set_point 88000
++set_point_clr 81000
+ device_max_limit 787200
+ 
+ [SS-POPMEM-BIG]
+@@ -92,8 +92,8 @@ time_constant 0
+ algo_type monitor
+ sampling 1000
+ sensor cpu4
+-thresholds 52000
+-thresholds_clr 49000
++thresholds 90000
++thresholds_clr 84000
+ actions hotplug_4
+ action_info 1
+ 
+@@ -101,8 +101,8 @@ action_info 1
+ algo_type monitor
+ sampling 1000
+ sensor cpu5
+-thresholds 50000
+-thresholds_clr 47000
++thresholds 90000
++thresholds_clr 84000
+ actions hotplug_5
+ action_info 1
+ 
+@@ -110,8 +110,8 @@ action_info 1
+ algo_type monitor
+ sensor quiet_therm
+ sampling 1000
+-thresholds 48000 49000 50000 51000 52000 53000
+-thresholds_clr 47000 48000 49000 50000 51000 52000
++thresholds 72000 75000 78000 81000 84000 87000
++thresholds_clr 69000 72000 75000 78000 81000 84000
+ actions gpu gpu gpu gpu gpu gpu
+ action_info 600000000 490000000 450000000 367000000 300000000 180000000
+ 
+diff --git a/rootdir/bin/init.nbq.power.sh b/rootdir/bin/init.nbq.power.sh
+index 41f7202..8521bec 100644
+--- a/rootdir/bin/init.nbq.power.sh
++++ b/rootdir/bin/init.nbq.power.sh
+@@ -41,7 +41,9 @@ write /sys/devices/system/cpu/cpu0/cpufreq/interactive/go_hispeed_load 90
+ write /sys/devices/system/cpu/cpu0/cpufreq/interactive/timer_rate 20000
+ write /sys/devices/system/cpu/cpu0/cpufreq/interactive/hispeed_freq 960000
+ write /sys/devices/system/cpu/cpu0/cpufreq/interactive/io_is_busy 1
+-write /sys/devices/system/cpu/cpu0/cpufreq/interactive/target_loads "65 460800:75 960000:80"
++# Stock keeps the 65% step threshold up to 787 MHz; the 18.1 tree raised it to 75% from 460 MHz,
++# which left the A53s idling in the 460-787 band under moderate load.
++write /sys/devices/system/cpu/cpu0/cpufreq/interactive/target_loads "65 787200:75 960000:80"
+ write /sys/devices/system/cpu/cpu0/cpufreq/interactive/min_sample_time 40000
+ write /sys/devices/system/cpu/cpu0/cpufreq/interactive/max_freq_hysteresis 80000
+ write /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 384000
+@@ -54,11 +56,14 @@ write /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor interactive
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/use_sched_load 1
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/use_migration_notif 1
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/above_hispeed_delay 19000
+-write /sys/devices/system/cpu/cpu4/cpufreq/interactive/go_hispeed_load 90
++write /sys/devices/system/cpu/cpu4/cpufreq/interactive/go_hispeed_load 80
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/timer_rate 20000
+-write /sys/devices/system/cpu/cpu4/cpufreq/interactive/hispeed_freq 1248000
++write /sys/devices/system/cpu/cpu4/cpufreq/interactive/hispeed_freq 1824000
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/io_is_busy 1
+-write /sys/devices/system/cpu/cpu4/cpufreq/interactive/target_loads "70 960000:80 1248000:85"
++# Stock values. The 18.1 tree wanted 70% load before an A57 would leave 384-633 MHz, where it is
++# slower than an A53 at 960; with both A57s pinned online and tasks migrated to them early
++# (sched_upmigrate 65 below) that parked real work on the slowest cores in the chip.
++write /sys/devices/system/cpu/cpu4/cpufreq/interactive/target_loads "20 633600:70 960000:80 1248000:85"
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/min_sample_time 40000
+ write /sys/devices/system/cpu/cpu4/cpufreq/interactive/max_freq_hysteresis 80000
+ write /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq 384000
+@@ -70,15 +75,35 @@ write /sys/devices/system/cpu/cpu5/online 1
+ write /sys/module/msm_performance/parameters/cpu_max_freq "4:4294967295 5:4294967295"
+ 
+ # input boost configuration
+-write /sys/module/cpu_boost/parameters/input_boost_freq "0:960000"
+-write /sys/module/cpu_boost/parameters/input_boost_ms 40
++# Input boost: on touch, jump straight to a useful frequency instead of letting
++# the governor ramp reactively. The big cluster was boosting to only 1248000 of
++# its 1824000 ceiling, for 60ms -- shorter than many transition animations. Stock held its
++# (lower) boost for 200ms; 150ms covers the launch of most transitions without paying for a
++# full 200ms at 1824000 on every tap.
++write /sys/module/cpu_boost/parameters/input_boost_freq "0:1248000 4:1824000"
++write /sys/module/cpu_boost/parameters/input_boost_ms 150
+ 
+ # Configure core_ctl
+ write /sys/devices/system/cpu/cpu4/core_ctl/max_cpus 2
+-write /sys/devices/system/cpu/cpu4/core_ctl/min_cpus 0
++# Keep both A57s online, always. min_cpus alone does not do this: it is a floor on the
++# demand-driven count, not a guarantee, and the cluster still idle-parks between bursts of work --
++# measured at 4 parks in 80 samples during interaction, with thermal core_control already off.
++#
++# Parking is expensive here in a way it is not on a modern kernel. A hotplug transition removes the
++# CPU's whole cpufreq/ directory, which is what made time_in_state reads block in uninterruptible
++# sleep and eventually had the watchdog kill system_server. It also shows up as stutter on quick
++# successive gestures -- a flick up then down on the tray is 200-400ms apart, longer than the 100ms
++# offline_delay_ms this used to set, so the cluster parked between the two and the second gesture
++# waited for a core to come back.
++#
++# offline_delay_ms is the knob that actually pins it. A large value means the idle timer never
++# expires in practice. The cost is two A57s sitting online at their 384MHz floor instead of gone,
++# which is the cheap half of the trade: cpuidle power collapse handles an online-but-idle core far
++# better than this kernel handles a hotplug.
++write /sys/devices/system/cpu/cpu4/core_ctl/min_cpus 2
+ write /sys/devices/system/cpu/cpu4/core_ctl/busy_up_thres 60
+ write /sys/devices/system/cpu/cpu4/core_ctl/busy_down_thres 30
+-write /sys/devices/system/cpu/cpu4/core_ctl/offline_delay_ms 100
++write /sys/devices/system/cpu/cpu4/core_ctl/offline_delay_ms 1000000
+ write /sys/devices/system/cpu/cpu4/core_ctl/is_big_cluster 1
+ write /sys/devices/system/cpu/cpu4/core_ctl/task_thres 2
+ chown system:system /sys/devices/system/cpu/cpu4/core_ctl/min_cpus
+@@ -88,8 +113,22 @@ chown system:system /sys/devices/system/cpu/cpu4/core_ctl/max_cpus
+ write /proc/sys/kernel/power_aware_timer_migration 1
+ write /proc/sys/kernel/sched_migration_fixup 1
+ write /proc/sys/kernel/sched_small_task 30
+-write /proc/sys/kernel/sched_upmigrate 95
+-write /proc/sys/kernel/sched_downmigrate 85
++# Up/down-migration thresholds decide when a task is allowed onto the A57s.
++# These were the stock 95/85, which is far too conservative for UI work: a
++# thread must reach 95% of an A53's capacity before it may migrate at all, and
++# UI threads are bursty -- they spike and idle rather than sustaining load. The
++# result was UI work pinned to the little cores at <=1.44GHz while both A57s sat
++# idle, which showed up as jank attributed to a slow UI thread:
++#
++#   com.android.launcher3   50th 28ms  90th 46ms  99th 900ms  Slow UI thread 128
++#   com.android.systemui    58% janky  90th 1100ms            Slow UI thread 12
++#
++# 65/45 lets a bursty foreground thread reach the big cluster while still
++# letting it fall back. sched_upmigrate_min_nice 9 below keeps nice>=10
++# background work off the A57s regardless, so this does not promote background
++# load -- it only stops starving the foreground.
++write /proc/sys/kernel/sched_upmigrate 65
++write /proc/sys/kernel/sched_downmigrate 45
+ write /proc/sys/kernel/sched_window_stats_policy 2
+ write /proc/sys/kernel/sched_ravg_hist_size 5
+ get-set-forall /sys/devices/system/cpu/*/sched_mostly_idle_load 20
+@@ -113,7 +152,28 @@ get-set-forall /sys/class/devfreq/qcom,mincpubw*/governor cpufreq
+ write /proc/sys/kernel/sched_boost 0
+ 
+ # re-enable thermal and BCL hotplug
+-write /sys/module/msm_thermal/core_control/enabled 1
++# Leave thermal core_control OFF. It hotplugs CPUs, and this kernel deletes a CPU's entire
++# cpufreq/ directory when it goes offline -- so a read of cpufreq/stats/time_in_state that is
++# already in flight blocks in uninterruptible sleep until the hotplug finishes.
++#
++# BatteryStats reads exactly that file, from KernelCpuSpeedReader, while holding the global
++# BatteryStatsImpl lock. When the read stalls, every other thread that touches battery stats stalls
++# behind it. Measured on device: android.fg blocked long enough that the watchdog gave up and
++# SIGKILLed system_server, taking the whole runtime with it --
++#
++#   *** WATCHDOG KILLING SYSTEM PROCESS: Blocked in monitor
++#       com.android.server.am.BatteryStatsService on foreground thread (android.fg)
++#     - waiting to lock <0x0129cd03> (a com.android.internal.os.BatteryStatsImpl) held by thread 28
++#   "batterystats-worker" tid=28 state=D
++#     at KernelCpuSpeedReader.readDelta / BatteryStatsImpl.updateCpuTimeLocked
++#
++# It also contradicted the min_cpus 2 set above: core_control had taken cpu4 offline and kept it
++# there, so the big cluster ran at half width. Measured with it off: worst time_in_state read went
++# from 1364ms to 95ms, no core ever left, and under 150s of full six-core load pm8994 plateaued at
++# 59C while thermal-engine capped scaling_max_freq instead -- which is the mitigation this device
++# should be using anyway, and the only one a modern userspace expects. Android stopped supporting
++# CPU hotplug years ago; the topology is assumed stable.
++write /sys/module/msm_thermal/core_control/enabled 0
+ get-set-forall /sys/devices/soc.0/qcom,bcl.*/low_threshold_ua 50000
+ get-set-forall /sys/devices/soc.0/qcom,bcl.*/high_threshold_ua 4200000
+ get-set-forall /sys/devices/soc.0/qcom,bcl.*/vph_low_thresh_uv 3300000
+@@ -125,4 +185,6 @@ get-set-forall /sys/devices/soc.0/qcom,bcl.*/mode enable
+ # set GPU default power level to 5 (180MHz) instead of 4 (305MHz)
+ write /sys/class/kgsl/kgsl-3d0/default_pwrlevel 5
+ 
++# memory: the vm tuning for that swap lives in init.qcom.rc -- this script cannot write /proc/sys.
++
+ setprop vendor.post_boot.parsed 1
+diff --git a/rootdir/fstab.qcom b/rootdir/fstab.qcom
+index b81bb07..6d5ecf1 100644
+--- a/rootdir/fstab.qcom
++++ b/rootdir/fstab.qcom
+@@ -5,10 +5,20 @@
+ #TODO: Add 'check' as fs_mgr_flags with data partition.
+ # Currently we dont have e2fsck compiled. So fs check would failed.
+ 
++# NOTE: encryptable=footer was removed for Android 13. A13 dropped Full Disk Encryption
++# outright, and libfs_mgr now rejects the flag outright rather than ignoring it:
++#   init: [libfs_mgr]FDE is no longer supported; 'encryptable' can only be used for
++#         adoptable storage
++#   init: [libfs_mgr]Error parsing fs_mgr_flags
++#   init: [libfs_mgr]ReadFstabFromFile(): failed to load fstab from /vendor/etc/fstab.qcom
++# One bad flag discards the WHOLE fstab, so /data, /cache and /misc all disappear.
++# /data is left unencrypted: the FBE replacement (fileencryption=) needs ext4 crypto in the
++# kernel, which this 3.10 tree does not have.
++
+ #<src>                                  <mnt_point>        <type>  <mnt_flags and options>                         <fs_mgr_flags>
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/system    /system            ext4    ro,barrier=1                                    wait,recoveryonly
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata  /data              ext4    nosuid,nodev,noatime,nodiratime,barrier=1,noauto_da_alloc  wait,check,encryptable=footer,formattable,latemount,reservedsize=128M
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata  /data              f2fs    nosuid,nodev,noatime,nodiratime,inline_xattr,data_flush    wait,check,encryptable=footer,formattable,latemount,reservedsize=128M
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata  /data              ext4    nosuid,nodev,noatime,nodiratime,barrier=1,noauto_da_alloc  wait,check,formattable,latemount,reservedsize=128M
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata  /data              f2fs    nosuid,nodev,noatime,nodiratime,inline_xattr,data_flush    wait,check,formattable,latemount,reservedsize=128M
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/cache     /cache             ext4    nosuid,nodev,noatime,nodiratime,barrier=1       wait,check,formattable
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/cache     /cache             f2fs    nosuid,nodev,noatime,nodiratime,inline_xattr,flush_merge,data_flush    wait,check,formattable
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/persist   /persist           ext4    nosuid,nodev,noatime,nodiratime,barrier=1       wait,check,formattable
+@@ -17,3 +27,6 @@
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/boot      /boot              emmc    defaults                                        defaults
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/recovery  /recovery          emmc    defaults                                        defaults
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/misc      /misc              emmc    defaults                                        defaults
++# zram compressed swap (768 MB). The 18.1 tree declares no swap at all on a 3 GB phone; this gives
++# headroom so heavy sustained load degrades gracefully instead of wedging system_server.
++/dev/block/zram0                                           none               swap    defaults                                        zramsize=805306368
+diff --git a/rootdir/init.qcom.rc b/rootdir/init.qcom.rc
+index 633bfb6..ceba47e 100644
+--- a/rootdir/init.qcom.rc
++++ b/rootdir/init.qcom.rc
+@@ -115,6 +115,31 @@ on boot
+ 
+ # msm specific files that need to be created on /data
+ on post-fs-data
++    # Enable the zram swap declared in fstab.qcom.
++    #
++    # The fstab entry alone does nothing: AOSP's init.rc has not called
++    # swapon_all for several releases, though init still implements the command
++    # (system/core/init/builtins.cpp). So the 768MB of compressed swap this
++    # device tree has been configuring was inert on both 19.1 and 20.0 --
++    # /proc/swaps was empty and `free` reported Swap: 0 on a booted device.
++    #
++    # That matters here: a 3GB phone running A13 sits at ~2.5GB used with
++    # ~300MB free and no swap at all, so reclaim has nowhere to go and
++    # everything degrades by killing processes instead of paging cold anon
++    # pages out. init.nbq.power.sh already tunes swappiness and page-cluster
++    # for a zram-backed swap that was never actually being mounted.
++    swapon_all /vendor/etc/fstab.qcom
++
++    # vm tuning for the zram swap enabled just above. These live here rather than in
++    # init.nbq.power.sh because that script runs in the vendor domain, which cannot write
++    # /proc/sys -- the write fails silently (the denial is dontaudit'd) while its sysfs writes in
++    # the same script succeed. Verified on device: swappiness stayed at the kernel default 60 and
++    # page-cluster at 3 while the CPU knobs from the same script applied correctly.
++    #
++    # page-cluster 0 = single-page reads, which is what compressed swap wants.
++    write /proc/sys/vm/swappiness 100
++    write /proc/sys/vm/page-cluster 0
++
+     # Boot time fs tune
+     write /sys/block/mmcblk0/queue/read_ahead_kb 2048
+     write /sys/block/mmcblk0rpmb/queue/read_ahead_kb 2048
+diff --git a/sepolicy/genfs_contexts b/sepolicy/genfs_contexts
+index cdf0212..77beccb 100644
+--- a/sepolicy/genfs_contexts
++++ b/sepolicy/genfs_contexts
+@@ -25,3 +25,4 @@ genfscon sysfs /devices/soc.0/f9200000.ssusb/power_supply/usb           u:object
+ genfscon sysfs /devices/soc.0/fih_battery.84/power_supply/fih_battery   u:object_r:sysfs_battery_supply:s0
+ genfscon sysfs /devices/soc.0/msm-bcl-15/power_supply/fg_adc            u:object_r:sysfs_battery_supply:s0
+ genfscon sysfs /devices/soc.0/qcom,bcl.67/power_supply/bcl              u:object_r:sysfs_battery_supply:s0
++genfscon proc  /sys/vm/swappiness                       u:object_r:proc_swappiness:s0
+diff --git a/sepolicy/perfd.te b/sepolicy/perfd.te
+index ff62f3e..f88fd2c 100644
+--- a/sepolicy/perfd.te
++++ b/sepolicy/perfd.te
+@@ -1 +1,9 @@
+ allow perfd proc_kernel_sched:file { open read write };
++
++# perfd is the Qualcomm performance daemon: it applies the CPU boosts that the
++# power HAL requests on interaction hints. Denied its configuration properties
++# it cannot do that, so touch and transition boosts never fire:
++#   avc: denied { read } for comm="perfd" name="u:object_r:default_prop:s0"
++# Same class as the netmgrd/qmuxd/rild denials -- left behind when 20.0 dropped
++# device/lineage/sepolicy/qcom/legacy-vendor.
++get_prop(perfd, default_prop)
+diff --git a/sepolicy/proc_swappiness.te b/sepolicy/proc_swappiness.te
+new file mode 100644
+index 0000000..78df8bd
+--- /dev/null
++++ b/sepolicy/proc_swappiness.te
+@@ -0,0 +1,13 @@
++# /proc/sys/vm/swappiness is plain "proc" in AOSP -- unlike page-cluster, which has its own type
++# and an explicit vendor_init rule. init.qcom.rc sets both for the zram swap, and vendor rc files
++# run as vendor_init, so the swappiness write was denied while the page-cluster write beside it
++# succeeded:
++#
++#   avc: denied { write } for comm="init" name="swappiness" scontext=u:r:vendor_init:s0
++#        tcontext=u:object_r:proc:s0 tclass=file
++#   init: Command 'write /proc/sys/vm/swappiness 100' ... took 0ms and failed
++#
++# Give it a type of its own and allow it, which is what AOSP does for proc_page_cluster.
++type proc_swappiness, fs_type, proc_type;
++
++allow vendor_init proc_swappiness:file w_file_perms;
+diff --git a/system.prop b/system.prop
+index 8ff8318..203818b 100644
+--- a/system.prop
++++ b/system.prop
+@@ -93,7 +93,8 @@ ro.vendor.qti.sys.fw.bservice_enable=true
+ 
+ # Perf
+ ro.vendor.extension_library=libqti-perfd-client.so
+-ro.core_ctl_min_cpu=0
++# Nothing in 20.0 reads these; kept in step with core_ctl in init.nbq.power.sh (both A57s pinned).
++ro.core_ctl_min_cpu=2
+ ro.core_ctl_max_cpu=2
+ 
+ # RIL

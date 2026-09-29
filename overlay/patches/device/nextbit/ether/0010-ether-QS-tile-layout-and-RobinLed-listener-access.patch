@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: QS tile layout and RobinLed listener access
+
+Two device-level resource overlays:
+
+- `quick_settings_tiles_default` adds the NFC and LiveDisplay tiles to the default Quick Settings
+  layout. Both features default OFF, so the tiles put each one tap away. Only consulted when there is
+  no stored QS layout, i.e. on a fresh install.
+- `config_defaultListenerAccessPackages` auto-grants notification-listener access to
+  com.nextbit.robinled, so the rear LEDs work without the user enabling it by hand.
+
+The theme default is not set here: the forge's dark-default option sets config_defaultNightMode in
+frameworks/base, and a device overlay would silently override it.
+
+The accent is no longer set here. It used to be seven `*_device_default_*` colours in a framework-res
+overlay, which is the pre-Monet mechanism; on Android 12 and newer the dynamic-colour palette governs
+those surfaces. The forge's teal-skin option seeds the same #009D94 as a Monet preset with
+color_source=preset, so it survives wallpaper changes, and it is the same mechanism every other
+device here uses.
+
+The DeskClock `widget_max_clock_font_size` override is dropped as dead. It sizes the home-screen
+clock widget, and no preset has one: minimal-home strips every appwidget from the default workspace,
+and on a GApps build GoogleClock overrides DeskClock so the overlay is not compiled in at all.
+---
+ .../base/core/res/res/values/config.xml       |  5 ++++
+ .../packages/SystemUI/res/values/config.xml   | 29 ++++---------------
+ 2 files changed, 11 insertions(+), 23 deletions(-)
+
+diff --git a/overlay/frameworks/base/core/res/res/values/config.xml b/overlay/frameworks/base/core/res/res/values/config.xml
+index d35c036..b58855e 100644
+--- a/overlay/frameworks/base/core/res/res/values/config.xml
++++ b/overlay/frameworks/base/core/res/res/values/config.xml
+@@ -276,4 +276,9 @@
+     <!-- AOSP WFD -->
+     <bool name="config_enableWifiDisplay">true</bool>
+ 
++    <!-- Auto-grant notification-listener access to RobinLed so it can drive the rear LEDs
++         without the user enabling it manually. NotificationManagerService reads this as a
++         colon-separated *string*; a string-array is silently ignored. -->
++    <string name="config_defaultListenerAccessPackages" translatable="false">com.nextbit.robinled</string>
++
+ </resources>
+diff --git a/overlay/frameworks/base/packages/SystemUI/res/values/config.xml b/overlay/frameworks/base/packages/SystemUI/res/values/config.xml
+index 74df52f..b3f3dcb 100644
+--- a/overlay/frameworks/base/packages/SystemUI/res/values/config.xml
++++ b/overlay/frameworks/base/packages/SystemUI/res/values/config.xml
+@@ -1,26 +1,9 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<!--
+-/*
+-** Copyright 2015, The Android Open Source Project
+-**
+-** Licensed under the Apache License, Version 2.0 (the "License");
+-** you may not use this file except in compliance with the License.
+-** You may obtain a copy of the License at
+-**
+-**     http://www.apache.org/licenses/LICENSE-2.0
+-**
+-** Unless required by applicable law or agreed to in writing, software
+-** distributed under the License is distributed on an "AS IS" BASIS,
+-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-** See the License for the specific language governing permissions and
+-** limitations under the License.
+-*/
+--->
+-
+-<!-- These resources are around just to allow their values to be customized
+-     for different hardware and product builds. -->
++<!-- Add the NFC and LiveDisplay tiles to the default Quick Settings layout. Both features default
++     OFF (NFC via NfcService, LiveDisplay via config_defaultLiveDisplayMode), but the tiles ship in
++     the layout so each is one tap away. Order otherwise matches AOSP/Lineage's default set. -->
+ <resources>
+-    <!-- Doze: does this device support STATE_DOZE and STATE_DOZE_SUSPEND?  -->
+-    <bool name="doze_display_state_supported">true</bool>
++    <string name="quick_settings_tiles_default" translatable="false">
++        wifi,bt,dnd,flashlight,rotation,battery,cell,airplane,nfc,livedisplay,cast,screenrecord
++    </string>
+ </resources>
+-

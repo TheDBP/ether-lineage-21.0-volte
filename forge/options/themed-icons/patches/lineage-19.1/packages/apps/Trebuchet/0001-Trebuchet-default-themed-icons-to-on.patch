@@ -1,0 +1,29 @@
+From 61b891194441b9b1a9bb2735c8e00c41d05841b5 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 4 Sep 2026 15:44:25 -0400
+Subject: [PATCH] Trebuchet: default themed icons to on
+
+isThemedIconEnabled() reads the themed_icons pref with a default of false, so a
+fresh install ships with monochrome app icons off. ENABLE_THEMED_ICONS is already
+true here, so only the pref default needs flipping; the settings toggle is
+unaffected.
+---
+ src/com/android/launcher3/util/Themes.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/com/android/launcher3/util/Themes.java b/src/com/android/launcher3/util/Themes.java
+index 53a584d8de..c45ac6fda8 100644
+--- a/src/com/android/launcher3/util/Themes.java
++++ b/src/com/android/launcher3/util/Themes.java
+@@ -75,7 +75,7 @@ public class Themes {
+      */
+     public static boolean isThemedIconEnabled(Context context) {
+         return FeatureFlags.ENABLE_THEMED_ICONS.get()
+-                && Utilities.getPrefs(context).getBoolean(KEY_THEMED_ICONS, false);
++                && Utilities.getPrefs(context).getBoolean(KEY_THEMED_ICONS, true);
+     }
+ 
+     public static String getDefaultBodyFont(Context context) {
+-- 
+2.53.0
+

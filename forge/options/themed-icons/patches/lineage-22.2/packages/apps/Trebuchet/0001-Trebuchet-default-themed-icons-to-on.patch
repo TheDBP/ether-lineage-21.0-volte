@@ -1,0 +1,29 @@
+From 2380f1f61a1afec2184fb37619551b5be184a4ac Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 4 Sep 2026 15:44:13 -0400
+Subject: [PATCH] Trebuchet: default themed icons to on
+
+THEMED_ICONS is a backed-up pref defaulting to false, so a fresh install ships
+with monochrome/themed app icons disabled and every device needs the toggle
+flipped by hand in launcher settings. Default it on; the toggle still works, and
+existing installs keep whatever they had because the pref is backed up.
+---
+ src/com/android/launcher3/LauncherPrefs.kt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/com/android/launcher3/LauncherPrefs.kt b/src/com/android/launcher3/LauncherPrefs.kt
+index 23a9541ea4..6ca74d4ccd 100644
+--- a/src/com/android/launcher3/LauncherPrefs.kt
++++ b/src/com/android/launcher3/LauncherPrefs.kt
+@@ -88,7 +88,7 @@ abstract class LauncherPrefs : SafeCloseable {
+         @JvmField
+         val ENABLE_TWOLINE_ALLAPPS_TOGGLE = backedUpItem("pref_enable_two_line_toggle", false)
+         @JvmField
+-        val THEMED_ICONS = backedUpItem(Themes.KEY_THEMED_ICONS, false, EncryptionType.ENCRYPTED)
++        val THEMED_ICONS = backedUpItem(Themes.KEY_THEMED_ICONS, true, EncryptionType.ENCRYPTED)
+         @JvmField val PROMISE_ICON_IDS = backedUpItem(InstallSessionHelper.PROMISE_ICON_IDS, "")
+         @JvmField val WORK_EDU_STEP = backedUpItem("showed_work_profile_edu", 0)
+         @JvmField
+-- 
+2.53.0
+

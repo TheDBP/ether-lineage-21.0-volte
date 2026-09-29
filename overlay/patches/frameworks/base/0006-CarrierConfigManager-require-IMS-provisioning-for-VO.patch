@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 20:53:49 -0400
+Subject: [PATCH] CarrierConfigManager: require IMS provisioning for VOICE over
+ IWLAN by default
+
+A modem that will not accept a Wi-Fi calling configuration it has not been told is provisioned
+answers the attempt and declines it:
+
+    client_provisioning_config_ind_hdlr: .. client_prov_enabled: 0
+                                         .. wifi_call_preference: 0    (1 was sent)
+
+ImsManager.isWfcProvisionedOnDevice() only reaches the branch that pushes the provisioning value
+when isMmTelProvisioningRequired(VOICE, IWLAN) is true. With KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE
+defaulting to an empty bundle it short-circuits to "provisioned" locally, ENABLE_VOWIFI is never
+sent, and the modem is left believing the feature is unprovisioned while the framework believes it
+is enabled.
+
+VOICE over IWLAN only. VoLTE falls through to the deprecated
+KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, which stays false, so it is untouched -- and it has
+never needed this path, because it works off the modem's own carrier config. Wi-Fi calling, which
+that config does not enable, is exactly the feature that does need it.
+
+Set here rather than in a device carrier_config overlay because a nested <pbundle_as_map> does not
+survive that path. PersistableBundle.restoreFromXml() is called with throwException=false so a
+malformed config cannot be used to attack the platform, which means a nested bundle it cannot parse
+is dropped in silence. The XML compiles into the APK correctly -- verified with aapt2, attributes
+and all -- and simply never appears in the merged config, while every scalar around it applies. It
+looks exactly like a change that worked.
+---
+ .../telephony/CarrierConfigManager.java       | 29 ++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/telephony/java/android/telephony/CarrierConfigManager.java b/telephony/java/android/telephony/CarrierConfigManager.java
+index 741721d14ac1..bd9126ac7cdb 100644
+--- a/telephony/java/android/telephony/CarrierConfigManager.java
++++ b/telephony/java/android/telephony/CarrierConfigManager.java
+@@ -47,6 +47,7 @@ import android.telephony.ims.ImsRegistrationAttributes;
+ import android.telephony.ims.ImsSsData;
+ import android.telephony.ims.RcsUceAdapter;
+ import android.telephony.ims.feature.MmTelFeature;
++import android.telephony.ims.stub.ImsRegistrationImplBase;
+ import android.telephony.ims.feature.RcsFeature;
+ 
+ import com.android.internal.telephony.ICarrierConfigLoader;
+@@ -5641,8 +5642,34 @@ public class CarrierConfigManager {
+             /**
+              * @see #KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE
+              */
++            // Require IMS provisioning for VOICE over IWLAN by default.
++            //
++            // This device's modem will not accept a Wi-Fi calling configuration it has not been told
++            // is provisioned. It answers the attempt and declines it:
++            //
++            //     client_provisioning_config_ind_hdlr: .. client_prov_enabled: 0
++            //                                          .. wifi_call_preference: 0   (1 was sent)
++            //
++            // ImsManager.isWfcProvisionedOnDevice() only reaches the branch that pushes the
++            // provisioning value when isMmTelProvisioningRequired(VOICE, IWLAN) is true. With this
++            // bundle empty it short-circuits to "provisioned" locally, so ENABLE_VOWIFI is never
++            // sent and the modem is left believing the feature is unprovisioned.
++            //
++            // VOICE over IWLAN only, so VoLTE is untouched: it falls through to the deprecated
++            // KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, which stays false. VoLTE works because
++            // the modem's own carrier config enables it and so never needed this path -- Wi-Fi
++            // calling, which that config does not enable, is exactly the feature that does.
++            //
++            // Set here rather than in a device carrier_config overlay because a nested
++            // <pbundle_as_map> does not survive that path: PersistableBundle.restoreFromXml() is
++            // called with throwException=false so the platform cannot be attacked with a malformed
++            // config, which means a nested bundle it cannot parse is dropped in silence. The XML
++            // compiles into the APK correctly and simply never appears in the merged config.
++            PersistableBundle mmtelProvisioning = new PersistableBundle();
++            mmtelProvisioning.putIntArray(Ims.KEY_CAPABILITY_TYPE_VOICE_INT_ARRAY,
++                    new int[] { ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN });
+             defaults.putPersistableBundle(
+-                    KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE, new PersistableBundle());
++                    KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE, mmtelProvisioning);
+             /**
+              * @see #KEY_RCS_REQUIRES_PROVISIONING_BUNDLE
+              */

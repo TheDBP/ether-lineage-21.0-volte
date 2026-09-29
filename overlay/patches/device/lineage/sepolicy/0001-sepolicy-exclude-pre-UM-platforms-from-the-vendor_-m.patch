@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 21:37:33 -0400
+Subject: [PATCH] sepolicy: exclude pre-UM platforms from the vendor_ m4
+ renames again
+
+lineage-20.0 dropped every pre-UM platform from the filter guarding
+BOARD_SEPOLICY_M4DEFS, so msm8992 now receives renames written for the newer
+qcom sepolicy trees. That produces a half-rename which will not compile:
+hal_perf_default has a def, hal_perf_default_exec does not, and
+init_daemon_domain derives the exec type from the renamed domain.
+
+  device/qcom/sepolicy-legacy/common/hal_perf_default.te:33:
+    ERROR 'unknown type vendor_hal_perf_default_exec'
+
+Restores the 19.1 exclusion list verbatim.
+
+Not restored: the device/lineage/sepolicy/qcom/legacy-vendor dir that 19.1
+also added for these platforms. Upstream deleted it, and its single rule
+(unix_socket_connect(hal_lineage_livedisplay_qti, pps, mm-pp-daemon))
+references a 'pps' type that is not declared anywhere on 20.0 -- the same
+socket rule is already commented out in sepolicy-legacy/common/system_app.te.
+Re-adding it would trade this build failure for another. Worth watching for a
+LiveDisplay/mm-pp-daemon denial at runtime.
+---
+ qcom/sepolicy.mk | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/qcom/sepolicy.mk b/qcom/sepolicy.mk
+index 9ad4674..5ee967a 100644
+--- a/qcom/sepolicy.mk
++++ b/qcom/sepolicy.mk
+@@ -22,7 +22,27 @@ BOARD_VENDOR_SEPOLICY_DIRS += \
+     device/lineage/sepolicy/qcom/vendor
+ endif
+ 
+-ifeq (,$(filter msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845, $(TARGET_BOARD_PLATFORM)))
++# ether/msm8992: the pre-UM platforms are back in this exclusion list.
++#
++# These m4 defs rename legacy type names onto the vendor_-prefixed ones used by the newer
++# qcom sepolicy trees. lineage-19.1 excluded every pre-UM platform from them (msm8960,
++# msm8226, msm8610, msm8974, apq8084, msm8909, msm8916, msm8952, msm8992, msm8994), because
++# those devices carry their own legacy policy that declares the unprefixed names. 20.0
++# dropped them from the list, so the renames now apply to platforms they were never meant
++# for.
++#
++# The result is a half-rename that fails to compile. In
++# device/qcom/sepolicy-legacy/common/hal_perf_default.te the domain is declared as
++# hal_perf_default and the exec type as hal_perf_default_exec. Only the first has a def
++# here, so init_daemon_domain(hal_perf_default) becomes
++# init_daemon_domain(vendor_hal_perf_default), which derives $1_exec as
++# vendor_hal_perf_default_exec -- a type nothing declares:
++#
++#   hal_perf_default.te:33: ERROR unknown type vendor_hal_perf_default_exec
++#
++# Restoring the 19.1 exclusion list leaves the legacy names alone, which is what the
++# vendored sepolicy-legacy tree expects.
++ifeq (,$(filter msm8960 msm8226 msm8610 msm8974 apq8084 msm8909 msm8916 msm8952 msm8992 msm8994 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845, $(TARGET_BOARD_PLATFORM)))
+ BOARD_SEPOLICY_M4DEFS += \
+     display_vendor_data_file=vendor_display_vendor_data_file \
+     hal_keymaster_qti_exec=vendor_hal_keymaster_qti_exec \

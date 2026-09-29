@@ -1,0 +1,198 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:06:41 -0400
+Subject: [PATCH] netd: restore the Android 11 no-eBPF fallback (A13 half)
+
+Rebased from 19.1, which had this as a single 5-file patch. A13 split the
+surface: it deleted TrafficController from netd and moved socket tagging into
+packages/modules/Connectivity, so two of the five files no longer exist here.
+Those changes now live in the companion Connectivity patch; this is the half
+that is still netd's.
+
+BandwidthController is unchanged from 19.1 and applied cleanly: build the
+legacy xt_owner/xt_qtaguid accounting rules when BPF is unavailable, instead
+of iptables rules referencing pinned BPF objects that do not exist. Without
+it enableBandwidthControl()'s iptables-restore batch fails wholesale and netd
+exits.
+
+Controllers.cpp needed re-deriving. The 19.1 line was
+
+    bandwidthCtrl.setBpfEnabled(trafficCtrl.getBpfEnabled());
+
+but netd has no TrafficController on A13, and the Connectivity module sits
+behind the libnetd_updatable C API which exposes no equivalent accessor.
+Rather than widen that API, netd now probes for XT_BPF_ALLOWLIST_PROG_PATH
+directly. That is simpler and a strictly more precise test: it asks exactly
+the question the rules depend on -- is the pinned object these rules
+reference actually present -- rather than inferring it from another
+component's state.
+---
+ server/BandwidthController.cpp | 39 ++++++++++++++++++++++++++++------
+ server/BandwidthController.h   | 10 +++++++++
+ server/Controllers.cpp         | 19 +++++++++++++++++
+ 3 files changed, 62 insertions(+), 6 deletions(-)
+
+diff --git a/server/BandwidthController.cpp b/server/BandwidthController.cpp
+index 8dba75a5..3d495b9c 100644
+--- a/server/BandwidthController.cpp
++++ b/server/BandwidthController.cpp
+@@ -43,6 +43,7 @@
+ #include <linux/rtnetlink.h>
+ #include <linux/pkt_sched.h>
+ 
++#include "netdutils/UidConstants.h"  // MAX_SYSTEM_UID
+ #include "android-base/stringprintf.h"
+ #include "android-base/strings.h"
+ #define LOG_TAG "BandwidthController"
+@@ -203,7 +204,12 @@ static const uint32_t uidBillingMask = Fwmark::getUidBillingMask();
+  * See go/ipsec-data-accounting for more information.
+  */
+ 
+-std::vector<std::string> getBasicAccountingCommands() {
++// Legacy (pre-eBPF) equivalent of the pinned-BPF allowlist rule: exempt system UIDs by range
++// using xt_owner instead of an eBPF program. Restored from Android 11 for kernels with no eBPF.
++const std::string HAPPY_BOX_MATCH_ALLOWLIST_COMMAND =
++        StringPrintf("-I bw_happy_box -m owner --uid-owner %d-%d -j RETURN", 0, MAX_SYSTEM_UID);
++
++std::vector<std::string> getBasicAccountingCommands(const bool useBpf) {
+     // clang-format off
+     std::vector<std::string> ipt_basic_accounting_commands = {
+             "*filter",
+@@ -213,14 +219,29 @@ std::vector<std::string> getBasicAccountingCommands() {
+             "-A bw_INPUT -p esp -j RETURN",
+             StringPrintf("-A bw_INPUT -m mark --mark 0x%x/0x%x -j RETURN", uidBillingMask,
+                          uidBillingMask),
++            // Ingress application UID accounting. With eBPF this happens in the cgroup hooks;
++            // without it we need the old xt_qtaguid/xt_owner socket match back.
++            useBpf ? "" : "-A bw_INPUT -m owner --socket-exists",
+             StringPrintf("-A bw_INPUT -j MARK --or-mark 0x%x", uidBillingMask),
+             "-A bw_OUTPUT -j bw_global_alert",
++            // Prevents IPSec double counting (Tunnel mode and Transport mode respectively).
++            // Only needed on the legacy path; the eBPF hooks do not double count.
++            useBpf ? "" : "-A bw_OUTPUT -o " IPSEC_IFACE_PREFIX "+ -j RETURN",
++            useBpf ? "" : "-A bw_OUTPUT -m policy --pol ipsec --dir out -j RETURN",
++            // Don't count clat traffic twice; it is already counted on the stacked interface.
++            useBpf ? "" : "-A bw_OUTPUT -m owner --uid-owner clat -j RETURN",
++            // Egress application UID accounting, legacy path only (see bw_INPUT above).
++            useBpf ? "" : "-A bw_OUTPUT -m owner --socket-exists",
+             "-A bw_costly_shared -j bw_penalty_box",
+-            ("-I bw_penalty_box -m bpf --object-pinned " XT_BPF_DENYLIST_PROG_PATH " -j REJECT"),
++            useBpf ? ("-I bw_penalty_box -m bpf --object-pinned " XT_BPF_DENYLIST_PROG_PATH
++                      " -j REJECT")
++                   : "",
+             "-A bw_penalty_box -j bw_happy_box",
+             "-A bw_happy_box -j bw_data_saver",
+             "-A bw_data_saver -j RETURN",
+-            ("-I bw_happy_box -m bpf --object-pinned " XT_BPF_ALLOWLIST_PROG_PATH " -j RETURN"),
++            useBpf ? ("-I bw_happy_box -m bpf --object-pinned " XT_BPF_ALLOWLIST_PROG_PATH
++                      " -j RETURN")
++                   : HAPPY_BOX_MATCH_ALLOWLIST_COMMAND,
+             "COMMIT",
+ 
+             "*raw",
+@@ -239,7 +260,8 @@ std::vector<std::string> getBasicAccountingCommands() {
+             //
+             // Hence we will never double count and additional corrections are not needed.
+             // We can simply take the sum of base and stacked (+20B/pkt) interface counts.
+-            ("-A bw_raw_PREROUTING -m bpf --object-pinned " XT_BPF_INGRESS_PROG_PATH),
++            useBpf ? "-A bw_raw_PREROUTING -m bpf --object-pinned " XT_BPF_INGRESS_PROG_PATH
++                   : "-A bw_raw_PREROUTING -m owner --socket-exists",
+             "COMMIT",
+ 
+             "*mangle",
+@@ -252,7 +274,8 @@ std::vector<std::string> getBasicAccountingCommands() {
+             // This is egress interface accounting: we account 464xlat traffic only on
+             // the clat interface (as offloaded packets never hit base interface's ip6tables)
+             // and later sum base and stacked with overhead (+20B/pkt) in higher layers
+-            ("-A bw_mangle_POSTROUTING -m bpf --object-pinned " XT_BPF_EGRESS_PROG_PATH),
++            useBpf ? "-A bw_mangle_POSTROUTING -m bpf --object-pinned " XT_BPF_EGRESS_PROG_PATH
++                   : "-A bw_mangle_POSTROUTING -m owner --socket-exists",
+             COMMIT_AND_CLOSE};
+     // clang-format on
+     return ipt_basic_accounting_commands;
+@@ -260,6 +283,10 @@ std::vector<std::string> getBasicAccountingCommands() {
+ 
+ }  // namespace
+ 
++void BandwidthController::setBpfEnabled(bool isEnabled) {
++    mBpfSupported = isEnabled;
++}
++
+ BandwidthController::BandwidthController() {
+ }
+ 
+@@ -286,7 +313,7 @@ int BandwidthController::enableBandwidthControl() {
+ 
+     flushCleanTables(false);
+ 
+-    std::string commands = Join(getBasicAccountingCommands(), '\n');
++    std::string commands = Join(getBasicAccountingCommands(mBpfSupported), '\n');
+     return iptablesRestoreFunction(V4V6, commands, nullptr);
+ }
+ 
+diff --git a/server/BandwidthController.h b/server/BandwidthController.h
+index 2a3b4bd1..a7a86396 100644
+--- a/server/BandwidthController.h
++++ b/server/BandwidthController.h
+@@ -27,6 +27,12 @@
+ 
+ class BandwidthController {
+ public:
++    // Restored from Android 11: netd must keep working on kernels with no eBPF, where the
++    // pinned BPF programs the iptables rules reference do not exist. Set during
++    // Controllers::init() by probing for XT_BPF_ALLOWLIST_PROG_PATH (A13 moved
++    // TrafficController out of netd, so its getBpfEnabled() is no longer reachable).
++    void setBpfEnabled(bool isEnabled);
++
+     std::mutex lock;
+ 
+     BandwidthController();
+@@ -72,6 +78,10 @@ public:
+     enum IptOp { IptOpInsert, IptOpDelete };
+ 
+   private:
++    // Defaults to false so a failure to call setBpfEnabled() degrades safely to the legacy
++    // xt_owner/xt_qtaguid rules rather than emitting rules for BPF objects that may not exist.
++    bool mBpfSupported = false;
++
+     struct QuotaInfo {
+         int64_t quota;
+         int64_t alert;
+diff --git a/server/Controllers.cpp b/server/Controllers.cpp
+index 00ee186d..8c780d7b 100644
+--- a/server/Controllers.cpp
++++ b/server/Controllers.cpp
+@@ -26,7 +26,10 @@
+ #define LOG_TAG "Netd"
+ #include <log/log.h>
+ 
++#include <unistd.h>  // access()
++
+ #include "Controllers.h"
++#include "mainline/XtBpfProgLocations.h"  // XT_BPF_ALLOWLIST_PROG_PATH
+ #include "IdletimerController.h"
+ #include "NetworkController.h"
+ #include "RouteController.h"
+@@ -277,6 +280,22 @@ void Controllers::init() {
+     initIptablesRules();
+     Stopwatch s;
+ 
++    // ether/msm8992: must precede enableBandwidthControl(). On a kernel without eBPF the
++    // pinned BPF programs the default rules reference do not exist, so the whole
++    // iptables-restore batch fails and bandwidth accounting is silently absent.
++    //
++    // The 19.1 version of this read TrafficController::getBpfEnabled(), but A13 deleted
++    // TrafficController from netd (it now lives in packages/modules/Connectivity, behind
++    // the libnetd_updatable C API, which exposes no such accessor). Probing for the pinned
++    // program directly is both simpler and a more precise test, since it asks exactly the
++    // question the iptables rules depend on: is the object these rules reference present?
++    const bool bpfSupported = (access(XT_BPF_ALLOWLIST_PROG_PATH, F_OK) == 0);
++    if (!bpfSupported) {
++        gLog.warn("%s not present -- assuming no eBPF; using legacy xt_owner accounting rules",
++                  XT_BPF_ALLOWLIST_PROG_PATH);
++    }
++    bandwidthCtrl.setBpfEnabled(bpfSupported);
++
+     if (int ret = bandwidthCtrl.enableBandwidthControl()) {
+         gLog.error("Failed to initialize BandwidthController (%s)", strerror(-ret));
+         // A failure to init almost definitely means that iptables failed to load

@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 02:06:48 -0400
+Subject: [PATCH] ether: enable the memory and blkio cgroup controllers
+
+Android 13's libprocessgroup mounts both during early init:
+
+  libprocessgroup: Failed to mount blkio cgroup: No such file or directory
+  libprocessgroup: Failed to mount memory cgroup: No such file or directory
+
+Neither controller was in the defconfig -- 18.1 never needed them. Both have
+existed since well before 3.10, so this is a config gap rather than a kernel
+limitation, unlike the cgroup v2 problem in the same log.
+---
+ arch/arm64/configs/lineageos_ether_defconfig | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm64/configs/lineageos_ether_defconfig b/arch/arm64/configs/lineageos_ether_defconfig
+index 7dcc237a315..0201c01bed0 100644
+--- a/arch/arm64/configs/lineageos_ether_defconfig
++++ b/arch/arm64/configs/lineageos_ether_defconfig
+@@ -12,6 +12,13 @@ CONFIG_RCU_NOCB_CPU_ALL=y
+ CONFIG_IKCONFIG=y
+ CONFIG_CGROUPS=y
+ CONFIG_CGROUP_FREEZER=y
++# Android 13 libprocessgroup mounts blkio and memory cgroups during early init. Without these
++# it logs "Failed to mount blkio cgroup" / "Failed to mount memory cgroup" and cannot set up
++# the process groups ueventd and apexd-bootstrap depend on. Both controllers exist in 3.10;
++# they were simply never enabled here because 18.1 did not need them.
++CONFIG_MEMCG=y
++CONFIG_MEMCG_SWAP=y
++CONFIG_BLK_CGROUP=y
+ CONFIG_CPUSETS=y
+ CONFIG_CGROUP_CPUACCT=y
+ CONFIG_RESOURCE_COUNTERS=y

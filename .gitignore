@@ -1,0 +1,35 @@
+# ---- heavy build state: re-created by the forge, never committed ----
+/build_output/
+/lineage-robin/
+/ccache/
+/logs/
+out/
+
+# ---- build cruft ----
+*.log
+*.rej
+*.orig
+.DS_Store
+
+# ---- fetched prebuilts (see the relevant forge option's fetch.sh) — not vendored ----
+/prebuilt/*.apk
+
+# ---- Flashable artifacts staged for the phone (700 MB+ each) ----
+staging/
+
+# ---- Your own copy of the stock Nextbit ROM, needed for WITH_OEM builds (~1.2 GB).
+# Proprietary and huge; bootstrap auto-detects it in the working dir. Never commit it.
+Ether_Stock_ROM_*.zip
+
+# ---- local-only notes and history: kept on disk, not published ----
+/AGENTS.md
+archive/
+boot-logs*/
+diag/
+# How the work was done, as opposed to what the tree is. Useful to us, not to a reader of the repo.
+/PORT-LOG.md
+/VOLTE.md
+/PATCH-CONSOLIDATION.md
+
+# personal, per-checkout build settings (EXTRA_OPTIONS etc) -- never published
+/device.conf.local

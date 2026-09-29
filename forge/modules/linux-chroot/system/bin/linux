@@ -1,0 +1,4 @@
+#!/system/bin/sh
+# linux -- enter the Linux chroot. Mounts are set up idempotently on each call, so this is safe
+# to run repeatedly and after a reboot (nothing is mounted at boot; it is all on demand).
+exec /data/adb/modules/linux_chroot/scripts/lx-enter "$@"

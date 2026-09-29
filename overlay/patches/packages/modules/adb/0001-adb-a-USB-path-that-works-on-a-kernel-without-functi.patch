@@ -1,0 +1,332 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:26:27 -0400
+Subject: [PATCH] adb: a USB path that works on a kernel without functionfs AIO
+
+This device's 3.10 kernel has no functionfs AIO, so adbd's default connection type
+cannot work: it submits async reads that never complete and the daemon appears to
+hang with the device stuck in "unauthorized".
+
+Restores a blocking USB connection (UsbFfsBlockingConnection) and selects it when
+the kernel cannot do AIO, and makes that path treat a zero-length bulk read as a
+framing artifact rather than end-of-file. Both halves are needed: without the second,
+the blocking path added by the first drops the connection the moment the host sends
+a zero-length packet, which is exactly what it does between transfers.
+
+The connection is a BlockingConnection behind BlockingConnectionAdapter, like the
+TCP transport: reader and writer threads of its own, so a bulk write the host is
+not draining blocks only the writer and never the fdevent loop (an earlier shape
+blocked the caller of Connection::Write() and a host that stopped reading froze
+adbd, TCP included). Close() signals each thread that is inside a syscall and
+keeps signalling until it has left -- a single pthread_kill() can be eaten by the
+no-op handler between the closed check and the read(), which left the reader
+blocked and the destructor's join() hung. The handler goes in via sigaction()
+without SA_RESTART (bionic's signal() sets it, and the read that waits for
+FUNCTIONFS_ENABLE returns -ERESTARTSYS), and the I/O is
+unix_read_interruptible()/adb_writev(), because adb_read()/adb_write() are
+TEMP_FAILURE_RETRY and re-issue the call on EINTR themselves. This kernel's f_fs
+fails every endpoint read/write with ENODEV after a DISABLE until the files are
+re-opened, so the transport is torn down on the first failed read and
+usb_ffs_open_thread opens a fresh one for the next ENABLE.
+
+Was two patches, the second fixing code the first introduced in the same file.
+---
+ daemon/usb.cpp | 253 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 250 insertions(+), 3 deletions(-)
+
+diff --git a/daemon/usb.cpp b/daemon/usb.cpp
+index 6c3f735e..18e135f3 100644
+--- a/daemon/usb.cpp
++++ b/daemon/usb.cpp
+@@ -20,6 +20,7 @@
+ 
+ #include <errno.h>
+ #include <inttypes.h>
++#include <signal.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -32,10 +33,12 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <atomic>
+ #include <future>
+ #include <memory>
+ #include <mutex>
+ #include <optional>
++#include <thread>
+ #include <vector>
+ 
+ #include <asyncio/AsyncIO.h>
+@@ -51,6 +54,7 @@
+ #include "daemon/property_monitor.h"
+ #include "daemon/usb_ffs.h"
+ #include "sysdeps/chrono.h"
++#include "sysdeps/uio.h"
+ #include "transfer_id.h"
+ #include "transport.h"
+ #include "types.h"
+@@ -726,6 +730,240 @@ struct UsbFfsConnection : public Connection {
+     static constexpr int kInterruptionSignal = SIGUSR1;
+ };
+ 
++
++// Blocking FunctionFS connection, for kernels whose functionfs predates AIO.
++//
++// UsbFfsConnection above drives the bulk endpoints with io_submit(). FFS only
++// grew .aio_read/.aio_write in the 3.15 era; on an older kernel
++// ffs_epfile_operations has just .read/.write, so io_submit() returns EINVAL
++// and the transport is destroyed the instant it enumerates:
++//
++//   UsbFfs: connection terminated: failed to submit read: Invalid argument
++//
++// The host then sees a device that appears, reports "offline", and never
++// answers CNXN -- indistinguishable from an authorisation problem, but nothing
++// to do with keys. AOSP used to ship this fallback as usb_legacy.cpp, selected
++// by sys.usb.ffs.aio_compat, and dropped it when adb became a mainline module.
++// This restores the same idea under the same property name.
++//
++// It is a BlockingConnection behind BlockingConnectionAdapter, like the TCP
++// transport: the adapter owns a reader thread and a writer thread, so a bulk
++// write that the host is not draining blocks only the writer, never the fdevent
++// loop that calls Connection::Write() (an earlier version of this class blocked
++// the caller, and a host that stopped reading froze adbd -- TCP included).
++//
++// A blocking endpoint read()/write() is only interruptible by a signal. Close()
++// therefore signals the threads that are inside a syscall, and keeps signalling
++// until each one reports it has left: a single pthread_kill() can land between
++// the "are we closed" check and the read() and is then eaten by the no-op
++// handler, which is a reader that never exits and a destructor join() that never
++// returns -- adbd was wedged that way after the first USB re-enumeration.
++// The syscalls are unix_read_interruptible()/adb_writev(): adb_read()/adb_write()
++// are TEMP_FAILURE_RETRY and re-issue the call on EINTR, and bionic's signal()
++// would have installed the handler with SA_RESTART, either of which hides the
++// interruption from this code.
++//
++// FUNCTIONFS_DISABLE needs no event monitor here: the reader is always inside a
++// read(), this kernel's f_fs fails that read (ESHUTDOWN), marks the endpoint
++// files errored so every later read()/write() on them fails with ENODEV until
++// they are re-opened, and the adapter tears the transport down;
++// usb_ffs_open_thread then re-opens ep0 and the endpoints and a fresh connection
++// comes up on the next ENABLE. ep0 is still drained on its own thread so the
++// event queue cannot back up and UNBIND is logged, but nothing depends on it.
++struct UsbFfsBlockingConnection : public BlockingConnection {
++    UsbFfsBlockingConnection(unique_fd control, unique_fd read, unique_fd write,
++                             std::promise<void> destruction_notifier)
++        : destruction_notifier_(std::move(destruction_notifier)),
++          control_fd_(std::move(control)),
++          read_fd_(std::move(read)),
++          write_fd_(std::move(write)) {
++        LOG(INFO) << "UsbFfsBlockingConnection constructed (no-AIO fallback)";
++        static std::once_flag handler_once;
++        std::call_once(handler_once, []() {
++            // Not signal(): bionic's signal() sets SA_RESTART, and the endpoint read that
++            // waits for FUNCTIONFS_ENABLE returns -ERESTARTSYS, so the kernel would restart
++            // it transparently and the interrupt would never surface as EINTR.
++            struct sigaction sa = {};
++            sa.sa_handler = [](int) {};
++            sigemptyset(&sa.sa_mask);
++            sa.sa_flags = 0;
++            sigaction(kInterruptionSignal, &sa, nullptr);
++        });
++        StartEp0Monitor();
++    }
++
++    ~UsbFfsBlockingConnection() override {
++        LOG(INFO) << "UsbFfsBlockingConnection being destroyed";
++        Close();
++        if (monitor_thread_.joinable()) monitor_thread_.join();
++        control_fd_.reset();
++        read_fd_.reset();
++        write_fd_.reset();
++        destruction_notifier_.set_value();
++    }
++
++    // Called on the adapter's read thread.
++    bool Read(apacket* packet) override final {
++        if (!ReadFully(reader_, &packet->msg, sizeof(packet->msg))) return false;
++        if (packet->msg.data_length > MAX_PAYLOAD) {
++            LOG(ERROR) << "USB read: payload too large: " << packet->msg.data_length;
++            return false;
++        }
++        packet->payload.resize(packet->msg.data_length);
++        if (packet->msg.data_length &&
++            !ReadFully(reader_, packet->payload.data(), packet->payload.size())) {
++            return false;
++        }
++        LOG(DEBUG) << "USB read: " << dump_header(&packet->msg);
++        return true;
++    }
++
++    // Called on the adapter's write thread.
++    bool Write(apacket* packet) override final {
++        LOG(DEBUG) << "USB write: " << dump_header(&packet->msg);
++        if (!WriteFully(writer_, &packet->msg, sizeof(packet->msg))) return false;
++        if (!packet->payload.empty() &&
++            !WriteFully(writer_, packet->payload.data(), packet->payload.size())) {
++            return false;
++        }
++        return true;
++    }
++
++    bool DoTlsHandshake(RSA* key, std::string* auth_key) override final {
++        LOG(ERROR) << "TLS handshake is not supported on the blocking USB path";
++        return false;
++    }
++
++    // Must make concurrent Read()/Write() return; the adapter joins its threads right after.
++    void Close() override final {
++        if (closed_.exchange(true)) return;
++        LOG(INFO) << "UsbFfsBlockingConnection closing";
++        Interrupt(reader_);
++        Interrupt(writer_);
++        Interrupt(monitor_);
++    }
++
++    void Reset() override final { Close(); }
++
++  private:
++    // Matches USB_FFS_BULK_SIZE from the pre-AIO adbd. Reads are chunked because
++    // a single bulk transfer is bounded and a payload may span several.
++    static constexpr size_t kBulkChunk = 16384;
++    static constexpr int kInterruptionSignal = SIGUSR1;
++
++    // One per thread that can block in a syscall on our fds. in_syscall_ is set
++    // around the call so Close() can tell whether a signal is still needed.
++    struct Blocker {
++        std::atomic<bool> in_syscall{false};
++        std::atomic<pthread_t> tid{};
++    };
++
++    // Enter/leave a possibly-blocking syscall. Returns false if Close() already ran,
++    // so the caller bails without touching the fd.
++    bool Enter(Blocker& b) {
++        b.tid.store(pthread_self());
++        b.in_syscall.store(true);
++        if (closed_.load()) {
++            b.in_syscall.store(false);
++            return false;
++        }
++        return true;
++    }
++    void Leave(Blocker& b) { b.in_syscall.store(false); }
++
++    // Signal until the thread has left its syscall. Bounded only so a kernel that
++    // will not wake a sleeper (it should) produces a log line instead of a silent hang.
++    void Interrupt(Blocker& b) {
++        for (int i = 0; b.in_syscall.load(); ++i) {
++            pthread_kill(b.tid.load(), kInterruptionSignal);
++            if (i == 2000) {  // ~10s
++                LOG(ERROR) << "UsbFfsBlockingConnection: thread ignored " << i << " interrupts";
++            }
++            std::this_thread::sleep_for(5ms);
++        }
++    }
++
++    bool WriteFully(Blocker& b, const void* data, size_t len) {
++        const char* p = static_cast<const char*>(data);
++        while (len > 0) {
++            if (!Enter(b)) return false;
++            // adb_writev() is a bare writev(); adb_write() is TEMP_FAILURE_RETRY and
++            // would swallow the EINTR.
++            adb_iovec iov = {const_cast<char*>(p), len};
++            ssize_t rc = adb_writev(write_fd_, &iov, 1);
++            Leave(b);
++            if (rc < 0 && errno == EINTR) continue;  // Enter() returns false once closed
++            if (rc <= 0) {
++                if (!closed_) PLOG(ERROR) << "blocking USB write failed";
++                return false;
++            }
++            p += rc;
++            len -= rc;
++        }
++        return true;
++    }
++
++    bool ReadFully(Blocker& b, void* data, size_t len) {
++        char* p = static_cast<char*>(data);
++        // A bulk transfer whose length is an exact multiple of the endpoint's max
++        // packet size is terminated by a zero-length packet, which surfaces here as
++        // a 0-byte read. That is a framing marker, not an error or EOF: treating it
++        // as failure tore the transport down mid-transfer, which is why a large
++        // host->device push died while device->host pulls looked fine.
++        int zero_reads = 0;
++        while (len > 0) {
++            size_t want = std::min(kBulkChunk, len);
++            if (!Enter(b)) return false;
++            ssize_t rc = unix_read_interruptible(read_fd_, p, want);
++            Leave(b);
++            if (rc < 0 && errno == EINTR) continue;
++            if (rc == 0) {
++                // Guard against a genuinely dead endpoint spinning here forever.
++                if (++zero_reads > 64) {
++                    if (!closed_) LOG(ERROR) << "blocking USB read: endpoint stuck at EOF";
++                    return false;
++                }
++                continue;
++            }
++            if (rc < 0) {
++                if (!closed_) PLOG(ERROR) << "blocking USB read failed";
++                return false;
++            }
++            zero_reads = 0;
++            p += rc;
++            len -= rc;
++        }
++        return true;
++    }
++
++    void StartEp0Monitor() {
++        monitor_thread_ = std::thread([this]() {
++            adb_thread_setname("UsbFfs-blk-ep0");
++            while (!closed_) {
++                struct usb_functionfs_event event;
++                if (!Enter(monitor_)) break;
++                ssize_t rc = unix_read_interruptible(control_fd_, &event, sizeof(event));
++                Leave(monitor_);
++                if (rc < 0 && errno == EINTR) continue;
++                if (rc != sizeof(event)) {
++                    if (!closed_) PLOG(WARNING) << "ep0 read failed";
++                    break;
++                }
++                LOG(INFO) << "USB event: "
++                          << to_string(static_cast<usb_functionfs_event_type>(event.type));
++            }
++        });
++    }
++
++    std::atomic<bool> closed_{false};
++    Blocker reader_, writer_, monitor_;
++    std::thread monitor_thread_;
++    std::promise<void> destruction_notifier_;
++    unique_fd control_fd_;
++    unique_fd read_fd_;
++    unique_fd write_fd_;
++};
++
+ static void usb_ffs_open_thread() {
+     adb_thread_setname("usb ffs open");
+ 
+@@ -762,9 +1000,18 @@ static void usb_ffs_open_thread() {
+         transport->serial = "UsbFfs";
+         std::promise<void> destruction_notifier;
+         std::future<void> future = destruction_notifier.get_future();
+-        transport->SetConnection(std::make_unique<UsbFfsConnection>(
+-                std::move(control), std::move(bulk_out), std::move(bulk_in),
+-                std::move(destruction_notifier)));
++        // Kernels without FunctionFS AIO cannot service io_submit(); fall back to
++        // blocking reads and writes. Same property name AOSP's usb_legacy.cpp used.
++        if (android::base::GetBoolProperty("sys.usb.ffs.aio_compat", false)) {
++            transport->SetConnection(std::make_unique<BlockingConnectionAdapter>(
++                    std::make_unique<UsbFfsBlockingConnection>(
++                            std::move(control), std::move(bulk_out), std::move(bulk_in),
++                            std::move(destruction_notifier))));
++        } else {
++            transport->SetConnection(std::make_unique<UsbFfsConnection>(
++                    std::move(control), std::move(bulk_out), std::move(bulk_in),
++                    std::move(destruction_notifier)));
++        }
+         register_transport(transport);
+         future.wait();
+     }

@@ -1,0 +1,110 @@
+# device.conf — per-device configuration, read by every rom-forge script.
+#
+# Lives at the device repo root, beside forge/ and overlay/. Copy this file, fill it in, delete the
+# parts you do not need. The forge scripts `source` it, so keep it valid shell: KEY=value, no spaces
+# around `=`. See forge/README.md for the full contract.
+
+# ---- identity ----
+DEVICE=                  # <vendor>/<codename> — the path under device/
+DEVICE_CODENAME=         # lunch target suffix, and the codename in the zip name
+DEVICE_SLUG=             # docker image/container naming: aosp-<slug>
+VENDOR=                  # OEM vendor (informational)
+SOC=                     # SoC id, used to gate options that only suit some hardware
+
+# ---- base ----
+BRANCH=                  # e.g. lineage-22.2
+BASE_REF=                # upstream tracking ref, usually m/<BRANCH>
+LUNCH_TARGET=
+MANIFEST_URL=https://github.com/LineageOS/android.git
+
+# ---- build environment ----
+UBUNTU_VER=24.04         # 20.04 for LOS 18.1, 24.04 for 22.x and newer
+JDK_VER=21               # 11 for LOS 18.1, 21 for 22.x and newer
+
+# ---- device-specific patches ----
+# ONLY what is genuinely true of this phone — its device tree, its kernel. Anything that would make
+# sense on another device belongs in a forge option instead (forge/options/), where every device
+# gets it. apply-overlay discovers projects from overlay/patches/ itself; this list is what gets
+# reset to upstream before patches are applied.
+PATCHED_PROJECTS=""      # e.g. "device/<vendor>/<codename> kernel/<vendor>/<soc>"
+
+# ---- what goes into a build ----
+# An OPTION is one customization, carried by the forge and usable on any device. The switch name is
+# derived from the directory name: forge/options/nav-icons -> WITH_NAV_ICONS. A name with no
+# directory under forge/options/ is an error, not a silently ignored word.
+#
+# COMMON_OPTIONS are the options every PRESET on this device gets, so the preset rows only list what
+# differs between them. This applies to presets only: an ad-hoc OPTIONS="..." replaces the list
+# rather than adding to it, so that set is the whole set.
+# nav-icons on every preset: the artwork is ours, so it is part of the look, not an add-on.
+COMMON_OPTIONS="nav-icons"
+
+# One build command produces one image. A preset is a saved selection, so the combinations you
+# actually use do not get retyped: `PRESET=clean ./forge/bootstrap.sh`.
+# `libre` is the one release.sh will publish: no Google apps, nothing reclaimed from a manufacturer.
+PRESETS="
+  clean   tag=clean         options=
+  libre   tag=libre         options=fdroid,k9,kdeconnect,connectbot
+  full    tag=full          options=fdroid,k9,kdeconnect,connectbot,gapps,root
+"
+
+# ---- reclaiming a phone's own OEM assets (optional, niche) ----
+# The forge can pull a manufacturer's boot animation, wallpapers and sounds out of that phone's own
+# stock ROM. It currently understands one firmware family, so for most devices the answer is "not
+# yet". See forge/docs/OEM-ASSETS.md. Naming a pack here is what the `oem` option extracts.
+#OEM_ASSET_PACK=none
+#STOCK_ROM_GLOB="MyPhone_Stock_*.zip"
+#STOCK_ROM_URL=
+
+# ---- Android version (only needed for GApps, and only if BRANCH does not imply it) ----
+# GApps are Android-version specific and the wrong set installs silently: the build succeeds, the
+# apps run, they are simply built for another platform. The forge derives the version from BRANCH for
+# LineageOS branches and AOSP tags, and stops and asks for anything it does not recognise rather than
+# guessing.
+#ANDROID_VERSION=15       # 11, 12, 12.1, 13, 14, 15, 16 — note 12.1 (12L) is distinct
+
+# ---- optional download overrides ----
+#GAPPS_URL=               # a specific GApps zip; overrides the version-derived default
+# App options (fdroid, k9, kdeconnect, connectbot, fulguris, firefox, termoneplus, nextcloud,
+# nextcloud-core) fetch the
+# build F-Droid currently suggests, verified by signing certificate. Pin one to a versionCode only
+# to reproduce a release or hold back a bad update; anything not listed stays on latest.
+#FDROID_PINS="org.mozilla.fennec_fdroid=1550020 com.fsck.k9=39043"
+
+# ---- optional: sub-switches that narrow what an option does ----
+# These mean nothing on their own; they only limit an option this device has enabled.
+#
+#   WITH_LINUX_CGROUP_PATCH   the `linux` option's cgroup symlink patch needs a kernfs-based cgroup
+#                             implementation. Fine on 4.9 and 3.18; set false for 3.10.
+#   WITH_LINUX_FHANDLE        dockerd wants CONFIG_FHANDLE, but some devices' VINTF kernel
+#                             requirements forbid it. Set false where the build enforces that.
+#WITH_LINUX_CGROUP_PATCH=true
+# gapps without the Google app swaps: Play Store and GMS from MindTheGapps, Lineage's own
+# Calculator/Calendar/Clock/Contacts/Files/Messages/Phone. For an Android version NikGapps has
+# not released for. The build says so on every run; it is never inferred.
+#WITH_GAPPS_EXTRAS=false
+#WITH_LINUX_FHANDLE=true
+
+# ---- optional: vendored projects (no upstream left to sync) ----
+# Projects kept in this repo under vendored/ because upstream is gone. Re-installed on every run:
+# `repo sync --force-sync` prunes worktrees that are not manifest projects, so a vendored tree will
+# disappear otherwise. Each is git-initialised so it can also be a PATCHED_PROJECT.
+#   Format: "<src-under-device-repo>:<dest-under-AOSP> ..."
+#VENDORED_PROJECTS="vendored/device_<vendor>_<codename>:device/<vendor>/<codename>"
+
+# ---- signing ----
+# Not here: KEYS_DIR belongs in device.conf.local (gitignored), pointing at a directory outside
+# every repo made by forge/tools/make-keys.sh. Unset -> AOSP test keys, which release.sh refuses.
+# The same file is the place for a personal default option set, so `oem` or `root` never reach the
+# published config:
+#   device.conf.local:  KEYS_DIR=/home/me/keys/rom
+#                       EXTRA_OPTIONS="${EXTRA_OPTIONS-root}"   # an explicit empty env still wins
+
+# ---- releasing ----
+# forge/tools/release.sh publishes one preset (the first with neither gapps nor oem) as a GitHub
+# release, after auditing the image. See forge/docs/RELEASING.md.
+#RELEASE_NAME=            # release title; default is the codename. Checked against RELEASE_NAME_DENY
+#RELEASE_NO_RECOVERY=1    # A/B device with recovery inside boot.img: publish only the zip
+# release.sh refuses an image containing a file it cannot account for. Each sha256 listed here has
+# been looked at and cleared, with the reason. Never add one to silence an error you have not read.
+#RELEASE_AUDIT_ALLOW=""

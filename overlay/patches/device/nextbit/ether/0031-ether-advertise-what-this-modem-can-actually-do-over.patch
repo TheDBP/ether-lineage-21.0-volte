@@ -1,0 +1,170 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 16:55:19 -0400
+Subject: [PATCH] ether: advertise what this modem can actually do over IMS
+
+Three device-capability booleans, the carrier legs that gate them, and the CarrierConfig bundle for
+T-Mobile US. One patch, because they are one decision expressed in four files, and splitting them
+across the series made the end state unreadable: a reader had to hold four patches in their head to
+learn what one boolean ends up as.
+
+The device leg lives unqualified in values/config.xml and deliberately NOT under an mcc/mnc
+qualifier. It used to, and that was the wrong axis: ImsManager.isVolteEnabledByPlatform() ANDs the
+device leg with the carrier's carrier_volte_available_bool, so qualifying the device leg by carrier
+refused every network except the two we had directories for, before that network's own carrier config
+was ever consulted -- including carriers AOSP ships working VoLTE config for. Whether this hardware
+can do VoLTE does not depend on which SIM is inserted. Carrier permission is the carrier leg's job.
+
+Android also resolves those qualifiers from the SIM, not from the serving network. Mint runs on
+T-Mobile, so gsm.sim.operator.numeric reads 310240 while gsm.operator.numeric reads 310260, and a
+value placed only under mnc260 never applies to a Mint SIM. Both directories therefore carry the
+genuinely per-carrier legs, and only those.
+
+volte true. vt false: lib-imsvt.so imports IOMXObserver and IGraphicBufferAlloc among 61 unresolved
+symbols, platform interfaces deleted outright when OMX moved to HIDL/Codec2, so the engine cannot be
+shimmed back. False removes the carrier video-calling toggle and stops the framework requesting a VT
+capability at all.
+
+The carrier leg says the same: carrier_vt_available_bool is false too. ImsManager ANDs the two, so
+true there was inert, but a carrier config advertising a capability the device denies is a trap for
+whoever reads it next.
+
+wfc false, because it cannot work on this hardware and not because it was not tried. The framework
+side is complete and the modem's EFS is provisioned for iWLAN as fully as a handset that sells the
+feature, but the modem never attempts an ePDG tunnel, and a later modem build cannot be loaded: it
+asks PIL for a 100 MB relocatable region against a 90 MB modem_mem reservation that cannot grow,
+because peripheral_mem ends exactly where modem_mem begins. True here produces a toggle that appears
+and then fails every time, which is worse than no toggle. Full account in VOLTE-BRINGUP.md section 8.
+
+The structure stays wired so another device inherits it by flipping one boolean.
+---
+ .../res/res/values-mcc310-mnc240/config.xml   | 17 +++++++++
+ .../res/res/values-mcc310-mnc260/config.xml   | 17 +++++++++
+ .../base/core/res/res/values/config.xml       | 25 +++++++++++++
+ .../apps/CarrierConfig/res/xml/vendor.xml     | 35 +++++++++++++++++++
+ 4 files changed, 94 insertions(+)
+ create mode 100644 overlay/frameworks/base/core/res/res/values-mcc310-mnc240/config.xml
+ create mode 100644 overlay/frameworks/base/core/res/res/values-mcc310-mnc260/config.xml
+ create mode 100644 overlay/packages/apps/CarrierConfig/res/xml/vendor.xml
+
+diff --git a/overlay/frameworks/base/core/res/res/values-mcc310-mnc240/config.xml b/overlay/frameworks/base/core/res/res/values-mcc310-mnc240/config.xml
+new file mode 100644
+index 0000000..b18ed8e
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/values-mcc310-mnc240/config.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Mint Mobile (MCC 310 / MNC 240). Carrier-specific legs only.
++
++     The device-capability booleans (config_device_volte_available and friends) are NOT here: they
++     live unqualified in values/config.xml, because whether this modem can do VoLTE does not depend
++     on the SIM. Only genuinely per-carrier values belong in an mcc/mnc directory.
++
++     Worth keeping in mind for anything added here: Android resolves these qualifiers from the SIM,
++     not from the serving network. Mint runs on T-Mobile, so gsm.sim.operator.numeric reads 310240
++     while gsm.operator.numeric reads 310260, and a value placed only under mnc260 never applies to
++     a Mint SIM. That cost this port a long time when the device leg lived here. -->
++<resources>
++    <!-- legacy carrier leg some code paths still consult -->
++    <bool name="config_carrier_volte_available">true</bool>
++    <!-- displayed RAT during a VoLTE call; 3 = UMTS, T-Mobile's value -->
++    <integer name="config_volte_replacement_rat">3</integer>
++</resources>
+diff --git a/overlay/frameworks/base/core/res/res/values-mcc310-mnc260/config.xml b/overlay/frameworks/base/core/res/res/values-mcc310-mnc260/config.xml
+new file mode 100644
+index 0000000..a1fc5dc
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/values-mcc310-mnc260/config.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- T-Mobile US (MCC 310 / MNC 260). Carrier-specific legs only.
++
++     The device-capability booleans (config_device_volte_available and friends) are NOT here: they
++     live unqualified in values/config.xml, because whether this modem can do VoLTE does not depend
++     on the SIM. Only genuinely per-carrier values belong in an mcc/mnc directory.
++
++     Worth keeping in mind for anything added here: Android resolves these qualifiers from the SIM,
++     not from the serving network. Mint runs on T-Mobile, so gsm.sim.operator.numeric reads 310240
++     while gsm.operator.numeric reads 310260, and a value placed only under mnc260 never applies to
++     a Mint SIM. That cost this port a long time when the device leg lived here. -->
++<resources>
++    <!-- legacy carrier leg some code paths still consult -->
++    <bool name="config_carrier_volte_available">true</bool>
++    <!-- displayed RAT during a VoLTE call; 3 = UMTS, T-Mobile's value -->
++    <integer name="config_volte_replacement_rat">3</integer>
++</resources>
+diff --git a/overlay/frameworks/base/core/res/res/values/config.xml b/overlay/frameworks/base/core/res/res/values/config.xml
+index b58855e..1b90e6c 100644
+--- a/overlay/frameworks/base/core/res/res/values/config.xml
++++ b/overlay/frameworks/base/core/res/res/values/config.xml
+@@ -281,4 +281,29 @@
+          colon-separated *string*; a string-array is silently ignored. -->
+     <string name="config_defaultListenerAccessPackages" translatable="false">com.nextbit.robinled</string>
+ 
++    <!-- IMS device capability. This is the "can this hardware do it" leg, and it has nothing to do
++         with which SIM is inserted, so it is deliberately NOT under an mcc/mnc qualifier.
++
++         It used to be, and that was the wrong axis: ImsManager.isVolteEnabledByPlatform() ANDs this
++         with the carrier's carrier_volte_available_bool, so qualifying the device leg by carrier
++         meant every network except the two we had directories for was refused before its own
++         carrier config was ever consulted, including carriers AOSP ships working VoLTE config for.
++         Carrier permission is the carrier leg's job.
++
++         Video calling is off deliberately, not merely untested: lib-imsvt.so imports IOMXObserver
++         and IGraphicBufferAlloc, platform interfaces deleted outright when OMX moved to HIDL and
++         Codec2, among 61 unresolved symbols, and they are not shimmable. libshim_vtsurface exists
++         only so ImsVideoGlobals.init() can construct its singletons. False here removes the carrier
++         video calling toggle and stops the framework requesting a VT capability at all. -->
++    <bool name="config_device_volte_available">true</bool>
++    <bool name="config_device_vt_available">false</bool>
++    <!-- Wi-Fi calling is false because it cannot work on this hardware, not because it was not
++         tried. The framework side is complete and the modem's own EFS is provisioned for iWLAN as
++         fully as a handset that sells the feature, but the modem never attempts an ePDG tunnel, and a
++         later modem build cannot be loaded: it asks PIL for a 100 MB relocatable region against a
++         90 MB modem_mem reservation that cannot grow, because peripheral_mem ends exactly where it
++         begins. True here only produces a toggle that appears and then fails every time, which is
++         worse than no toggle. Full account in VOLTE-BRINGUP.md section 8. -->
++    <bool name="config_device_wfc_ims_available">false</bool>
++
+ </resources>
+diff --git a/overlay/packages/apps/CarrierConfig/res/xml/vendor.xml b/overlay/packages/apps/CarrierConfig/res/xml/vendor.xml
+new file mode 100644
+index 0000000..e3b221a
+--- /dev/null
++++ b/overlay/packages/apps/CarrierConfig/res/xml/vendor.xml
+@@ -0,0 +1,35 @@
++<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
++<!-- CarrierConfig overlay: enable VoLTE / VT / Wi-Fi Calling for T-Mobile US ONLY
++     (MCC 310 / MNC 260, includes Mint Mobile). The mcc+mnc filter scopes this bundle to that
++     network; every other carrier keeps its AOSP/assets defaults (the stock vendor.xml was an
++     empty <carrier_config_list/>). This is the authoritative A11 availability leg:
++     carrier_volte_available_bool is ANDed with config_device_volte_available in ImsManager.
++     Whether IMS actually registers is then up to the network — T-Mobile also gates IMS behind
++     a device whitelist, so this may still no-op on ether. Add more T-Mobile MNCs as sibling
++     <carrier_config> blocks if a SIM reports something other than 310/260. -->
++<carrier_config_list>
++    <carrier_config mcc="310" mnc="260">
++        <boolean name="carrier_volte_available_bool" value="true" />
++        <boolean name="carrier_vt_available_bool" value="false" />
++        <boolean name="carrier_wfc_ims_available_bool" value="false" />
++        <boolean name="enhanced_4g_lte_on_by_default_bool" value="true" />
++        <boolean name="editable_enhanced_4g_lte_bool" value="true" />
++        <boolean name="editable_wfc_mode_bool" value="false" />
++        <boolean name="carrier_volte_provisioning_required_bool" value="false" />
++        <boolean name="carrier_ims_gba_required_bool" value="false" />
++        <boolean name="carrier_volte_override_wfc_provisioning_bool" value="true" />
++        <int name="carrier_default_wfc_ims_mode_int" value="1" />
++        <int name="carrier_default_wfc_ims_roaming_mode_int" value="1" />
++
++        <!-- Wi-Fi calling needs IMS provisioning required for VOICE over IWLAN, or the modem is
++             never told the feature is provisioned and declines every attempt to configure it. That
++             is NOT set here, deliberately: it needs a nested <pbundle_as_map>, and this file is
++             parsed by PersistableBundle.restoreFromXml() with throwException=false, so a nested
++             bundle it cannot handle is dropped in silence. The XML compiles into the APK correctly
++             and simply never reaches the merged config; every scalar around it applies, which
++             makes it look like it worked.
++
++             It lives in frameworks/base instead, as the default for
++             Ims.KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE. See that patch. -->
++    </carrier_config>
++</carrier_config_list>

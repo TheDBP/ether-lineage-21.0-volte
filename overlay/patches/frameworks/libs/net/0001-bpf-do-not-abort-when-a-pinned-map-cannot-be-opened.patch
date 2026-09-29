@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 14:06:05 -0400
+Subject: [PATCH] bpf: do not abort when a pinned map cannot be opened
+
+This is what has been killing system_server on ether 20.0. The tombstone:
+
+  pid: 7388, tid: 7541, name: WifiHandlerThre  >>> system_server <<<
+  signal 6 (SIGABRT)
+  #00 abort+164                                              libc.so
+  #01 android::bpf::BpfMap<unsigned int, StatsValue>::BpfMap(char const*, unsigned int)+436
+  #02 android::bpf::bpfGetIfaceStats(char const*, Stats*)    libnetworkstats.so
+  #03 android::getIfaceStat(_JNIEnv*, _jclass*, _jstring*, int)
+
+msm8992 runs a 3.10 kernel with no BPF syscall at all, so mapRetrieve() can
+never succeed. The first time anything asks for per-interface network stats --
+in practice the WiFi handler thread, early in boot -- the constructor aborts
+and takes system_server with it. Fifteen restarts per boot, then RescueParty.
+
+The callers are already written to cope. bpfGetIfaceStats() does:
+
+    BpfMapRO<uint32_t, StatsValue> ifaceStatsMap(IFACE_STATS_MAP_PATH);
+    if (!ifaceStatsMap.isValid()) { ... return ret; }
+
+It simply never gets to run that check, because the constructor aborts first.
+So this leaves the fd invalid and lets the existing error handling do its job.
+
+Deliberately narrow: only the pinned-path constructor changes. The
+createMap() constructor still aborts, because a process that sets out to
+create a map (bpfloader) genuinely cannot continue without one, and that is
+not a path ether reaches. The key/value size checks are untouched -- they are
+already gated behind isAtLeastKernelVersion(4, 14, 0).
+
+Complements the existing Connectivity patch, which fixed the socket-tagging
+path (BpfHandler) but not the stats path. Same cost as documented there: no
+per-UID accounting, no BPF firewall. The real fix is still a kernel with eBPF.
+---
+ common/native/bpf_headers/include/bpf/BpfMap.h | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/common/native/bpf_headers/include/bpf/BpfMap.h b/common/native/bpf_headers/include/bpf/BpfMap.h
+index 2bee2ee4..1f707fe6 100644
+--- a/common/native/bpf_headers/include/bpf/BpfMap.h
++++ b/common/native/bpf_headers/include/bpf/BpfMap.h
+@@ -50,7 +50,14 @@ class BpfMap {
+     // flag must be within BPF_OBJ_FLAG_MASK, ie. 0, BPF_F_RDONLY, BPF_F_WRONLY
+     BpfMap<Key, Value>(const char* pathname, uint32_t flags) {
+         mMapFd.reset(mapRetrieve(pathname, flags));
+-        if (mMapFd < 0) abort();
++        if (mMapFd < 0) {
++            // A kernel with no BPF syscall can never open a pinned map, so this is
++            // an expected outcome on such devices rather than a programming error.
++            // Every caller of this constructor already tests isValid() and degrades
++            // gracefully; aborting takes the whole process down before they can.
++            ALOGW("BpfMap: pinned map %s unavailable; leaving map invalid", pathname);
++            return;
++        }
+         if (isAtLeastKernelVersion(4, 14, 0)) {
+             if (bpfGetFdKeySize(mMapFd) != sizeof(Key)) abort();
+             if (bpfGetFdValueSize(mMapFd) != sizeof(Value)) abort();

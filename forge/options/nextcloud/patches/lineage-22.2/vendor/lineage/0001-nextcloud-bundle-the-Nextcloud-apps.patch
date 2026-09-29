@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 17 Sep 2026 11:03:51 -0400
+Subject: [PATCH] nextcloud: bundle the Nextcloud apps
+
+vendor/lineage/prebuilts/nextcloud: the Nextcloud bundle (Files, Talk, NextPush, Deck, NC
+Passwords, Notes, DAVx5, Tasks), each installed unmodified, plus guarded PRODUCT_PACKAGES lines in
+config/common.mk. The APKs are fetched by the nextcloud option's fetch.sh, which also writes the
+Soong module file (Android.bp, gitignored): skip_preprocessed_apk_checks has to match what each
+release of each APK packs. An app whose APK packs its native libraries compressed gets them
+unpacked beside it by the fetcher and installed as <app>/lib/arm64/ by jni/Android.mk.
+---
+ config/common.mk                   |  8 ++++++++
+ prebuilts/nextcloud/.gitignore     |  7 +++++++
+ prebuilts/nextcloud/jni/Android.mk | 28 ++++++++++++++++++++++++++++
+ 3 files changed, 43 insertions(+)
+ create mode 100644 prebuilts/nextcloud/.gitignore
+ create mode 100644 prebuilts/nextcloud/jni/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 5265427b..160aa625 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -207,6 +207,14 @@ PRODUCT_PACKAGES += \
+ PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
+     ro.storage_manager.enabled=true
+ 
++# nextcloud option: the Nextcloud bundle. Each module is guarded on its fetched APK, so a build
++# without the option (no APKs) is unaffected; require.sh fails the build if the option is on and
++# any of them is missing. An app whose APK packs its native libraries compressed has them unpacked
++# beside it by the fetcher; those install as one module per library (prebuilts/nextcloud/jni).
++NEXTCLOUD_APPS := NextcloudFiles NextcloudTalk NextPush NextcloudDeck NCPasswords NextcloudNotes DAVx5 Tasks
++PRODUCT_PACKAGES += $(foreach a,$(NEXTCLOUD_APPS),$(if $(wildcard vendor/lineage/prebuilts/nextcloud/$(a).apk),$(a)))
++PRODUCT_PACKAGES += $(foreach a,$(NEXTCLOUD_APPS),$(patsubst %.so,$(a)_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/nextcloud/$(a)/lib/arm64-v8a/*.so))))
++
+ # These packages are excluded from user builds
+ PRODUCT_PACKAGES_DEBUG += \
+     procmem
+diff --git a/prebuilts/nextcloud/.gitignore b/prebuilts/nextcloud/.gitignore
+new file mode 100644
+index 00000000..de7ba163
+--- /dev/null
++++ b/prebuilts/nextcloud/.gitignore
+@@ -0,0 +1,7 @@
++# Everything here but jni/ is written by the nextcloud option (forge/prebuilt/fetch-nextcloud.sh):
++# the APKs, the native libraries it unpacks beside an APK that packs them compressed, and the Soong
++# module file, which it writes per fetch because skip_preprocessed_apk_checks must match each APK.
++*.apk
++*.apk.download
++/*/lib/
++/Android.bp
+diff --git a/prebuilts/nextcloud/jni/Android.mk b/prebuilts/nextcloud/jni/Android.mk
+new file mode 100644
+index 00000000..eebc87bb
+--- /dev/null
++++ b/prebuilts/nextcloud/jni/Android.mk
+@@ -0,0 +1,28 @@
++# Native libraries for any bundle app whose APK packs them compressed or unaligned:
++# fetch-nextcloud.sh unpacks lib/arm64-v8a/ to ../<App>/lib/arm64-v8a/ beside that APK. The APK is
++# installed byte for byte (see ../Android.bp, written by the same fetch) and PackageManager does not
++# extract native libraries for a bundled app, so these are installed as app/<App>/lib/arm64/. One
++# Make module per library: the build refuses ELF files in PRODUCT_COPY_FILES, and no Soong prebuilt
++# type installs under app/. common.mk adds the modules to PRODUCT_PACKAGES from the same wildcard.
++LOCAL_PATH := $(call my-dir)/..
++
++# $(1) app module name, $(2) library file name
++define nextcloud-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := $(1)_jni_$(2:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(2:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := $(1)/lib/arm64-v8a/$(2)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/app/$(1)/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach d,$(wildcard $(LOCAL_PATH)/*/lib/arm64-v8a),\
++  $(foreach lib,$(notdir $(wildcard $(d)/*.so)),\
++    $(eval $(call nextcloud-jni-module,$(notdir $(patsubst %/lib/arm64-v8a,%,$(d))),$(lib)))))
+-- 
+2.53.0
+

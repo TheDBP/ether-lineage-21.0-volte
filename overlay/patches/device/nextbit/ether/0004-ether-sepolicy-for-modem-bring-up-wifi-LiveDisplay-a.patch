@@ -1,0 +1,220 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: sepolicy for modem bring-up, wifi, LiveDisplay and
+ logging
+
+A 2016 vendor blob set against a 2022 policy: the denials are all of the same kind,
+where a vendor process reaches for something the newer policy no longer grants by
+default, and the failure is silent -- no modem, no LiveDisplay, no logs -- rather
+than an error.
+
+Covers rild and qmuxd for modem bring-up, netmgrd and wcnss_service property access,
+the LiveDisplay HAL reaching the post-processing daemon, and the file and property
+contexts those need. vendor_init's rule is the compilable subset: the original named
+init_service_status_private_prop, a type that does not exist on this branch, which
+fails the policy build outright.
+---
+ sepolicy/file.te                        |  8 ++++++++
+ sepolicy/hal_lineage_livedisplay_qti.te | 19 +++++++++++++++++++
+ sepolicy/mm-pp-daemon.te                |  5 +++++
+ sepolicy/netmgrd.te                     | 10 ++++++++++
+ sepolicy/property_contexts              |  9 +++++++++
+ sepolicy/qmuxd.te                       |  6 ++++++
+ sepolicy/qti.te                         |  2 ++
+ sepolicy/rild.te                        | 25 +++++++++++++++++++++++++
+ sepolicy/seapp_contexts                 |  1 +
+ sepolicy/vendor_init.te                 | 14 ++++++++++++++
+ sepolicy/wcnss_service.te               | 11 +++++++++++
+ 11 files changed, 110 insertions(+)
+ create mode 100644 sepolicy/hal_lineage_livedisplay_qti.te
+ create mode 100644 sepolicy/mm-pp-daemon.te
+ create mode 100644 sepolicy/netmgrd.te
+ create mode 100644 sepolicy/qmuxd.te
+ create mode 100644 sepolicy/qti.te
+ create mode 100644 sepolicy/wcnss_service.te
+
+diff --git a/sepolicy/file.te b/sepolicy/file.te
+index 5c4aa96..01349a0 100644
+--- a/sepolicy/file.te
++++ b/sepolicy/file.te
+@@ -3,3 +3,11 @@ type fpc_data_file, file_type, data_file_type, core_data_file_type;
+ type proc_baseband, fs_type;
+ type proc_bt_mac, fs_type;
+ type proc_kernel_sched, fs_type;
++
++# Labelled by the vendored qcom sepolicy-legacy but no longer defined by AOSP: our lineage-19.1 tree
++# (2026) is much newer than the build that fork was written against (2024), and these types were
++# dropped from system/sepolicy since. checkfc rejects a label whose type does not exist, so declare
++# them here with the attributes AOSP used (cf. sysfs_dm / proc_meminfo).
++type sysfs_disk_stat, fs_type, sysfs_type;
++# proc_dirty_ratio NOT declared here: the qcom policy already has it in common/file.te,
++# written as "type  proc_dirty_ratio" with two spaces -- which a "type <name>" regex misses.
+diff --git a/sepolicy/hal_lineage_livedisplay_qti.te b/sepolicy/hal_lineage_livedisplay_qti.te
+new file mode 100644
+index 0000000..47762f4
+--- /dev/null
++++ b/sepolicy/hal_lineage_livedisplay_qti.te
+@@ -0,0 +1,19 @@
++# LiveDisplay (legacymm) needs to reach the Qualcomm post-processing daemon.
++#
++# Without these, vendor.lineage.livedisplay@2.0-service-legacymm cannot connect and init restarts
++# it forever -- 61 times in one boot -- logging:
++#
++#   Failed to connect to PPDaemon socket server
++#   Can not initialize libmm-disp-apis.so (-1)
++#   avc: denied { write } name="pps" scontext=u:r:hal_lineage_livedisplay_qti:s0
++#                                     tcontext=u:object_r:pps_socket:s0
++#
++# lineage-19.1 supplied the equivalent via device/lineage/sepolicy/qcom/legacy-vendor, which 20.0
++# deleted along with its pre-UM platform support. Restored here as device policy instead.
++#
++# NOTE this does not block boot -- system_server gets well past it -- but a service respawning in a
++# tight loop wastes CPU and floods the log on a 2016 phone. Also note LiveDisplay being disabled by
++# default (the livedisplay-off feature sets config_defaultLiveDisplayMode to 0) does NOT stop the
++# HAL running: that flag only changes the default mode, while the service is still in
++# PRODUCT_PACKAGES and started by init.
++unix_socket_connect(hal_lineage_livedisplay_qti, pps, mm-pp-daemon)
+diff --git a/sepolicy/mm-pp-daemon.te b/sepolicy/mm-pp-daemon.te
+new file mode 100644
+index 0000000..e81f2da
+--- /dev/null
++++ b/sepolicy/mm-pp-daemon.te
+@@ -0,0 +1,5 @@
++# The post-processing daemon reads system properties at startup:
++#   avc: denied { read } name="u:object_r:default_prop:s0" scontext=u:r:mm-pp-daemon:s0
++#                                                          tcontext=u:object_r:default_prop:s0
++# Paired with the LiveDisplay socket rules in hal_lineage_livedisplay_qti.te.
++get_prop(mm-pp-daemon, default_prop)
+diff --git a/sepolicy/netmgrd.te b/sepolicy/netmgrd.te
+new file mode 100644
+index 0000000..6d8998e
+--- /dev/null
++++ b/sepolicy/netmgrd.te
+@@ -0,0 +1,10 @@
++# netmgrd cannot read default_prop on 20.0:
++#
++#   avc: denied { read } for comm="netmgrd" name="u:object_r:default_prop:s0"
++#        scontext=u:r:netmgrd:s0 tcontext=u:object_r:default_prop:s0
++#        tclass=file permissive=0
++#
++# Same cause as the LiveDisplay denial: lineage-19.1 supplied this through
++# device/lineage/sepolicy/qcom/legacy-vendor, which 20.0 deleted along with its
++# pre-UM platform support. Restored here as device policy.
++get_prop(netmgrd, default_prop)
+diff --git a/sepolicy/property_contexts b/sepolicy/property_contexts
+index 970b48f..c9e974f 100644
+--- a/sepolicy/property_contexts
++++ b/sepolicy/property_contexts
+@@ -1,2 +1,11 @@
+ audio.smartamp.init u:object_r:audio_smartamp_init_prop:s0
+ persist.vendor.timeadjust u:object_r:vendor_timekeep_prop:s0
++
++# Give the LE vendor-capabilities gate the same type as the other
++# bluetooth.core.* switches. Without an exact entry it falls through to the
++# generic 'bluetooth.' prefix and lands on bluetooth_prop, which the stack is
++# not allowed to read:
++#   W libc: Access denied finding property
++#           "bluetooth.core.le.vendor_capabilities.enabled"
++# so the gate silently defaulted to true and the APCF crash persisted.
++bluetooth.core.le.vendor_capabilities.enabled    u:object_r:bluetooth_config_prop:s0 exact bool
+diff --git a/sepolicy/qmuxd.te b/sepolicy/qmuxd.te
+new file mode 100644
+index 0000000..7bae3c9
+--- /dev/null
++++ b/sepolicy/qmuxd.te
+@@ -0,0 +1,6 @@
++# qmuxd is the QMI multiplexer every RIL request passes through. Denied its
++# configuration properties it cannot come up:
++#   avc: denied { read } scontext=u:r:qmuxd:s0 tcontext=u:object_r:default_prop:s0
++#   avc: denied { read } scontext=u:r:qmuxd:s0 tcontext=u:object_r:radio_prop:s0
++get_prop(qmuxd, default_prop)
++get_prop(qmuxd, radio_prop)
+diff --git a/sepolicy/qti.te b/sepolicy/qti.te
+new file mode 100644
+index 0000000..5fefcba
+--- /dev/null
++++ b/sepolicy/qti.te
+@@ -0,0 +1,2 @@
++# The qti daemon is denied default_prop like its siblings.
++get_prop(qti, default_prop)
+diff --git a/sepolicy/rild.te b/sepolicy/rild.te
+index 5b47622..e3987fe 100644
+--- a/sepolicy/rild.te
++++ b/sepolicy/rild.te
+@@ -1 +1,26 @@
+ dontaudit rild vendor_file:file ioctl;
++
++# --- modem bring-up: close the denials that block RIL ---------------------
++#
++# Cellular has never worked on this port, on 19.1 or 20.0. The modem (MPSS) is
++# never loaded at all -- adsp and venus come up via PIL, the mss node does not,
++# and the SMD packet channel then times out:
++#
++#   subsys-pil-tz ...lpass: adsp: Brought out of reset
++#   subsys-pil-tz ...venus: venus: Brought out of reset      <- no mss entry
++#   smd_pkt_open: wait on smd_pkt_dev id:0 allocation failed rc:-110
++#   QC-QMI: Unable to open port id /dev/smdcntl
++#
++# Several SELinux denials sit in that path, identical on both branches. They
++# are the same class as the netmgrd/wcnss ones -- 20.0 deleted
++# device/lineage/sepolicy/qcom/legacy-vendor, and 19.1 never had them either.
++#
++# NOT claiming these alone restore cellular. vendor.qcom.PeripheralManager also
++# fails to register on vndbinder, and there is no SIM in the device to test
++# with. These are real gaps worth closing regardless, and closing them is a
++# precondition for diagnosing what remains.
++
++# rild cannot read the property that names its vendor RIL library, so it never
++# loads libril-qc-qmi-1.so:
++#   avc: denied { read } comm="rild" name="u:object_r:vendor_rild_libpath_prop:s0"
++get_prop(rild, vendor_rild_libpath_prop)
+diff --git a/sepolicy/seapp_contexts b/sepolicy/seapp_contexts
+index a70928a..dc76f11 100644
+--- a/sepolicy/seapp_contexts
++++ b/sepolicy/seapp_contexts
+@@ -1,4 +1,5 @@
+ user=system seinfo=platform name=com.sony.timekeep domain=timekeep_app type=app_data_file
++user=system seinfo=platform name=com.nextbit.robinled domain=robinled_app type=app_data_file
+ # Why app_data_file and not system_app_data_file?
+ # Because some daemon needs access to /data/data/com.sony.{timekeep,qcrilam}
+ # This happens with system_app_data_file:
+diff --git a/sepolicy/vendor_init.te b/sepolicy/vendor_init.te
+index 48f02fc..57d9d14 100644
+--- a/sepolicy/vendor_init.te
++++ b/sepolicy/vendor_init.te
+@@ -1,3 +1,17 @@
+ allow vendor_init fpc_data_file:dir create_dir_perms;
+ 
+ allow vendor_init radio_data_file:file create_file_perms;
++
++# NOTE: init.target.rc has a trigger on init.svc.per_mgr (the peripheral manager that brings up the
++# modem), and init drops it at parse time:
++#   init: ParseTriggers() failed: unexported property trigger found: init.svc.per_mgr
++# There used to be a get_prop(vendor_init, init_service_status_private_prop) here to fix that. It
++# cannot work and it breaks the build outright:
++#   device/nextbit/ether/sepolicy/vendor_init.te:9:ERROR 'unknown type init_service_status_private_prop'
++# init.svc.* is a system_internal_prop, so the type does not exist in the vendor policy namespace
++# that this file compiles into -- there is nothing to grant. Reading it from vendor_init would mean
++# exporting the property on the system side, not adding a vendor rule. The modem does not come up
++# on this device anyway (the MPSS never loads), so nothing here is worth that.
++
++# copy_complete under the radio core data dir
++allow vendor_init radio_core_data_file:file create_file_perms;
+diff --git a/sepolicy/wcnss_service.te b/sepolicy/wcnss_service.te
+new file mode 100644
+index 0000000..da05963
+--- /dev/null
++++ b/sepolicy/wcnss_service.te
+@@ -0,0 +1,11 @@
++# cnss-daemon (the WCNSS/WiFi connectivity daemon) cannot read default_prop:
++#
++#   avc: denied { read } for comm="cnss-daemon" name="u:object_r:default_prop:s0"
++#        scontext=u:r:wcnss_service:s0 tcontext=u:object_r:default_prop:s0
++#        tclass=file permissive=0
++#
++# Same 20.0 legacy-vendor removal as netmgrd.te. Whether this is implicated in
++# WiFi failing DHCP is NOT established -- DHCP itself runs in the Java
++# NetworkStack, not here -- but a WiFi daemon being denied its own
++# configuration properties is worth closing regardless.
++get_prop(wcnss_service, default_prop)

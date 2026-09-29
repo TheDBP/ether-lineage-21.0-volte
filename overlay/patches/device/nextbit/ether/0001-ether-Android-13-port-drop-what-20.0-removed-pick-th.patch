@@ -1,0 +1,230 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 14:01:00 -0400
+Subject: [PATCH] ether: Android 13 port -- drop what 20.0 removed, pick the
+ OSS WCNSS client
+
+lineage-20.0 deleted or relocated things this device tree still asked for, and each
+one fails the build or the boot rather than degrading:
+
+  audio.a2dp.default        APEX-only on 13; naming it as a module no longer resolves
+  Snap / camera.msm8992     Snap is gone; the HAL module name is the survivor
+  cryptfshw QSEE service    removed from LineageOS
+  libhidltransport(.vendor) folded into libhidlbase; libhwbinder.vendor likewise
+  libcnefeatureconfig       no longer built on 13; cnd itself stays
+  the local libhidl shim    upstream now provides it
+  manifest.xml entries      for HALs that no longer exist
+
+BoardConfig gains WCNSS_QMI_OSS. On 19.1 the flag was unset and wcnss-service still
+took the open-source path, because its Android.mk fell back to it when QCPATH was
+empty. lineage-20.0 ships a rewritten Android.mk with no such fallback, so leaving
+the flag unset links libqmi_cci, libqmi_common_so and libmdmdetect -- proprietary
+libraries this tree does not have.
+---
+ BoardConfig.mk     | 24 ++++++++++++++++++++++++
+ device.mk          | 34 +++++++++++++++++++++++-----------
+ libhidl/Android.mk | 26 --------------------------
+ manifest.xml       | 36 ------------------------------------
+ 4 files changed, 47 insertions(+), 73 deletions(-)
+ delete mode 100644 libhidl/Android.mk
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 213a5c0..5593a0f 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -171,6 +171,19 @@ BOARD_WPA_SUPPLICANT_DRIVER      := NL80211
+ BOARD_WPA_SUPPLICANT_PRIVATE_LIB := lib_driver_cmd_qcwcn
+ 
+ TARGET_USES_QCOM_WCNSS_QMI       := true
++# Use the open-source (dlopen) WCNSS QMI client rather than linking the proprietary QMI
++# libraries. Despite the name, this selects the -DWCNSS_QMI_OSS + libdl path.
++#
++# On 19.1 this flag was unset and wcnss-service still took that same OSS path, because its
++# Android.mk fell back to it when QCPATH was empty (no proprietary Qualcomm source tree):
++#     ifneq ($(QCPATH),) ... else  -DWCNSS_QMI_OSS + libdl  endif
++# lineage-20.0 ships a rewritten wcnss-service/Android.mk that drops the QCPATH fallback, so
++# with the flag unset it unconditionally links libqmi_cci, libqmi_common_so and libmdmdetect
++# and the build dies at makefile parse:
++#     wcnss_service (EXECUTABLES android-arm64) missing libqmi_cci (SHARED_LIBRARIES ...)
++# Those three exist in vendor/nextbit as .so blobs but are not declared as build modules, and
++# never were -- 19.1 never needed them. Setting this reproduces the 19.1 outcome exactly.
++TARGET_PROVIDES_WCNSS_QMI        := true
+ TARGET_USES_WCNSS_MAC_ADDR_REV   := true
+ 
+ WIFI_AVOID_IFACE_RESET_MAC_CHANGE := true
+@@ -181,3 +194,14 @@ WPA_SUPPLICANT_VERSION           := VER_0_8_X
+ 
+ # Inherit from the proprietary version
+ include vendor/nextbit/ether/BoardConfigVendor.mk
++
++# This 3.10 kernel predates clang: its integrated assembler rejects the "\n->" marker DEFINE() emits
++# in include/linux/kbuild.h, so scripts/mod/devicetable-offsets.c fails on every DEVID() line.
++# TipzTeam did not need this because their kernel fork carried clang-compat patches; that kernel is
++# deleted (see PORT-LOG), so build with GCC as 18.1 did.
++TARGET_KERNEL_CLANG_COMPILE := false
++# BoardConfigKernel.mk passes HOSTCFLAGS on the kernel make COMMAND LINE, which overrides the kernel
++# Makefile; restate it here (appended later, so it wins) or scripts/dtc fails to link:
++#   ld.lld: error: duplicate symbol: yylloc
++TARGET_KERNEL_ADDITIONAL_FLAGS := HOSTCFLAGS="-fuse-ld=lld -fcommon"
++
+diff --git a/device.mk b/device.mk
+index 3edee37..78ab571 100644
+--- a/device.mk
++++ b/device.mk
+@@ -36,7 +36,6 @@ PRODUCT_PACKAGES += \
+     android.hardware.audio@6.0-impl \
+     android.hardware.audio.service \
+     android.hardware.audio.effect@6.0-impl \
+-    audio.a2dp.default \
+     audio_amplifier.msm8992 \
+     audio.primary.msm8992 \
+     audio.r_submix.default \
+@@ -79,12 +78,7 @@ PRODUCT_PACKAGES += \
+ PRODUCT_PACKAGES += \
+     android.hardware.camera.provider@2.4-impl \
+     android.hardware.camera.provider@2.4-service \
+-    camera.msm8992 \
+-    Snap
+-
+-# CryptfsHW
+-PRODUCT_PACKAGES += \
+-    vendor.qti.hardware.cryptfshw@1.0-service-qti.qsee
++    camera.msm8992
+ 
+ # Display
+ PRODUCT_PACKAGES += \
+@@ -142,9 +136,7 @@ PRODUCT_ENFORCE_VINTF_MANIFEST_OVERRIDE := true
+ 
+ PRODUCT_PACKAGES += \
+     libhidltransport \
+-    libhidltransport.vendor \
+-    libhwbinder \
+-    libhwbinder.vendor
++    libhwbinder
+ 
+ # Init
+ PRODUCT_PACKAGES += \
+@@ -267,7 +259,6 @@ PRODUCT_PACKAGES += \
+ PRODUCT_PACKAGES += \
+     android.hidl.base@1.0 \
+     android.hidl.manager@1.0 \
+-    libcnefeatureconfig \
+     librmnetctl \
+     libxml2
+ 
+@@ -333,3 +324,24 @@ PRODUCT_COPY_FILES += \
+ 
+ # Call the proprietary setup
+ $(call inherit-product, vendor/nextbit/ether/ether-vendor.mk)
++
++# ---------------------------------------------------------------------------
++
++# This kernel's functionfs has no AIO: ffs_epfile_operations carries only
++# .read/.write, so adbd's io_submit() returns EINVAL and the USB transport is
++# destroyed the moment it enumerates. The host then sees a device that appears,
++# reports "offline" and never answers CNXN -- which looks exactly like an adb
++# authorisation problem and is not one.
++#
++# Selects the blocking read/write path in daemon/usb.cpp. Property name and
++# semantics match AOSP's old usb_legacy.cpp, and it is still declared in
++# system/sepolicy property_contexts as an exact bool.
++PRODUCT_PROPERTY_OVERRIDES += sys.usb.ffs.aio_compat=1
++
++# The WCNSS controller answers vendor HCI commands with only the OCF, dropping
++# the OGF, which trips HciLayer's strict opcode match and aborts the stack on
++# every Bluetooth enable:
++#   assertion 'waiting_command_ == op_code' failed -
++#     Waiting for 0xfd57 (LE_ADV_FILTER), got 0x157 (Unknown OpCode: 343)
++# Skipping the vendor capabilities query stops the stack from ever issuing APCF.
++PRODUCT_PROPERTY_OVERRIDES += bluetooth.core.le.vendor_capabilities.enabled=false
+diff --git a/libhidl/Android.mk b/libhidl/Android.mk
+deleted file mode 100644
+index a03a674..0000000
+--- a/libhidl/Android.mk
++++ /dev/null
+@@ -1,26 +0,0 @@
+-#
+-# Copyright (C) 2017 The LineageOS Project
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#      http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-include $(CLEAR_VARS)
+-LOCAL_MODULE := android.hidl.base@1.0
+-LOCAL_MODULE_TAGS := optional
+-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+-include $(BUILD_SHARED_LIBRARY)
+-
+-include $(CLEAR_VARS)
+-LOCAL_MODULE := android.hidl.manager@1.0
+-LOCAL_MODULE_TAGS := optional
+-LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+-include $(BUILD_SHARED_LIBRARY)
+diff --git a/manifest.xml b/manifest.xml
+index ce771dd..b33b639 100644
+--- a/manifest.xml
++++ b/manifest.xml
+@@ -155,15 +155,6 @@
+             <instance>slot1</instance>
+         </interface>
+     </hal>
+-    <hal format="hidl">
+-        <name>android.hardware.radio.deprecated</name>
+-        <transport>hwbinder</transport>
+-        <version>1.0</version>
+-        <interface>
+-            <name>IOemHook</name>
+-            <instance>slot1</instance>
+-        </interface>
+-    </hal>
+     <hal format="hidl">
+         <name>android.hardware.sensors</name>
+         <transport arch="32+64">passthrough</transport>
+@@ -182,15 +173,6 @@
+             <instance>default</instance>
+         </interface>
+     </hal>
+-    <hal format="hidl">
+-        <name>com.qualcomm.qti.dpm.api</name>
+-        <transport>hwbinder</transport>
+-        <version>1.0</version>
+-        <interface>
+-            <name>IdpmQmi</name>
+-            <instance>dpmQmiService</instance>
+-        </interface>
+-    </hal>
+     <hal format="hidl">
+         <name>com.quicinc.cne.api</name>
+         <transport>hwbinder</transport>
+@@ -234,22 +216,4 @@
+             <instance>default</instance>
+         </interface>
+     </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.data.latency</name>
+-        <transport>hwbinder</transport>
+-        <version>1.0</version>
+-        <interface>
+-            <name>ILinkLatency</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.qti.hardware.cryptfshw</name>
+-        <transport>hwbinder</transport>
+-        <version>1.0</version>
+-        <interface>
+-            <name>ICryptfsHw</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+ </manifest>

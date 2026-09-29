@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MindTheGapps: the GApps base for this build. It supplies GMS Core and the Play Store, which
+     NikGapps does not replace, and it is built from source by this build rather than injected as a
+     prebuilt.
+
+     This lives in the gapps OPTION, not in a device repo, because every device that enables gapps
+     needs it and none of them need a different one. When it was copied per repo, ether 20.0 was the
+     one branch that never got a copy, so WITH_GAPPS there produced an image with no GMS at all and
+     nothing said so.
+
+     BRANCH-SCOPED, like patches: revision cinnamonbun is Android 17, taken from that branch's own
+     build/gapps.sh (ANDROIDV=17.0.0) rather than from the order of the dessert names. -->
+<manifest>
+  <remote name="mindthegapps" fetch="https://gitlab.com/MindTheGapps/" />
+  <project path="vendor/gapps" name="vendor_gapps" revision="cinnamonbun" remote="mindthegapps" clone-depth="1" />
+</manifest>

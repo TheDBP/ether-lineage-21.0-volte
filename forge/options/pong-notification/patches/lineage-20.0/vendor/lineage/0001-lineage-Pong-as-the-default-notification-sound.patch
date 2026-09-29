@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 25 Sep 2026 02:00:00 -0400
+Subject: [PATCH] lineage: Pong as the default notification sound
+
+Pong instead of Argon as the default notification sound.
+
+Done as a patch and not as a property, which is the whole point of this file:
+vendor/lineage sets ro.config.notification_sound in PRODUCT_PRODUCT_PROPERTIES,
+and setting the same name again from vendor/extra/product.mk is a DUPLICATE
+sysprop assignment in the same partition. post_process_props.py rejects that and
+the build dies. ro.* immutability -- first value wins -- is a RUNTIME property and
+never gets a chance to apply, which is the trap: the option looks correct and
+fails at build time.
+
+So change the value at its one source instead.
+
+---
+--- a/config/common_mobile.mk
++++ b/config/common_mobile.mk
+@@ -9,7 +9,7 @@
+ 
+ # Default notification/alarm sounds
+ PRODUCT_PRODUCT_PROPERTIES += \
+-    ro.config.notification_sound=Argon.ogg \
++    ro.config.notification_sound=Pong.ogg \
+     ro.config.alarm_alert=Hassium.ogg
+ 
+ # Apps

@@ -1,0 +1,241 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 17:32:49 -0400
+Subject: [PATCH] msm8992: power the flash chip's own I/O rail so the torch
+ works without a camera
+
+MSM_CAMERA_LED_INIT on this board fails with -110:
+
+    msm_cci_i2c_write: wait_for_completion_timeout 681
+    msm_cci_flush_queue:113 wait timeout
+    msm_camera_cci_i2c_write_table: line 217 rc = -110
+    msm_flash_led_init:224 failed
+
+CCI itself is fine -- there is no cci_init failure, so the GDSC, the clocks and the CCI reset all
+came up. What fails is the first i2c write to the LM3646, and it fails because the chip is not
+powered: pm8994_lvs1, which is cam_vio, sits at enable 0 use_count 0 whenever no camera is open.
+
+The rail is declared only on the rear sensor node, which also owns the flash via
+qcom,led-flash-src. So the chip is powered exactly when a camera session is open and at no other
+time, and msm_led_i2c_trigger.c has no regulator handling at all -- it assumes the chip is already
+up, which for a flash driven from the camera pipeline it always was. That is why the stock ROM
+exposed no torch API and ran the flashlight through the camera.
+
+So: let the flash node declare its own rails, parse them, and bring them up in
+msm_flash_led_init() before CCI, dropping them in msm_flash_led_release(). The regulator core
+refcounts, so naming the same supply the sensor uses costs nothing while a session holds it. A
+flash node that declares no rails parses to num_vreg 0 and behaves exactly as before.
+
+An unpowered i2c slave does not NACK -- the transfer simply never completes and surfaces as a
+queue timeout, which is why this reads as a bus fault rather than a power one.
+
+The regulator count is checked in the caller rather than left to msm_camera_get_dt_vreg_data():
+that helper assigns of_property_count_strings(), which returns -EINVAL when the property is
+absent, into a uint32_t, so an unguarded call on a node without regulators asks for a ~4G-element
+kzalloc and returns -ENOMEM. Calling it unguarded would fail probe on every board that does not
+need any of this.
+
+Both the dvt/pvt and the evt camera dtsi carry the node, so both get the supply.
+---
+ .../msm8992-camera-sensor-mtp-nbq-evt.dtsi    | 10 +++
+ .../nbq/msm8992-camera-sensor-mtp-nbq.dtsi    | 10 +++
+ .../camera_v2/sensor/flash/msm_led_flash.h    |  5 ++
+ .../sensor/flash/msm_led_i2c_trigger.c        | 86 +++++++++++++++++++
+ 4 files changed, 111 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq-evt.dtsi b/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq-evt.dtsi
+index d2ec90382ff..50a9fc5a8d3 100644
+--- a/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq-evt.dtsi
++++ b/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq-evt.dtsi
+@@ -31,6 +31,16 @@
+ 					  "FLASH_NOW";
+ 		qcom,max-current = <1200 1200>;
+ 		qcom,max-duration = <1600 1600>;
++		/* The LM3646's I/O rail. It is the same supply the rear sensor declares, and the
++		 * regulator core refcounts, so naming it here costs nothing while a camera session
++		 * holds it -- and without it nothing powers the chip when there is no session, so
++		 * every CCI transfer to it times out. lvs1 is a switch: 0/0/0 like the sensor node. */
++		cam_vio-supply = <&pm8994_lvs1>;
++		qcom,cam-vreg-name = "cam_vio";
++		qcom,cam-vreg-type = <0>;
++		qcom,cam-vreg-min-voltage = <0>;
++		qcom,cam-vreg-max-voltage = <0>;
++		qcom,cam-vreg-op-mode = <0>;
+ 	};
+ 
+ 	actuator0: qcom,actuator@0 {
+diff --git a/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq.dtsi b/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq.dtsi
+index 2ae6607e08b..9a56c3681ac 100644
+--- a/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq.dtsi
++++ b/arch/arm64/boot/dts/fih/nbq/msm8992-camera-sensor-mtp-nbq.dtsi
+@@ -31,6 +31,16 @@
+ 					  "FLASH_NOW";
+ 		qcom,max-current = <1200 1200>;
+ 		qcom,max-duration = <1600 1600>;
++		/* The LM3646's I/O rail. It is the same supply the rear sensor declares, and the
++		 * regulator core refcounts, so naming it here costs nothing while a camera session
++		 * holds it -- and without it nothing powers the chip when there is no session, so
++		 * every CCI transfer to it times out. lvs1 is a switch: 0/0/0 like the sensor node. */
++		cam_vio-supply = <&pm8994_lvs1>;
++		qcom,cam-vreg-name = "cam_vio";
++		qcom,cam-vreg-type = <0>;
++		qcom,cam-vreg-min-voltage = <0>;
++		qcom,cam-vreg-max-voltage = <0>;
++		qcom,cam-vreg-op-mode = <0>;
+ 	};
+ 
+ 	actuator0: qcom,actuator@0 {
+diff --git a/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_flash.h b/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_flash.h
+index 9edc6b02103..66c5ea7a97c 100644
+--- a/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_flash.h
++++ b/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_flash.h
+@@ -42,6 +42,8 @@ struct msm_led_flash_reg_t {
+ 	struct msm_camera_i2c_reg_setting *high_setting;
+ };
+ 
++#define MSM_LED_FLASH_MAX_VREG 4
++
+ struct msm_led_flash_ctrl_t {
+ 	struct msm_camera_i2c_client *flash_i2c_client;
+ 	struct msm_sd_subdev msm_sd;
+@@ -69,6 +71,9 @@ struct msm_led_flash_ctrl_t {
+ 	enum msm_camera_led_config_t led_state;
+ 	uint32_t subdev_id;
+ 	struct msm_pinctrl_info pinctrl_info;
++	/* Regulators declared by the flash node itself. Boards where the flash chip's rails belong
++	 * to the camera sensor node leave this empty and behave exactly as before. */
++	struct regulator *flash_reg_ptr[MSM_LED_FLASH_MAX_VREG];
+ };
+ 
+ int msm_flash_i2c_probe(struct i2c_client *client,
+diff --git a/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_i2c_trigger.c b/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_i2c_trigger.c
+index fb99acd8127..b7e7b1458e7 100644
+--- a/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_i2c_trigger.c
++++ b/drivers/media/platform/msm/camera_v2/sensor/flash/msm_led_i2c_trigger.c
+@@ -16,6 +16,7 @@
+ #include <linux/module.h>
+ #include "msm_led_flash.h"
+ #include "msm_camera_io_util.h"
++#include "msm_camera_dt_util.h"
+ #include "../msm_sensor.h"
+ #include "msm_led_flash.h"
+ #include "../cci/msm_cci.h"
+@@ -154,6 +155,53 @@ static int msm_flash_pinctrl_init(struct msm_led_flash_ctrl_t *ctrl)
+ }
+ 
+ 
++/* The device the flash node hangs off: a platform device on CCI boards, an i2c client otherwise.
++ * regulator_get() needs it to resolve the <name>-supply phandle on that node. */
++static struct device *msm_flash_dev(struct msm_led_flash_ctrl_t *fctrl)
++{
++	if (fctrl->flash_device_type == MSM_CAMERA_PLATFORM_DEVICE)
++		return &fctrl->pdev->dev;
++	if (fctrl->flash_i2c_client && fctrl->flash_i2c_client->client)
++		return &fctrl->flash_i2c_client->client->dev;
++	return NULL;
++}
++
++static int msm_flash_vreg_set(struct msm_led_flash_ctrl_t *fctrl, int on)
++{
++	struct msm_camera_power_ctrl_t *power_info = &fctrl->flashdata->power_info;
++	struct device *dev = msm_flash_dev(fctrl);
++	int rc;
++
++	if (power_info->num_vreg <= 0 || !dev)
++		return 0;
++
++	if (on) {
++		rc = msm_camera_config_vreg(dev, power_info->cam_vreg,
++			power_info->num_vreg, NULL, 0, fctrl->flash_reg_ptr, 1);
++		if (rc < 0) {
++			pr_err("%s: flash regulator config failed %d\n", __func__, rc);
++			return rc;
++		}
++		rc = msm_camera_enable_vreg(dev, power_info->cam_vreg,
++			power_info->num_vreg, NULL, 0, fctrl->flash_reg_ptr, 1);
++		if (rc < 0) {
++			pr_err("%s: flash regulator enable failed %d\n", __func__, rc);
++			msm_camera_config_vreg(dev, power_info->cam_vreg,
++				power_info->num_vreg, NULL, 0,
++				fctrl->flash_reg_ptr, 0);
++			return rc;
++		}
++		/* The chip needs its I/O rail settled before it will ACK on the bus. */
++		usleep_range(1000, 2000);
++	} else {
++		msm_camera_enable_vreg(dev, power_info->cam_vreg,
++			power_info->num_vreg, NULL, 0, fctrl->flash_reg_ptr, 0);
++		msm_camera_config_vreg(dev, power_info->cam_vreg,
++			power_info->num_vreg, NULL, 0, fctrl->flash_reg_ptr, 0);
++	}
++	return 0;
++}
++
+ int msm_flash_led_init(struct msm_led_flash_ctrl_t *fctrl)
+ {
+ 	int rc = 0;
+@@ -168,12 +216,19 @@ int msm_flash_led_init(struct msm_led_flash_ctrl_t *fctrl)
+ 		pr_err("%s:%d mux install\n", __func__, __LINE__);
+ 	}
+ 
++	/* Power the chip before the bus: an unpowered slave does not NACK, it simply never
++	 * completes, and the transfer surfaces as -ETIMEDOUT from the CCI queue. */
++	rc = msm_flash_vreg_set(fctrl, 1);
++	if (rc < 0)
++		return rc;
++
+ 	/* CCI Init */
+ 	if (fctrl->flash_device_type == MSM_CAMERA_PLATFORM_DEVICE) {
+ 		rc = fctrl->flash_i2c_client->i2c_func_tbl->i2c_util(
+ 			fctrl->flash_i2c_client, MSM_CCI_INIT);
+ 		if (rc < 0) {
+ 			pr_err("cci_init failed\n");
++			msm_flash_vreg_set(fctrl, 0);
+ 			return rc;
+ 		}
+ 	}
+@@ -286,6 +341,10 @@ int msm_flash_led_release(struct msm_led_flash_ctrl_t *fctrl)
+ 			pr_err("cci_deinit failed\n");
+ 	}
+ 
++	/* Rail last, and unconditionally: the regulator core refcounts, so dropping it here cannot
++	 * disturb a camera session that is holding the same supply. */
++	msm_flash_vreg_set(fctrl, 0);
++
+ 	return 0;
+ }
+ 
+@@ -436,6 +495,33 @@ static int32_t msm_led_get_dt_data(struct device_node *of_node,
+ 		rc = 0;
+ 	}
+ 
++	/* Regulators belonging to the flash node itself. On boards where the flash chip's rails are
++	 * declared only on the camera sensor node there is nothing to power it outside a camera
++	 * session, and an i2c/CCI transfer to it simply times out. A node that declares no rails
++	 * parses to num_vreg 0 and behaves exactly as before.
++	 *
++	 * The count is checked here rather than left to msm_camera_get_dt_vreg_data(): that helper
++	 * assigns of_property_count_strings() -- which returns -EINVAL when the property is absent --
++	 * into a uint32_t, so a node without the property asks it for a ~4G-element kzalloc and gets
++	 * -ENOMEM back. Calling it unguarded would fail probe on every board that does not need this.
++	 */
++	if (of_property_count_strings(of_node, "qcom,cam-vreg-name") > 0) {
++		rc = msm_camera_get_dt_vreg_data(of_node,
++			&power_info->cam_vreg, &power_info->num_vreg);
++		if (rc < 0) {
++			pr_err("%s:%d failed to parse flash regulators\n",
++				__func__, __LINE__);
++			goto ERROR1;
++		}
++		if (power_info->num_vreg > MSM_LED_FLASH_MAX_VREG) {
++			pr_err("%s:%d flash declares %d regulators, max %d\n",
++				__func__, __LINE__, power_info->num_vreg,
++				MSM_LED_FLASH_MAX_VREG);
++			rc = -EINVAL;
++			goto ERROR1;
++		}
++	}
++
+ 	fctrl->pinctrl_info.use_pinctrl = false;
+ 	fctrl->pinctrl_info.use_pinctrl = of_property_read_bool(of_node,
+ 						"qcom,enable_pinctrl");

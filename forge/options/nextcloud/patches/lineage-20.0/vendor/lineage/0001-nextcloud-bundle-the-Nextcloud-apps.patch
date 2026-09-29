@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 17 Sep 2026 11:02:54 -0400
+Subject: [PATCH] nextcloud: bundle the Nextcloud apps
+
+vendor/lineage/prebuilts/nextcloud: one BUILD_PREBUILT module per app (Files, Talk, NextPush, Deck,
+NC Passwords, Notes, DAVx5, Tasks), installed unmodified through the do_not_alter_apk path, plus a
+guarded PRODUCT_PACKAGES line in config/common.mk. The APKs are fetched by the nextcloud option's
+fetch.sh; each module is a no-op without its APK. An app whose APK packs its native libraries
+compressed gets them unpacked beside it by the fetcher and installed as <app>/lib/arm64/.
+---
+ config/common.mk               |  5 +++++
+ prebuilts/nextcloud/.gitignore |  4 ++++
+ prebuilts/nextcloud/Android.mk | 38 ++++++++++++++++++++++++++++++++++
+ 3 files changed, 47 insertions(+)
+ create mode 100644 prebuilts/nextcloud/.gitignore
+ create mode 100644 prebuilts/nextcloud/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 985e611c..ff351e41 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -178,6 +178,11 @@ PRODUCT_PACKAGES += \
+ PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
+     ro.storage_manager.enabled=true
+ 
++# nextcloud option: the Nextcloud bundle. Each module is guarded on its fetched APK, so a build
++# without the option (no APKs) is unaffected; require.sh fails the build if the option is on and
++# any of them is missing.
++PRODUCT_PACKAGES += $(foreach a,NextcloudFiles NextcloudTalk NextPush NextcloudDeck NCPasswords NextcloudNotes DAVx5 Tasks,$(if $(wildcard vendor/lineage/prebuilts/nextcloud/$(a).apk),$(a)))
++
+ # These packages are excluded from user builds
+ PRODUCT_PACKAGES_DEBUG += \
+     procmem
+diff --git a/prebuilts/nextcloud/.gitignore b/prebuilts/nextcloud/.gitignore
+new file mode 100644
+index 00000000..525079bc
+--- /dev/null
++++ b/prebuilts/nextcloud/.gitignore
+@@ -0,0 +1,4 @@
++# Fetched by the nextcloud option (forge/prebuilt/fetch-nextcloud.sh); never committed.
++*.apk
++*.apk.download
++/*/lib/
+diff --git a/prebuilts/nextcloud/Android.mk b/prebuilts/nextcloud/Android.mk
+new file mode 100644
+index 00000000..d2624382
+--- /dev/null
++++ b/prebuilts/nextcloud/Android.mk
+@@ -0,0 +1,38 @@
++LOCAL_PATH := $(call my-dir)
++# The Nextcloud bundle (nextcloud option). Every APK here is PRESIGNED by its upstream, fetched
++# signer-verified at sync time by forge/prebuilt/fetch-nextcloud.sh, and gitignored, never
++# committed. A module is defined only when its APK is present; see config/common.mk.
++#
++# Ship each APK byte for byte. Without LOCAL_SDK_VERSION the build takes the rewriting path and
++# uncompresses the embedded libraries and dex, which invalidates the whole-file v2 signature;
++# PackageManager then rejects the package at boot scan, silently. Setting it selects
++# do_not_alter_apk: copy, then check only. Most of these ship their dex compressed, so that check
++# needs the build/make patch that makes it a warning (the option's require.sh verifies it is
++# applied).
++#
++# The <uses-library> check is off: the APKs are whatever F-Droid's current build is at fetch time,
++# so their manifests cannot be mirrored in LOCAL_OPTIONAL_USES_LIBRARIES here. The check guards
++# dexpreopt, which is off for these modules anyway.
++define nextcloud-app
++ifneq ($$(wildcard $$(LOCAL_PATH)/$(1).apk),)
++include $$(CLEAR_VARS)
++LOCAL_MODULE := $(1)
++LOCAL_MODULE_TAGS := optional
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := $$(COMMON_ANDROID_PACKAGE_SUFFIX)
++LOCAL_BUILT_MODULE_STEM := package.apk
++LOCAL_CERTIFICATE := PRESIGNED
++LOCAL_SDK_VERSION := current
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_SRC_FILES := $(1).apk
++# PackageManager never extracts native libraries for a bundled system app and the linker cannot
++# dlopen a compressed zip entry, so for an APK that packs them compressed fetch-nextcloud.sh unpacks
++# lib/arm64-v8a/ beside it, and these install as <app>/lib/arm64/*.so. Empty for the others.
++LOCAL_PREBUILT_JNI_LIBS := $$(patsubst $$(LOCAL_PATH)/%,%,$$(wildcard $$(LOCAL_PATH)/$(1)/lib/arm64-v8a/*.so))
++LOCAL_PRODUCT_MODULE := true
++LOCAL_DEX_PREOPT := false
++include $$(BUILD_PREBUILT)
++endif
++endef
++
++$(foreach a,NextcloudFiles NextcloudTalk NextPush NextcloudDeck NCPasswords NextcloudNotes DAVx5 Tasks,$(eval $(call nextcloud-app,$(a))))
+-- 
+2.53.0
+

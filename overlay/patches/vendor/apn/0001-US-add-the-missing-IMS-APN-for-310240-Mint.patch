@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 23 Sep 2026 21:48:42 -0400
+Subject: [PATCH] US: add the missing IMS APN for 310240 (Mint)
+
+310240 carries six APN rows and not one of them is type=ims, so a Mint SIM has no IMS PDN to
+attach to. 310260 -- T-Mobile proper, which this SIM registers on as an EHPLMN -- has eight, but
+Android matches APNs on the SIM's own operator numeric, so none of them are reachable.
+
+The visible effect is that imsdatadaemon never finishes starting: dsi_get_data_srvc_hndl for the IMS
+ApnType finds nothing, so sys.ims.DATA_DAEMON_STATUS is never set and init never starts
+ims_rtp_daemon. IMS registration itself succeeds -- it is the media path that is missing.
+
+Mirrors the ungated 'T-Mobile US IMS' row, gated to Mint's gid the same way Mint's existing data row
+is, so the other MVNOs sharing 310240 are unaffected.
+---
+ US.xml | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/US.xml b/US.xml
+index 1802652..583d7ab 100644
+--- a/US.xml
++++ b/US.xml
+@@ -877,6 +877,20 @@
+         roaming_protocol="IPV4V6"
+         type="default,supl,mms,ia"
+     />
++    <apn
++        mcc="310"
++        mnc="240"
++        carrier="Mint IMS"
++        apn="ims"
++        bearer_bitmask="14|18|20"
++        mtu="1440"
++        mvno_match_data="756D"
++        mvno_type="gid"
++        protocol="IPV6"
++        roaming_protocol="IPV4V6"
++        type="ims"
++        user_visible="false"
++    />
+     <apn
+         mcc="310"
+         mnc="240"

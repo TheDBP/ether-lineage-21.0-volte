@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 25 Sep 2026 14:35:44 -0400
+Subject: [PATCH] ether: grant the two boot denials that can be expressed,
+ explain the two that cannot
+
+Captured from a running handset rather than written from memory, which changed the
+answer for half of them.
+
+robinled_app wanted search on system_data_file: it traverses /data to reach its own
+sandbox. search on the directory grants no listing and no read of anything inside.
+
+ueventd wanted read on /proc/device-tree/compatible while resolving a firmware
+load. Unlabelled that is plain `proc`, and granting read on `proc` would hand it
+everything unlabelled under /proc -- so it gets its own type and a genfscon, and
+ueventd is allowed only that. ueventd is public policy, so a device tree may extend
+it; storaged is not.
+
+storaged's read of sysfs_disk_stat cannot be expressed from a device tree at all.
+The rule needs a platform-private domain AND a vendor-declared type, and neither
+policy segment may name both -- vendor cannot see `storaged`, system_ext private
+cannot see sysfs_disk_stat. Attempting it failed the build with "unknown type
+storaged". The cost is that storaged attributes no per-uid disk I/O.
+
+init's write to discard_max_bytes is not granted either: the file is -r--r--r-- on
+this 3.10 kernel and the writer is upstream AOSP's own init.rc, so an allow would
+silence the denial without changing behaviour.
+---
+ sepolicy/file.te         |  4 ++++
+ sepolicy/genfs_contexts  |  1 +
+ sepolicy/robinled_app.te |  4 ++++
+ sepolicy/ueventd.te      | 12 ++++++++++++
+ 4 files changed, 21 insertions(+)
+ create mode 100644 sepolicy/ueventd.te
+
+diff --git a/sepolicy/file.te b/sepolicy/file.te
+index 01349a0..3267831 100644
+--- a/sepolicy/file.te
++++ b/sepolicy/file.te
+@@ -11,3 +11,7 @@ type proc_kernel_sched, fs_type;
+ type sysfs_disk_stat, fs_type, sysfs_type;
+ # proc_dirty_ratio NOT declared here: the qcom policy already has it in common/file.te,
+ # written as "type  proc_dirty_ratio" with two spaces -- which a "type <name>" regex misses.
++
++# /proc/device-tree, which ueventd reads while resolving a firmware load. Unlabelled it falls through
++# to `proc`, and granting a domain read on `proc` hands it everything unlabelled under /proc.
++type proc_device_tree, fs_type, proc_type;
+diff --git a/sepolicy/genfs_contexts b/sepolicy/genfs_contexts
+index 77beccb..845ded1 100644
+--- a/sepolicy/genfs_contexts
++++ b/sepolicy/genfs_contexts
+@@ -26,3 +26,4 @@ genfscon sysfs /devices/soc.0/fih_battery.84/power_supply/fih_battery   u:object
+ genfscon sysfs /devices/soc.0/msm-bcl-15/power_supply/fg_adc            u:object_r:sysfs_battery_supply:s0
+ genfscon sysfs /devices/soc.0/qcom,bcl.67/power_supply/bcl              u:object_r:sysfs_battery_supply:s0
+ genfscon proc  /sys/vm/swappiness                       u:object_r:proc_swappiness:s0
++genfscon proc  /device-tree                             u:object_r:proc_device_tree:s0
+diff --git a/sepolicy/robinled_app.te b/sepolicy/robinled_app.te
+index d630603..90859aa 100644
+--- a/sepolicy/robinled_app.te
++++ b/sepolicy/robinled_app.te
+@@ -16,3 +16,7 @@ allow robinled_app app_api_service:service_manager find;
+ allow robinled_app sysfs_leds:dir search;
+ allow robinled_app sysfs_leds:lnk_file read;
+ allow robinled_app sysfs_leds:file rw_file_perms;
++
++# Traverse /data to reach its own sandbox. `search` on the directory only -- it grants no listing and
++# no read of anything inside, which is why this is narrower than it looks.
++allow robinled_app system_data_file:dir search;
+diff --git a/sepolicy/ueventd.te b/sepolicy/ueventd.te
+new file mode 100644
+index 0000000..8975297
+--- /dev/null
++++ b/sepolicy/ueventd.te
+@@ -0,0 +1,12 @@
++# ueventd reads /proc/device-tree/compatible while resolving a firmware load. Unlabelled that file is
++# plain `proc`, and allowing read on `proc` would grant everything unlabelled under /proc, so it is
++# given its own type in file.te and labelled in genfs_contexts.
++allow ueventd proc_device_tree:dir search;
++allow ueventd proc_device_tree:file r_file_perms;
++
++# storaged's read of sysfs_disk_stat is deliberately NOT fixed here. The rule needs both `storaged`,
++# which is platform-private, and sysfs_disk_stat, which this device tree declares -- so it can be
++# written in neither segment: vendor policy cannot name a private platform domain, and system_ext
++# private policy cannot name a vendor type. That is the split working as designed. The cost is that
++# storaged attributes no per-uid disk I/O; the fix would be moving the type into platform public
++# policy, which is more surgery than the feature is worth.

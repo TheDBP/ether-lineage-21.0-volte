@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 14:14:43 -0400
+Subject: [PATCH] SettingsProvider: seed FONT_SCALE from a device resource
+
+ether ships the panel at 320 dpi, which reports this 1080x1920 screen as 540 dp wide. That is the
+room dense layouts need, but it leaves text physically small on 5.2 inches, so the device wants the
+font one notch up out of the box.
+
+AOSP has no default for Settings.System.FONT_SCALE: every reader passes 1.0f and nothing seeds the
+database, so there is no resource to overlay and no way to ship a different starting point without
+this. Read it through loadFractionSetting with base 1, so the value lives in the device overlay
+(def_font_scale, 115%) and this carries no device-specific number.
+---
+ .../src/com/android/providers/settings/DatabaseHelper.java | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java b/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+index 62fff96c57ad..0c39c3e15519 100644
+--- a/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
++++ b/packages/SettingsProvider/src/com/android/providers/settings/DatabaseHelper.java
+@@ -2263,6 +2263,13 @@ class DatabaseHelper extends SQLiteOpenHelper {
+             loadBooleanSetting(stmt, Settings.System.SCREEN_BRIGHTNESS_MODE,
+                     R.bool.def_screen_brightness_automatic_mode);
+ 
++            // ether: text one notch up to compensate for shipping the panel at 320 dpi. The
++            // resource lives in the device overlay, so this reads whatever that sets rather than
++            // hardcoding a scale here. Base 1, so 115% becomes 1.15 -- the second step of the
++            // SettingsLib ladder, which keeps it a normal selection in Settings.
++            loadFractionSetting(stmt, Settings.System.FONT_SCALE,
++                    R.fraction.def_font_scale, 1);
++
+             loadBooleanSetting(stmt, Settings.System.ACCELEROMETER_ROTATION,
+                     R.bool.def_accelerometer_rotation);
+ 

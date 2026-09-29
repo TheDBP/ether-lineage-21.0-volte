@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 13 Sep 2026 18:48:59 -0400
+Subject: [PATCH] msm8992: let the GPU governor react to UI, not just sustained
+ 3D
+
+msm-adreno-tz defers to TrustZone for ordinary scaling and keeps one path of its own: an accumulated
+busy window that jumps straight to the top power level. That path is gated on constants chosen for a
+game holding the GPU flat out -- a sample >95% busy, a frame longer than 25ms, and 50ms of
+accumulated busy time.
+
+Compositing a UI never looks like that. Measured on this device over 30 seconds of continuous
+interaction: 69.7% of the time at 180MHz, 16.6% at 300MHz, 13.7% at 367MHz, and 0% at 450, 490 and
+600MHz -- ten transitions in thirty seconds, while dropping frames. The TZ path does climb, but it
+stops at 367MHz; the jump-to-max never armed once, so the top half of the range was unreachable
+during exactly the workload that needed it.
+
+Retune the three constants that gate that path: a sample counts at 80% busy rather than 95%, a
+"long" frame becomes one 60Hz vsync interval (16666us) rather than 25ms, and the accumulated window
+drops to 25ms -- still longer than a standard frame, so steady 60fps content will not trip it, and
+still well under the 80ms idle timer.
+
+This leaves the minimum at 180MHz. The complaint was never that the floor was too low; it was that
+the GPU would not climb when it needed to.
+---
+ drivers/devfreq/governor_msm_adreno_tz.c | 25 +++++++++++++++++++-----
+ 1 file changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/devfreq/governor_msm_adreno_tz.c b/drivers/devfreq/governor_msm_adreno_tz.c
+index e4337d19361..2fa7f968073 100644
+--- a/drivers/devfreq/governor_msm_adreno_tz.c
++++ b/drivers/devfreq/governor_msm_adreno_tz.c
+@@ -39,16 +39,31 @@ static DEFINE_SPINLOCK(tz_lock);
+  * Use BUSY_BIN to check for fully busy rendering
+  * intervals that may need early intervention when
+  * seen with LONG_FRAME lengths
++ *
++ * Retuned for UI rather than sustained 3D. Upstream wanted a sample >95% busy and a frame longer
++ * than 25ms before it would count an interval as needing help, which suits a game holding the GPU
++ * flat out. Compositing a launcher does not look like that: it is short bursts well under 95%, so
++ * the early-intervention path never armed. Measured on this panel over 30s of continuous
++ * interaction, the GPU spent 69.7% of its time at 180MHz, 16.6% at 300MHz, 13.7% at 367MHz and
++ * NEVER reached 450, 490 or 600MHz -- 10 transitions in 30 seconds, while visibly dropping frames.
++ *
++ * 16666us is one 60Hz vsync interval: a frame that takes longer than that has already missed, which
++ * is the signal we actually want to react to.
+  */
+-#define BUSY_BIN		95
+-#define LONG_FRAME		25000
++#define BUSY_BIN		80
++#define LONG_FRAME		16666
+ #define MAX_TZ_VERSION		0
+ 
+ /*
+- * CEILING is 50msec, larger than any standard
+- * frame length, but less than the idle timer.
++ * CEILING is the accumulated busy time that forces a jump straight to the top power level.
++ *
++ * Was 50msec. The comment's reasoning still holds -- it must stay below the 80ms idle timer -- but
++ * 50ms of accumulated busy time is roughly three frames' worth of solid GPU work, and bursty UI
++ * rendering reaches that so rarely that the jump effectively never happened. 25msec is still longer
++ * than one standard frame, so steady 60fps content will not trip it, while a sustained burst that
++ * is actually falling behind now gets the clock it needs.
+  */
+-#define CEILING			50000
++#define CEILING			25000
+ #define TZ_RESET_ID		0x3
+ #define TZ_UPDATE_ID		0x4
+ #define TZ_INIT_ID		0x6

@@ -1,0 +1,287 @@
+# Copyright (c) 2009-2012, 2014-2015, The Linux Foundation. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of The Linux Foundation nor
+#       the names of its contributors may be used to endorse or promote
+#       products derived from this software without specific prior written
+#       permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NON-INFRINGEMENT ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+import /vendor/etc/init/hw/init.nbq.target.rc
+import /vendor/etc/init/hw/init.target.rc
+
+on early-init
+    mount debugfs debugfs /sys/kernel/debug
+
+on early-boot
+    # set RLIMIT_MEMLOCK to 64MB
+    setrlimit 8 67108864 67108864
+
+    write /sys/kernel/boot_adsp/boot 1
+    chown root audio /sys/kernel/boot_adsp/boot
+
+    # SSR Setup
+    write /sys/bus/msm_subsys/devices/subsys0/restart_level "related"
+    write /sys/bus/msm_subsys/devices/subsys1/restart_level "related"
+    write /sys/bus/msm_subsys/devices/subsys2/restart_level "related"
+    write /sys/bus/msm_subsys/devices/subsys3/restart_level "related"
+
+    start vendor.qseecomd
+
+on boot
+    chown bluetooth net_bt /sys/class/rfkill/rfkill0/type
+    chown bluetooth net_bt /sys/class/rfkill/rfkill0/state
+    chmod 0660 /sys/class/rfkill/rfkill0/state
+
+    chown bluetooth net_bt /dev/ttyHS0
+    chmod 0660 /dev/ttyHS0
+
+    chown bluetooth net_bt /sys/class/rfkill/rfkill0/device/extldo
+    chmod 0660 /sys/class/rfkill/rfkill0/device/extldo
+
+    # Create QMUX deamon socket area
+    mkdir /dev/socket/qmux_radio 2770 radio radio
+    mkdir /dev/socket/qmux_audio 2770 media audio
+    mkdir /dev/socket/qmux_bluetooth 2770 bluetooth bluetooth
+    mkdir /dev/socket/qmux_gps 2770 gps gps
+    mkdir /dev/socket/qmux_nfc 2770 nfc nfc
+
+    mkdir /persist/bluetooth 0770 bluetooth bluetooth
+    mkdir /persist/alarm 0770 system system
+
+    # Create NETMGR daemon socket area
+    mkdir /dev/socket/netmgr 0750 radio radio
+
+    # Assign TCP buffer thresholds to be ceiling value of technology maximums
+    # Increased technology maximums should be reflected here.
+    write /proc/sys/net/core/rmem_max 16777216
+    write /proc/sys/net/core/wmem_max 8388608
+
+    # To prevent out of order acknowledgements from making
+    # connection tracking to treat them as not belonging to
+    # the connection they belong to.
+    # Otherwise, a weird issue happens in which some long
+    # connections on high-throughput links get dropped when
+    # an ack packet comes out of order
+    write /proc/sys/net/netfilter/nf_conntrack_tcp_be_liberal 1
+
+    # NFC HAL data
+    mkdir /data/vendor/nfc 0770 nfc nfc
+
+    # Allow access for CCID command/response timeout configuration
+    chown system system /sys/module/ccid_bridge/parameters/bulk_msg_timeout
+
+    # Graphics node permissions
+    chown system graphics /sys/class/graphics/fb0/dyn_pu
+    chmod 0664 /sys/class/graphics/fb0/dyn_pu
+    chown system graphics /sys/class/graphics/fb0/dynamic_fps
+    chmod 0664 /sys/class/graphics/fb0/dynamic_fps
+    chown system graphics /sys/class/graphics/fb0/idle_time
+    chmod 0664 /sys/class/graphics/fb0/idle_time
+    chown system graphics /sys/class/graphics/fb0/mode
+    chmod 0664 /sys/class/graphics/fb0/mode
+    chown system graphics /sys/class/graphics/fb0/modes
+    chmod 0664 /sys/class/graphics/fb0/modes
+
+    # Wifi firmware reload path
+    chown wifi wifi /sys/module/wlan/parameters/fwpath
+
+    # ACDB
+    setprop persist.audio.calfile0 /vendor/etc/acdbdata/NBQ/NBQ_Bluetooth_cal.acdb
+    setprop persist.audio.calfile1 /vendor/etc/acdbdata/NBQ/NBQ_General_cal.acdb
+    setprop persist.audio.calfile2 /vendor/etc/acdbdata/NBQ/NBQ_Global_cal.acdb
+    setprop persist.audio.calfile3 /vendor/etc/acdbdata/NBQ/NBQ_Handset_cal.acdb
+    setprop persist.audio.calfile4 /vendor/etc/acdbdata/NBQ/NBQ_Hdmi_cal.acdb
+    setprop persist.audio.calfile5 /vendor/etc/acdbdata/NBQ/NBQ_Headset_cal.acdb
+    setprop persist.audio.calfile6 /vendor/etc/acdbdata/NBQ/NBQ_Speaker_cal.acdb
+
+# msm specific files that need to be created on /data
+on post-fs-data
+    # Boot time fs tune
+    write /sys/block/mmcblk0/queue/read_ahead_kb 2048
+    write /sys/block/mmcblk0rpmb/queue/read_ahead_kb 2048
+
+    # Create folder for mm-qcamera-daemon
+    mkdir /data/misc/camera 0770 camera camera
+
+    mkdir /data/misc/ipa 0700 radio radio
+
+    # Create the directories used by the Wireless subsystem
+    mkdir /data/vendor/wifi 0770 wifi wifi
+    mkdir /data/vendor/wifi/wpa 0770 wifi wifi
+    mkdir /data/vendor/wifi/wpa/sockets 0770 wifi wifi
+
+    # Create the directories used by CnE subsystem
+    mkdir /data/connectivity 0771 system system
+
+    # Create directory used by audio subsystem
+    mkdir /data/misc/audio 0770 audio audio
+
+    # Create directory for audio delta files
+    mkdir /data/misc/audio/acdbdata 0770 media audio
+    mkdir /data/misc/audio/acdbdata/delta 0770 media audio
+
+    # Create directory used by display clients
+    mkdir /data/misc/display 0770 system graphics
+    mkdir /persist/display 0770 system graphics
+
+    # Create directories for Location services
+    mkdir /data/misc/location 0770 gps gps
+    mkdir /data/misc/location/xtwifi 0770 gps gps
+    mkdir /data/misc/location/gpsone_d 0770 system gps
+
+    # Mark the copy complete flag to not completed
+    write /data/misc/radio/copy_complete 0
+    chown radio radio /data/misc/radio/copy_complete
+    chmod 0660 /data/misc/radio/copy_complete
+
+    setprop vold.post_fs_data_done 1
+
+    # Create PERFD deamon related dirs
+    mkdir /data/system/perfd 2770 root system
+
+service perfd /system/vendor/bin/perfd
+    class main
+    user root
+    group system
+    disabled
+    socket perfd seqpacket 0666 root system
+    writepid /dev/cpuset/system-background/tasks
+
+service cnd /vendor/bin/cnd
+    class main
+    user system
+    group system wifi inet radio wakelock net_admin
+    writepid /dev/cpuset/system-background/tasks
+
+service dpmQmiMgr /vendor/bin/dpmQmiMgr
+    class main
+    user system
+    group radio system
+    writepid /dev/cpuset/system-background/tasks
+
+service irsc_util /vendor/bin/irsc_util "/vendor/etc/sec_config"
+    class main
+    user root
+    oneshot
+
+service rmt_storage /vendor/bin/rmt_storage
+    class core
+    user root
+    group system wakelock
+    shutdown critical
+    writepid /dev/cpuset/system-background/tasks
+
+service rfs_access /vendor/bin/rfs_access
+    class core
+    user root
+    group system net_raw
+    writepid /dev/cpuset/system-background/tasks
+
+on property:vendor.wc_transport.start_hci=true
+    start start_hci_filter
+
+on property:vendor.wc_transport.start_hci=false
+    stop start_hci_filter
+
+service start_hci_filter /vendor/bin/wcnss_filter
+    class late_start
+    user bluetooth
+    group bluetooth oem_2950 system wakelock
+    disabled
+    writepid /dev/cpuset/system-background/tasks
+
+service hciattach /vendor/bin/hci_qcomm_init -e
+    class late_start
+    user bluetooth
+    group bluetooth net_bt_admin oem_2950 diag radio
+    disabled
+    oneshot
+
+on property:vendor.bluetooth.hciattach=true
+    start hciattach
+
+on property:vendor.bluetooth.hciattach=false
+    setprop vendor.bluetooth.status off
+
+# QMUX must be in multiple groups to support external process connections
+service qmuxd /vendor/bin/qmuxd
+    class main
+    user root
+    group radio audio bluetooth gps nfc diag
+    writepid /dev/cpuset/system-background/tasks
+
+service netmgrd /vendor/bin/netmgrd
+    class main
+    user root
+    group root wifi wakelock radio inet
+    writepid /dev/cpuset/system-background/tasks
+
+service ipacm /vendor/bin/ipacm
+    class main
+    user radio
+    group radio inet
+    writepid /dev/cpuset/system-background/tasks
+
+service qti /system/vendor/bin/qti
+    class main
+    user radio
+    group radio net_raw diag usb net_admin
+    writepid /dev/cpuset/system-background/tasks
+
+service sensors /vendor/bin/sensors.qcom
+    class late_start
+    user root
+    group root system
+    disabled
+    writepid /dev/cpuset/system-background/tasks
+
+# Adjust socket buffer to enlarge TCP receive window for high bandwidth
+# but only if ro.data.large_tcp_window_size property is set.
+on property:ro.data.large_tcp_window_size=true
+    write /proc/sys/net/ipv4/tcp_adv_win_scale 2
+
+on property:sys.sysctl.tcp_adv_win_scale=*
+    write /proc/sys/net/ipv4/tcp_adv_win_scale ${sys.sysctl.tcp_adv_win_scale}
+
+service cnss-daemon /vendor/bin/cnss-daemon -n -l
+    class late_start
+    user system
+    group system inet net_admin wifi
+    writepid /dev/cpuset/system-background/tasks
+
+service qcom-sh /vendor/bin/init.qcom.sh
+    class late_start
+    user root
+    oneshot
+
+on property:apexd.status=ready
+    mount none /system/etc/swcodec/ld.config.txt /apex/com.android.media.swcodec/etc/ld.config.txt bind
+
+on property:dev.bootcomplete=1
+    setprop sys.io.scheduler "bfq"
+    write /sys/block/mmcblk0/queue/read_ahead_kb 128
+    write /sys/block/mmcblk0rpmb/queue/read_ahead_kb 128
+    rm /data/system/perfd/default_values
+    start perfd
+
+on property:vold.decrypt=trigger_restart_framework
+    restart vendor.camera-provider-2-4

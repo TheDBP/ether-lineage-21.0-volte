@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:07:39 -0400
+Subject: [PATCH] home screen defaults: no icon labels, no auto-add
+
+New apps do not add themselves to the home screen, and desktop icons carry no labels. The
+preference default and the code default are set together, so a profile created before first boot
+agrees with one created after.
+
+Two differences from the 22.2 and 23.2 sets, both upstream changes on lineage-24.0:
+- the code default now lives in LauncherPrefs (SHOW_DESKTOP_LABELS), not an inline getBoolean
+  fallback in BubbleTextView;
+- no config_allowRotation change, because Launcher3 no longer has that resource -- the launcher's
+  own rotation toggle is gone, leaving the system auto-rotate setting.
+---
+ res/xml/launcher_preferences.xml           | 4 ++--
+ src/com/android/launcher3/LauncherPrefs.kt | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 3ef7795214..a2e9bf004c 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -47,7 +47,7 @@
+         android:key="pref_add_icon_to_home"
+         android:title="@string/auto_add_shortcuts_label"
+         android:summary="@string/auto_add_shortcuts_description"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true"
+         launcher:logIdOn="613"
+         launcher:logIdOff="614" />
+@@ -85,7 +85,7 @@
+     <SwitchPreferenceCompat
+         android:key="pref_desktop_show_labels"
+         android:title="@string/desktop_show_labels"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:persistent="true" />
+ 
+     <SwitchPreferenceCompat
+diff --git a/src/com/android/launcher3/LauncherPrefs.kt b/src/com/android/launcher3/LauncherPrefs.kt
+index c624c3530d..97ff61fb7f 100644
+--- a/src/com/android/launcher3/LauncherPrefs.kt
++++ b/src/com/android/launcher3/LauncherPrefs.kt
+@@ -263,7 +263,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
+ 
+         @JvmField val ALLAPPS_THEMED_ICONS = backedUpItem("pref_allapps_themed_icons", false)
+         @JvmField val DRAWER_OPEN_KEYBOARD = backedUpItem("pref_drawer_open_keyboard", false)
+-        @JvmField val SHOW_DESKTOP_LABELS = backedUpItem("pref_desktop_show_labels", true)
++        @JvmField val SHOW_DESKTOP_LABELS = backedUpItem("pref_desktop_show_labels", false)
+         @JvmField val SHOW_DRAWER_LABELS = backedUpItem("pref_drawer_show_labels", true)
+         @JvmField val SLEEP_GESTURE = backedUpItem("pref_sleep_gesture", false)
+         @JvmField val WORKSPACE_LOCK = backedUpItem("pref_workspace_lock", false)
+-- 
+2.53.0
+

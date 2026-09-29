@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:03:31 -0400
+Subject: [PATCH] default to dark theme (config_defaultNightMode: 1 -> 2)
+
+---
+ core/res/res/values/config.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/res/res/values/config.xml b/core/res/res/values/config.xml
+index a19202ff1683..dbef28468e17 100644
+--- a/core/res/res/values/config.xml
++++ b/core/res/res/values/config.xml
+@@ -904,7 +904,7 @@
+              1 - MODE_NIGHT_NO
+              2 - MODE_NIGHT_YES
+     -->
+-    <integer name="config_defaultNightMode">1</integer>
++    <integer name="config_defaultNightMode">2</integer>
+ 
+      <!-- Boolean indicating whether Color Inversion is enabled within the Setup Wizard flow.
+          This flag is disabled by default. -->
+-- 
+2.53.0
+

@@ -1,0 +1,114 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 13:51:29 -0400
+Subject: [PATCH] fdroid: bundle the F-Droid client and Privileged Extension
+
+vendor/lineage/prebuilts/fdroid modules, installed unmodified, plus a guarded PRODUCT_PACKAGES
+block in config/common.mk and the Privileged Extension's privapp-permissions XML. The APKs are
+fetched by the fdroid option's fetch.sh (the current F-Droid build of each, signer-pinned); the
+modules are a no-op without them.
+
+Anchored on the privapp-permissions block rather than 22.2's credentials.prebuilt.xml, which
+lineage-24.0 no longer has. Soong branch: the patch ships no module file -- Android.bp is written
+by the fetcher, because skip_preprocessed_apk_checks has to match what each release packs.
+---
+ config/common.mk                              | 13 +++++++++
+ prebuilts/fdroid/.gitignore                   |  8 +++++
+ prebuilts/fdroid/jni/Android.mk               | 29 +++++++++++++++++++
+ ...rmissions-org.fdroid.fdroid.privileged.xml |  9 ++++++
+ 4 files changed, 59 insertions(+)
+ create mode 100644 prebuilts/fdroid/.gitignore
+ create mode 100644 prebuilts/fdroid/jni/Android.mk
+ create mode 100644 prebuilts/fdroid/permissions/privapp-permissions-org.fdroid.fdroid.privileged.xml
+
+diff --git a/config/common.mk b/config/common.mk
+index 64b433bd..39f46189 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -103,6 +103,19 @@ PRODUCT_COPY_FILES += \
+ PRODUCT_PRODUCT_PROPERTIES += \
+     ro.control_privapp_permissions=enforce
+ 
++# fdroid option: F-Droid client + Privileged Extension (silent installs). Guarded on the fetched
++# APK so a build without the option (no APK) is unaffected; require.sh fails the build if the
++# option is on and either APK is missing. Native libraries the fetcher unpacked beside an APK
++# install as one module per library (prebuilts/fdroid/jni).
++ifneq ($(wildcard vendor/lineage/prebuilts/fdroid/FDroid.apk),)
++PRODUCT_PACKAGES += \
++    FDroid \
++    FDroidPrivilegedExtension
++PRODUCT_PACKAGES += $(foreach a,FDroid FDroidPrivilegedExtension,$(patsubst %.so,$(a)_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/fdroid/$(a)/lib/arm64-v8a/*.so))))
++PRODUCT_COPY_FILES += \
++    vendor/lineage/prebuilts/fdroid/permissions/privapp-permissions-org.fdroid.fdroid.privileged.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-org.fdroid.fdroid.privileged.xml
++endif
++
+ ifneq ($(TARGET_DISABLE_LINEAGE_SDK), true)
+ # Lineage SDK
+ include vendor/lineage/config/lineage_sdk_common.mk
+diff --git a/prebuilts/fdroid/.gitignore b/prebuilts/fdroid/.gitignore
+new file mode 100644
+index 00000000..66f49e64
+--- /dev/null
++++ b/prebuilts/fdroid/.gitignore
+@@ -0,0 +1,8 @@
++# Everything here but jni/ is written by the fdroid option (forge/prebuilt/fetch-fdroid.sh):
++# the APK, the native libraries it unpacks beside it when the APK packs them compressed, and the
++# Soong module file, which it writes per fetch because skip_preprocessed_apk_checks must match
++# the APK.
++*.apk
++*.apk.download
++/*/lib/
++/Android.bp
+diff --git a/prebuilts/fdroid/jni/Android.mk b/prebuilts/fdroid/jni/Android.mk
+new file mode 100644
+index 00000000..8932062d
+--- /dev/null
++++ b/prebuilts/fdroid/jni/Android.mk
+@@ -0,0 +1,29 @@
++# Native libraries for either F-Droid app whose APK packs them compressed or unaligned:
++# fetch-fdroid.sh unpacks lib/arm64-v8a/ to ../<App>/lib/arm64-v8a/ beside that APK. The APK is
++# installed byte for byte (see ../Android.bp, written by the same fetch) and PackageManager does not
++# extract native libraries for a bundled app, so these are installed as app/<App>/lib/arm64/
++# (priv-app/ for the Privileged Extension). One Make module per library: the build refuses ELF
++# files in PRODUCT_COPY_FILES, and no Soong prebuilt type installs under app/. common.mk adds the
++# modules to PRODUCT_PACKAGES from the same wildcard. Nothing is defined when nothing was unpacked.
++LOCAL_PATH := $(call my-dir)/..
++
++# $(1) app module name, $(2) library file name
++define fdroid-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := $(1)_jni_$(2:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(2:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := $(1)/lib/arm64-v8a/$(2)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/$(if $(filter FDroidPrivilegedExtension,$(1)),priv-app,app)/$(1)/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach d,$(wildcard $(LOCAL_PATH)/*/lib/arm64-v8a),\
++  $(foreach lib,$(notdir $(wildcard $(d)/*.so)),\
++    $(eval $(call fdroid-jni-module,$(notdir $(patsubst %/lib/arm64-v8a,%,$(d))),$(lib)))))
+diff --git a/prebuilts/fdroid/permissions/privapp-permissions-org.fdroid.fdroid.privileged.xml b/prebuilts/fdroid/permissions/privapp-permissions-org.fdroid.fdroid.privileged.xml
+new file mode 100644
+index 00000000..e497d524
+--- /dev/null
++++ b/prebuilts/fdroid/permissions/privapp-permissions-org.fdroid.fdroid.privileged.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Privileged-permission allowlist for the F-Droid Privileged Extension (install/remove packages
++     for the F-Droid client). Copied to /product/etc/permissions. -->
++<permissions>
++    <privapp-permissions package="org.fdroid.fdroid.privileged">
++        <permission name="android.permission.INSTALL_PACKAGES"/>
++        <permission name="android.permission.DELETE_PACKAGES"/>
++    </privapp-permissions>
++</permissions>
+-- 
+2.53.0
+

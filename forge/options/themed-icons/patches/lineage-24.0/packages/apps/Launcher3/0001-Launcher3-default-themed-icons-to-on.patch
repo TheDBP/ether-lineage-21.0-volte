@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 15:06:23 -0400
+Subject: [PATCH] Launcher3: default themed icons to on
+
+THEMED_ICONS is a backed-up pref defaulting to false, so a fresh install ships
+with monochrome/themed app icons disabled and every device needs the toggle
+flipped by hand in launcher settings. Default it on; the toggle still works, and
+existing installs keep whatever they had because the pref is backed up.
+---
+ res/xml/launcher_preferences.xml           | 2 +-
+ src/com/android/launcher3/LauncherPrefs.kt | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 3ef7795214..8ad9f45f2a 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -70,7 +70,7 @@
+         android:key="pref_allapps_themed_icons"
+         android:title="@string/pref_themed_icons_title"
+         android:summary="@string/pref_themed_icons_summary"
+-        android:defaultValue="false"
++        android:defaultValue="true"
+         android:persistent="true" />
+ 
+     <androidx.preference.PreferenceScreen
+diff --git a/src/com/android/launcher3/LauncherPrefs.kt b/src/com/android/launcher3/LauncherPrefs.kt
+index c624c3530d..d084354fe9 100644
+--- a/src/com/android/launcher3/LauncherPrefs.kt
++++ b/src/com/android/launcher3/LauncherPrefs.kt
+@@ -261,7 +261,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
+                 DefaultsValueProvider.get(context).enableTwoLineToggle
+             }
+ 
+-        @JvmField val ALLAPPS_THEMED_ICONS = backedUpItem("pref_allapps_themed_icons", false)
++        @JvmField val ALLAPPS_THEMED_ICONS = backedUpItem("pref_allapps_themed_icons", true)
+         @JvmField val DRAWER_OPEN_KEYBOARD = backedUpItem("pref_drawer_open_keyboard", false)
+         @JvmField val SHOW_DESKTOP_LABELS = backedUpItem("pref_desktop_show_labels", true)
+         @JvmField val SHOW_DRAWER_LABELS = backedUpItem("pref_drawer_show_labels", true)
+-- 
+2.53.0
+

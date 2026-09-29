@@ -1,0 +1,39 @@
+From 9987cd584434e150a9970c7d20735eada21011e6 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 08:00:00 +0000
+Subject: [PATCH] Trebuchet: disable the -1 Google feed
+ (swipe-right-to-Google) by default
+---
+ .../com/android/launcher3/uioverrides/OverlayCallbackImpl.java  | 2 +-
+ res/xml/launcher_preferences.xml                                | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
+index 9000ab719..2c0a58166 100644
+--- a/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
++++ b/quickstep/recents_ui_overrides/src/com/android/launcher3/uioverrides/OverlayCallbackImpl.java
+@@ -176,7 +176,7 @@ public class OverlayCallbackImpl
+ 
+     private LauncherClient.ClientOptions getClientOptions(SharedPreferences prefs) {
+         return new LauncherClient.ClientOptions(
+-                prefs.getBoolean(KEY_ENABLE_MINUS_ONE, true),
++                prefs.getBoolean(KEY_ENABLE_MINUS_ONE, false), /* -1 Google feed OFF by default */
+                 true, /* enableHotword */
+                 true /* enablePrewarming */
+         );
+diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
+index 36eb21363..77474c46f 100644
+--- a/res/xml/launcher_preferences.xml
++++ b/res/xml/launcher_preferences.xml
+@@ -53,7 +53,7 @@
+         android:persistent="true" />
+ 
+     <SwitchPreference
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:key="pref_enable_minus_one"
+         android:summary="@string/pref_show_google_now_summary"
+         android:title="@string/title_show_google_app" />
+-- 
+2.53.0
+

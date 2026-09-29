@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 23 Sep 2026 18:19:34 -0400
+Subject: [PATCH] ether: ship the rebuilt ims.apk and let ImsResolver find the
+ bridge
+
+Three things, none of which work without the others.
+
+ims: the rebuilt apk, imported rather than copied. AOSP rejects APKs in PRODUCT_COPY_FILES outright,
+and this one declares sharedUserId=android.uid.phone so it must carry the platform signature --
+extract-ims-blobs.sh stages it with a generated android_app_import that lets the build sign it.
+
+ImsBridge: the translation layer added in 0019.
+
+android.hardware.telephony.ims: PhoneGlobals only constructs an ImsResolver when this feature is
+present. Without it nothing binds the bridge however correct the bridge is, and nothing logs a
+reason. config_ims_mmtel_package is the other half -- it is empty upstream, so the resolver has no
+device default to bind even once it exists.
+---
+ device.mk                                            | 12 ++++++++++++
+ .../services/Telephony/res/values/config.xml         |  5 +++++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/device.mk b/device.mk
+index aebacc8..0dbe388 100644
+--- a/device.mk
++++ b/device.mk
+@@ -364,6 +364,18 @@ endif
+ # must stop. Shipping a ROM whose VoLTE is quietly absent is the failure this whole block exists to
+ # prevent.
+ include vendor/ims-blobs/ims-blobs.mk
++
++# The rebuilt ims.apk, imported rather than copied: AOSP rejects APKs in PRODUCT_COPY_FILES, and
++# this one must be signed with the platform key because it declares sharedUserId=android.uid.phone.
++# extract-ims-blobs.sh generates vendor/ims-blobs/Android.bp alongside the blobs.
++PRODUCT_PACKAGES += ims
++
++# The bridge from that 7.1 IMS stack to the modern telephony framework. See VOLTE-BRINGUP.md.
++PRODUCT_PACKAGES += ImsBridge
++
++# Without this feature PhoneGlobals never constructs an ImsResolver at all, so nothing binds the
++# bridge and nothing says why. It is the first thing to check if IMS looks inert.
++PRODUCT_PACKAGES += android.hardware.telephony.ims.prebuilt.xml
+ ifeq ($(WITH_OEM),true)
+ ifneq ($(OEM_DEFAULT_WALLPAPER),)
+ ether_def_wallpaper := $(OEM_DEFAULT_WALLPAPER)
+diff --git a/overlay/packages/services/Telephony/res/values/config.xml b/overlay/packages/services/Telephony/res/values/config.xml
+index 93e1416..308f5bc 100644
+--- a/overlay/packages/services/Telephony/res/values/config.xml
++++ b/overlay/packages/services/Telephony/res/values/config.xml
+@@ -19,4 +19,9 @@
+ <resources>
+     <!-- Flag indicating if hac is enabled -->
+     <bool name="hac_enabled">true</bool>
++
++    <!-- The ImsService ImsResolver binds for MMTEL on this device. Empty upstream, which leaves the
++         resolver with no device default and nothing to bind. Points at the bridge that fronts
++         ether's 7.1 ims.apk. -->
++    <string name="config_ims_mmtel_package" translatable="false">org.lineageos.ims.bridge</string>
+ </resources>

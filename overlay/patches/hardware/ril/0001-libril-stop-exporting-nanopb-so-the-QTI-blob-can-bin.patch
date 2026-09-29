@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 07:02:41 -0400
+Subject: [PATCH] libril: stop exporting nanopb so the QTI blob can bind its
+ own
+
+QTI's libril-qc-qmi-1.so does not carry a nanopb; it imports pb_encode/pb_decode and hands over
+message descriptors that were generated against nanopb 0.2.8, the version Android 7.1.1 shipped.
+
+Between 0.2.8 and 0.3.x nanopb inserted PB_LTYPE_BOOL at 0x00 and shifted every other PB_LTYPE_* up
+by one:
+
+    0.2.8   VARINT 0x00  UVARINT 0x01  SVARINT 0x02  ...  STRING 0x06  SUBMESSAGE 0x07
+    0.3.9   BOOL   0x00  VARINT  0x01  UVARINT 0x02  ...  STRING 0x07  SUBMESSAGE 0x08
+
+So the modern runtime reads every field of those descriptors as the next type along. On hardware that
+is 10 messages received, 10 decode failures, 0 successes, and nothing sent back -- with
+"Decoding failed: missing required field" on the way in and "Encoding failed: invalid data_size" on
+the way out. No PB_FIELD_8/16/32BIT setting can fix it; all three were built and tested, and 32-bit
+additionally SIGSEGVs because a misread LTYPE sends the decoder chasing a submessage pointer.
+
+libril cannot simply be built against 0.2.8: librilutils generates libril's own SAP descriptors at
+build time with the modern generator, so libril needs the modern runtime for itself. The two coexist
+by keeping the nanopb version AOSP uses and hiding it from the dynamic symbol table, which leaves the
+blob free to bind to a 0.2.8 copy shipped alongside. Static linkage means libril's SAP path is
+unaffected by the visibility change.
+---
+ libril/Android.mk     | 10 ++++++++++
+ libril/libril.map.txt | 13 +++++++++++++
+ 2 files changed, 23 insertions(+)
+ create mode 100644 libril/libril.map.txt
+
+diff --git a/libril/Android.mk b/libril/Android.mk
+index c39c5a9..bebf0ba 100644
+--- a/libril/Android.mk
++++ b/libril/Android.mk
+@@ -24,6 +24,15 @@ LOCAL_SHARED_LIBRARIES := \
+     android.hardware.radio@1.1 \
+     libhidlbase \
+ 
++# nanopb stays as AOSP has it -- librilutils generates libril's own SAP descriptors with the modern
++# 32-bit generator, so this runtime has to match those.
++#
++# What changes is that libril no longer EXPORTS nanopb (see libril.map.txt). QTI's
++# libril-qc-qmi-1.so imports pb_encode/pb_decode rather than carrying its own, and its descriptors
++# were generated against nanopb 0.2.8 -- the version Android 7.1.1 shipped. Between 0.2.8 and 0.3.x
++# nanopb inserted PB_LTYPE_BOOL at 0x00 and shifted every other PB_LTYPE_* up by one, so the modern
++# runtime reads every field of those descriptors as the next type along and nothing decodes. Hiding
++# the symbols lets the blob bind to libnanopb_legacy instead.
+ LOCAL_STATIC_LIBRARIES := \
+     libprotobuf-c-nano-enable_malloc-32bit \
+ 
+@@ -44,6 +53,7 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/../include
+ LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/../include
+ 
+ LOCAL_MODULE:= libril
++LOCAL_LDFLAGS += -Wl,--version-script=$(LOCAL_PATH)/libril.map.txt
+ LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0
+ LOCAL_LICENSE_CONDITIONS:= notice
+ LOCAL_NOTICE_FILE:= $(LOCAL_PATH)/NOTICE
+diff --git a/libril/libril.map.txt b/libril/libril.map.txt
+new file mode 100644
+index 0000000..84e74dc
+--- /dev/null
++++ b/libril/libril.map.txt
+@@ -0,0 +1,13 @@
++# libril exports everything it always did, except nanopb.
++#
++# QTI's libril-qc-qmi-1.so imports pb_encode/pb_decode and, in a single-namespace process, would
++# bind them to whichever library exports them first -- libril, whose nanopb is the modern 0.3.x.
++# Its descriptors were generated against 0.2.8, where every PB_LTYPE_* is one lower, so nothing it
++# sends decodes. Hiding these here lets the blob bind to libnanopb_legacy instead, while libril goes
++# on using its own copy internally for SAP: static linkage resolves regardless of export visibility.
++{
++  global:
++    *;
++  local:
++    pb_*;
++};

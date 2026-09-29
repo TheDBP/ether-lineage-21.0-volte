@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 07:40:34 -0400
+Subject: [PATCH] netd: do not exit when there is no cgroup v2 root
+
+The 20.0 boot reaches the LineageOS boot animation and stays there. netd is
+restarting in a tight loop -- 107 times in ten minutes, each exiting with
+status 1:
+
+  netd 1.0 starting
+  Netd: Failed to find cgroup v2 root Success
+  NetdService: WARNING: returning null INetd instance.
+
+so NetworkManagementService never connects and the framework never finishes
+booting.
+
+main.cpp requires the cgroup v2 root and exits when it is absent. This kernel
+is 3.10 and cannot mount cgroup2 at all, so cgroups.json declares no v2
+hierarchy and the lookup can never succeed here.
+
+Important detail: this exit sits BEFORE libnetd_updatable_init(), so the
+BpfHandler degradation added to packages/modules/Connectivity never ran --
+netd died two calls earlier. Both changes are required.
+
+cg2_path is left empty and passed through; BpfHandler::init() then fails to
+attach and sets mBpfEnabled=false, which is the intended behaviour on a
+kernel with no eBPF.
+---
+ server/main.cpp | 22 ++++++++++++++++++++--
+ 1 file changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/server/main.cpp b/server/main.cpp
+index 0e81d4e5..8067638b 100644
+--- a/server/main.cpp
++++ b/server/main.cpp
+@@ -126,10 +126,28 @@ int main() {
+         gLog.info("setCloseOnExec(%s)", sock);
+     }
+ 
++    // ether/msm8992: do NOT exit when there is no cgroup v2 root.
++    //
++    // cgroup v2 arrived in Linux 4.5; this device runs 3.10, whose kernel cannot mount the
++    // cgroup2 filesystem at all, so cgroups.json declares no v2 hierarchy and this lookup always
++    // fails. Upstream treats that as fatal, which puts netd into a permanent restart loop -- 107
++    // restarts in one 10-minute boot, each ending:
++    //
++    //   netd 1.0 starting
++    //   Netd: Failed to find cgroup v2 root Success
++    //
++    // and system_server never gets an INetd ("WARNING: returning null INetd instance"), so the
++    // device sits on the boot animation forever.
++    //
++    // Note this exit is reached BEFORE libnetd_updatable_init(), so the BpfHandler tolerance added
++    // in the Connectivity patch never gets a chance to run. Both are needed.
++    //
++    // cg2_path is left empty; BpfHandler::init() then fails to attach its programs and degrades to
++    // mBpfEnabled=false, which is exactly the intended path on a kernel with no eBPF either.
+     std::string cg2_path;
+     if (!CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &cg2_path)) {
+-        ALOGE("Failed to find cgroup v2 root %s", strerror(errno));
+-        exit(1);
++        ALOGW("No cgroup v2 root (%s) -- continuing without it; BPF-dependent features degrade",
++              strerror(errno));
+     }
+ 
+     if (libnetd_updatable_init(cg2_path.c_str())) {

@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Tue, 15 Sep 2026 22:05:38 -0400
+Subject: [PATCH] ether: 320 dpi
+
+The Robin's 5.2-inch 1080p panel is 424 dpi; the upstream 480 renders everything a size too
+large on a screen this small. 320 reports the 1080x1920 panel as 540 dp wide, which is the
+room dense layouts need, and it is the one value here that is an exact resource bucket:
+at 320 the panel is xhdpi, so bitmaps land 1:1 instead of being scaled up from xhdpi as
+they are at 360, 378 or 420. It stays under the sw600dp breakpoint, so apps do not switch
+to tablet layouts. The Display Size ladder SettingsLib builds from
+display_density_min_scale (70%) and _min_scale_interval (9%) recomputes around it as
+224 / 256 / 288 / 320 and upwards, so anyone who finds it small can move it in Settings.
+
+TARGET_RECOVERY_DENSITY is pinned because recovery derives its asset bucket from
+TARGET_SCREEN_DENSITY, and build/make/core/Makefile splits xxhdpi at >= 400. Without the
+pin, 320 would silently drop recovery to xhdpi artwork; the panel itself has not changed.
+---
+ BoardConfig.mk | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 5593a0f..ad33875 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -81,7 +81,8 @@ TARGET_VNDK_USE_CORE_VARIANT := true
+ WITH_DEXPREOPT_DEBUG_INFO := false
+ 
+ # Display
+-TARGET_SCREEN_DENSITY := 480
++TARGET_SCREEN_DENSITY := 320
++TARGET_RECOVERY_DENSITY := xxhdpi
+ TARGET_USES_ION := true
+ 
+ # Encryption

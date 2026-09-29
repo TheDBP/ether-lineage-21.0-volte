@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Tue, 22 Sep 2026 14:23:26 -0400
+Subject: [PATCH] openvpn: bundle OpenVPN for Android as the VPN client
+
+vendor/lineage/prebuilts/openvpn module, installed unmodified, plus a guarded PRODUCT_PACKAGES line
+in config/common.mk. The APK is fetched by the openvpn option's fetch.sh (the current F-Droid build,
+signer-pinned); the module is a no-op without it.
+
+Unlike the other bundled apps this one is signed by F-Droid rather than by its author -- upstream
+publishes no reproducible build there -- so the pin proves F-Droid built it, not that the OpenVPN
+author signed it. Same trust as installing it from F-Droid by hand, different root from the rest.
+
+The native libraries matter more here than for most: the VPN implementation is libovpnexec and
+libopvpnutil, so an install without them starts and cannot connect.
+
+Soong branch: the patch ships no module file. Android.bp is written by the fetcher (gitignored),
+because skip_preprocessed_apk_checks has to match what each release of the APK packs, and an APK
+whose native libraries are compressed gets them unpacked beside it and installed by jni/Android.mk.
+---
+ config/common.mk                 | 10 ++++++++++
+ prebuilts/openvpn/.gitignore     |  8 ++++++++
+ prebuilts/openvpn/jni/Android.mk | 29 +++++++++++++++++++++++++++++
+ 3 files changed, 47 insertions(+)
+ create mode 100644 prebuilts/openvpn/.gitignore
+ create mode 100644 prebuilts/openvpn/jni/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -257,6 +257,16 @@
+     NetworkStackOverlay \
+     PermissionControllerOverlay
+ 
++# openvpn option: OpenVPN for Android as a bundled VPN client. Guarded on the fetched APK so a
++# build without the option (no APK) is unaffected; require.sh fails the build if the option is on
++# and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/openvpn/OpenVPN.apk),)
++PRODUCT_PACKAGES += OpenVPN
++# Native libraries the fetcher unpacked beside the APK, one module each (prebuilts/openvpn/jni).
++# This app does not work without them: the VPN itself is libovpnexec/libopvpnutil.
++PRODUCT_PACKAGES += $(patsubst %.so,OpenVPN_jni_%,$(notdir $(wildcard vendor/lineage/prebuilts/openvpn/lib/arm64-v8a/*.so)))
++endif
++
+ # Translations
+ CUSTOM_LOCALES += \
+     ast_ES \
+diff --git a/prebuilts/openvpn/.gitignore b/prebuilts/openvpn/.gitignore
+new file mode 100644
+index 00000000..7508b834
+--- /dev/null
++++ b/prebuilts/openvpn/.gitignore
+@@ -0,0 +1,8 @@
++# Everything here but jni/ is written by the openvpn option (forge/prebuilt/fetch-openvpn.sh):
++# the APK, the native libraries it unpacks beside it when the APK packs them compressed, and the
++# Soong module file, which it writes per fetch because skip_preprocessed_apk_checks must match
++# the APK.
++*.apk
++*.apk.download
++/lib/
++/Android.bp
+diff --git a/prebuilts/openvpn/jni/Android.mk b/prebuilts/openvpn/jni/Android.mk
+new file mode 100644
+index 00000000..d20367fa
+--- /dev/null
++++ b/prebuilts/openvpn/jni/Android.mk
+@@ -0,0 +1,29 @@
++# OpenVPN native libraries. The APK is installed byte for byte (see ../Android.bp, written by the
++# fetcher) and PackageManager does not extract native libraries for a bundled app, so when
++# fetch-openvpn.sh finds them compressed or unaligned in the APK it unpacks lib/arm64-v8a/ beside
++# it, and these install as app/OpenVPN/lib/arm64/. This app needs them more than most: the VPN is
++# libovpnexec/libopvpnutil, so without this it installs and cannot connect. One Make module per
++# library: the build refuses ELF files in PRODUCT_COPY_FILES, and no Soong prebuilt type installs
++# under app/. common.mk adds the modules to PRODUCT_PACKAGES from the same wildcard. Nothing is
++# defined when nothing was unpacked.
++LOCAL_PATH := $(call my-dir)/..
++
++OPENVPN_JNI_LIBS := $(notdir $(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++
++define openvpn-jni-module
++include $$(CLEAR_VARS)
++LOCAL_MODULE := OpenVPN_jni_$(1:.so=)
++LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++LOCAL_MODULE_STEM := $(1:.so=)
++LOCAL_MODULE_SUFFIX := .so
++LOCAL_MODULE_TAGS := optional
++LOCAL_SRC_FILES := lib/arm64-v8a/$(1)
++LOCAL_MULTILIB := 64
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $$(TARGET_OUT_PRODUCT)/app/OpenVPN/lib/arm64
++LOCAL_STRIP_MODULE := false
++LOCAL_CHECK_ELF_FILES := false
++include $$(BUILD_PREBUILT)
++endef
++
++$(foreach lib,$(OPENVPN_JNI_LIBS),$(eval $(call openvpn-jni-module,$(lib))))

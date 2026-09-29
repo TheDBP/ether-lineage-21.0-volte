@@ -1,0 +1,45 @@
+From 0da64abd5ba1d1395dc45b78f8c5bf839c0d1569 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 22:28:42 -0400
+Subject: [PATCH] advanced restart menu on by default (ADVANCED_REBOOT)
+
+Additive default (no stock upstream default in lineage-22.2). Adds def_advanced_reboot
+bool + loads it in LineageDatabaseHelper.loadSecureSettings (re-anchored on
+STATS_COLLECTION; the old A11 ADVANCED_MODE anchor no longer exists). Ports ether.
+---
+ packages/LineageSettingsProvider/res/values/defaults.xml      | 3 +++
+ .../org/lineageos/lineagesettings/LineageDatabaseHelper.java  | 4 ++++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/packages/LineageSettingsProvider/res/values/defaults.xml b/packages/LineageSettingsProvider/res/values/defaults.xml
+index 9a5b234..091cc7c 100644
+--- a/packages/LineageSettingsProvider/res/values/defaults.xml
++++ b/packages/LineageSettingsProvider/res/values/defaults.xml
+@@ -11,6 +11,9 @@
+     <!-- Default for LineageSettings.Secure.STATS_COLLECTION -->
+     <bool name="def_stats_collection">false</bool>
+ 
++    <!-- Default for LineageSettings.Secure.ADVANCED_REBOOT (on by default) -->
++    <bool name="def_advanced_reboot">true</bool>
++
+     <!-- Default for LineageSettings.Secure.LOCKSCREEN_VISUALIZER_ENABLED -->
+     <bool name="def_lockscreen_visualizer">false</bool>
+ 
+diff --git a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+index 1601091..5cf2b20 100644
+--- a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
++++ b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+@@ -407,6 +407,10 @@ public class LineageDatabaseHelper extends SQLiteOpenHelper{
+             loadBooleanSetting(stmt, LineageSettings.Secure.STATS_COLLECTION,
+                     R.bool.def_stats_collection);
+ 
++            // advanced restart menu on by default (additive — no stock default upstream)
++            loadBooleanSetting(stmt, LineageSettings.Secure.ADVANCED_REBOOT,
++                    R.bool.def_advanced_reboot);
++
+             loadBooleanSetting(stmt, LineageSettings.Secure.LOCKSCREEN_VISUALIZER_ENABLED,
+                     R.bool.def_lockscreen_visualizer);
+ 
+-- 
+2.43.0
+

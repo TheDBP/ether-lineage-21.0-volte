@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 21:01:13 -0400
+Subject: [PATCH] uapi: drop the sockaddr_storage alias that collides with A13
+ bionic
+
+libbt-vendor (and anything else seeing both the exported kernel headers and
+bionic) fails to compile on lineage-20.0:
+
+  bionic/libc/include/sys/socket.h:73:8: error: redefinition of
+    '__kernel_sockaddr_storage'
+  .../generated_kernel_includes/gen/usr/include/linux/socket.h:24:26:
+    note: expanded from macro 'sockaddr_storage'
+
+This header defined struct __kernel_sockaddr_storage and then aliased
+sockaddr_storage onto it for userspace, because bionic used to have no
+definition of its own -- Android 12.1's sys/socket.h mentions
+sockaddr_storage nowhere at all, which is why the identical kernel builds
+fine on 19.1. Android 13's bionic declares struct sockaddr_storage itself,
+so the alias turns that declaration into a redefinition.
+
+Removed the alias, matching what upstream Linux later did. The struct
+definition is untouched, and the block was already #ifndef __KERNEL__, so
+kernel-internal builds are unaffected.
+---
+ include/uapi/linux/socket.h | 20 +++++++++++++++-----
+ 1 file changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/include/uapi/linux/socket.h b/include/uapi/linux/socket.h
+index 359c82ac38f..b42153b4cbc 100644
+--- a/include/uapi/linux/socket.h
++++ b/include/uapi/linux/socket.h
+@@ -19,10 +19,20 @@ struct __kernel_sockaddr_storage {
+ } __attribute__ ((aligned(_K_SS_ALIGNSIZE)));	/* force desired alignment */
+ 
+ 
+-#ifndef __KERNEL__
+-/* This header is exposed as linux/socket.h, so it must provide definition
+- * for sockaddr_storage in place of include/linux/socket.h */
+-#define sockaddr_storage __kernel_sockaddr_storage
+-#endif
++/*
++ * ether/Android 13: the "#define sockaddr_storage __kernel_sockaddr_storage" that used to
++ * live here has been removed.
++ *
++ * It existed so userspace including <linux/socket.h> got a sockaddr_storage, because bionic
++ * did not define one. That changed in Android 13: bionic's sys/socket.h now declares
++ * "struct sockaddr_storage" itself. With the macro still in place the preprocessor rewrites
++ * that declaration into "struct __kernel_sockaddr_storage", which this header already
++ * defined above, so every translation unit that sees both headers fails with:
++ *
++ *   bionic/libc/include/sys/socket.h:73: error: redefinition of '__kernel_sockaddr_storage'
++ *
++ * Upstream Linux dropped the same macro for the same reason. Android 12.1 was unaffected
++ * only because its bionic had no sockaddr_storage of its own.
++ */
+ 
+ #endif /* _UAPI_LINUX_SOCKET_H */

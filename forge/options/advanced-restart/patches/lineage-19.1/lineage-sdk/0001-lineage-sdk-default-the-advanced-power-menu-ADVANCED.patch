@@ -1,0 +1,44 @@
+From b5abbc7bb7c02073b742ba6bd9a9bd9d1d253762 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 11:44:46 -0400
+Subject: [PATCH] lineage-sdk: default the advanced power menu
+ (ADVANCED_REBOOT) to on
+
+Rebased from the lineage-18.1 patch of the same name, which conflicts on 19.1 -- the surrounding
+def_ entries and loadBooleanSetting calls moved. Same two additions, re-anchored next to
+def_volume_panel_on_left / VOLUME_PANEL_ON_LEFT, which exist in both.
+---
+ packages/LineageSettingsProvider/res/values/defaults.xml       | 3 +++
+ .../org/lineageos/lineagesettings/LineageDatabaseHelper.java   | 2 ++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/packages/LineageSettingsProvider/res/values/defaults.xml b/packages/LineageSettingsProvider/res/values/defaults.xml
+index 9b52ce1a..82832c45 100644
+--- a/packages/LineageSettingsProvider/res/values/defaults.xml
++++ b/packages/LineageSettingsProvider/res/values/defaults.xml
+@@ -27,6 +27,9 @@
+     <!-- Default for LineageSettings.Secure.VOLUME_PANEL_ON_LEFT -->
+     <bool name="def_volume_panel_on_left">false</bool>
+ 
++    <!-- Default for LineageSettings.Secure.ADVANCED_REBOOT (advanced power menu on by default) -->
++    <bool name="def_advanced_reboot">true</bool>
++
+     <!-- Defaults for System -->
+ 
+     <!-- Default for LineageSettings.System.FORCE_SHOW_NAVBAR -->
+diff --git a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+index a7107ae1..841b3fa2 100644
+--- a/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
++++ b/packages/LineageSettingsProvider/src/org/lineageos/lineagesettings/LineageDatabaseHelper.java
+@@ -505,6 +505,8 @@ public class LineageDatabaseHelper extends SQLiteOpenHelper{
+ 
+             loadBooleanSetting(stmt, LineageSettings.Secure.VOLUME_PANEL_ON_LEFT,
+                     R.bool.def_volume_panel_on_left);
++            loadBooleanSetting(stmt, LineageSettings.Secure.ADVANCED_REBOOT,
++                    R.bool.def_advanced_reboot);
+         } finally {
+             if (stmt != null) stmt.close();
+         }
+-- 
+2.53.0
+

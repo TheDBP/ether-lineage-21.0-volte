@@ -1,0 +1,8 @@
+#add new domain for DataServices
+user=system seinfo=platform name=.dataservices domain=dataservice_app type=system_app_data_file
+
+# AtFwd and FastDormancy apps
+user=system seinfo=platform name=com.qualcomm.telephony domain=qtelephony type=system_app_data_file
+
+# FM app
+user=_app seinfo=platform name=com.caf.fmradio domain=vendor_fm_app type=app_data_file levelFrom=all

@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 13:53:49 -0400
+Subject: [PATCH] libprocessgroup: signal the process group when there is no
+ cgroup hierarchy
+
+With no cgroup v2 root (3.10 kernel, see the two earlier patches) the
+hierarchy path is empty and DoKillProcessGroupOnce takes the "cgroup.procs
+does not exist, so the process is already dead" shortcut without sending
+anything. Every `stop`, `restart` and service shutdown from init is then a
+no-op: the state flips to 'stopping' and stays there because the process
+never exits.
+
+In recovery that breaks sideload. adbd survives the stop that
+sys.usb.config=sideload issues, keeps /dev/usb-ffs/adb/ep0-2 open, and
+minadbd loops on EBUSY:
+
+  init.svc.adbd=stopping  (pid still running)
+  minadbd: usb_ffs.cpp:278] cannot open control endpoint
+           /dev/usb-ffs/adb/ep0: Device or resource busy
+  adb: sideload connection failed: closed
+
+init puts every service in its own process group (setpgid, or setsid for
+console services), so with no hierarchy signal the group directly. The
+count returned keeps the caller's retry loop waiting until the leader is
+gone or a zombie; RemoveProcessGroup likewise has nothing to remove.
+---
+ libprocessgroup/processgroup.cpp | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/libprocessgroup/processgroup.cpp b/libprocessgroup/processgroup.cpp
+index fe6aa8d59..2f2b11ca7 100644
+--- a/libprocessgroup/processgroup.cpp
++++ b/libprocessgroup/processgroup.cpp
+@@ -183,6 +183,10 @@ static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
+ }
+ 
+ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned int retries) {
++    // No hierarchy, nothing was created (see createProcessGroupInternal), nothing to remove.
++    if (cgroup == nullptr || *cgroup == '\0') {
++        return 0;
++    }
+     int ret = 0;
+     auto uid_pid_path = ConvertUidPidToPath(cgroup, uid, pid);
+     auto uid_path = ConvertUidToPath(cgroup, uid);
+@@ -344,7 +348,34 @@ err:
+ // Returns number of processes killed on success
+ // Returns 0 if there are no processes in the process cgroup left to kill
+ // Returns -1 on error
++// ether/msm8992: with no cgroup hierarchy there is no cgroup.procs to enumerate, so the "ENOENT
++// means already dead" shortcut below would never signal anything and init would leave every
++// stopped service in 'stopping' forever, its process still running (in recovery that is adbd
++// holding the FunctionFS endpoints minadbd needs for sideload). init puts each service in its own
++// process group (setpgid/setsid in service_utils.cpp), so signal the group instead. Returns 1 while
++// the leader is still alive so the caller's retry loop keeps waiting, 0 once it is gone or a zombie
++// (init reaps it after this returns).
++static int KillProcessGroupWithoutCgroup(int initialPid, int signal) {
++    if (kill(-initialPid, signal) == -1) {
++        if (errno == ESRCH) return 0;
++        PLOG(WARNING) << __func__ << " failed to signal process group " << initialPid;
++        return -1;
++    }
++    std::string stat;
++    if (!android::base::ReadFileToString(android::base::StringPrintf("/proc/%d/stat", initialPid),
++                                         &stat)) {
++        return 0;
++    }
++    // "<pid> (<comm>) <state> ..." -- comm may contain spaces or parentheses, so find the last ')'.
++    auto close = stat.rfind(')');
++    if (close == std::string::npos || close + 2 >= stat.size()) return 0;
++    return stat[close + 2] == 'Z' ? 0 : 1;
++}
++
+ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid, int signal) {
++    if (cgroup == nullptr || *cgroup == '\0') {
++        return KillProcessGroupWithoutCgroup(initialPid, signal);
++    }
+     auto path = ConvertUidPidToPath(cgroup, uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
+     std::unique_ptr<FILE, decltype(&fclose)> fd(fopen(path.c_str(), "re"), fclose);
+     if (!fd) {

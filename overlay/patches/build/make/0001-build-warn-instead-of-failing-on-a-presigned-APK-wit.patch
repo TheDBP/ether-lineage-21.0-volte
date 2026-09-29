@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 13 Sep 2026 12:47:28 -0400
+Subject: [PATCH] build: warn instead of failing on a presigned APK with
+ compressed libs
+
+check-jni-dex-compression runs only on the do_not_alter_apk path, which exists precisely so a
+presigned APK is copied verbatim rather than rewritten. Failing there pushes the APK back onto the
+rewriting path, which uncompresses its libraries and dex and invalidates the whole-file v2
+signature -- exactly the outcome the path was avoiding. PackageManager then rejects the package
+during the boot scan and logs nothing, so the build succeeds and the app is simply missing.
+
+Measured on this device: Firefox went 127,545,689 -> 242,684,607 bytes and GoogleContacts
+14,891,125 -> 19,776,651, both losing their APK Sig Block, and neither installed. The visible
+symptom was no browser, no F-Droid, no Contacts, and two dead dock tiles where the overridden
+Lineage apps used to be.
+
+An APK that declares extractNativeLibs=true is entitled to ship compressed libraries -- they are
+extracted at install. Fennec F-Droid and the MindTheGapps swaps all declare it. Repacking someone
+else's signed APK to satisfy a local packaging preference is not a trade worth making.
+---
+ core/definitions.mk | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/core/definitions.mk b/core/definitions.mk
+index 0c46de9fc..4c243a0ab 100644
+--- a/core/definitions.mk
++++ b/core/definitions.mk
+@@ -2795,10 +2795,17 @@ endef
+ 
+ # Verifies shared JNI libraries and dex files in an apk are uncompressed.
+ #
++# Warns rather than fails. This runs only on the do_not_alter_apk path, which exists so a presigned
++# APK is copied verbatim instead of being rewritten -- rewriting invalidates an APK Signature
++# Scheme v2 signature, and PackageManager then rejects the package at boot scan without logging
++# anything. Refusing the copy pushes such an APK back onto the rewriting path, which is the failure
++# it was trying to prevent.
++#
++# An APK declaring extractNativeLibs=true is entitled to compressed libraries; they are extracted at
++# install. Fennec F-Droid and the MindTheGapps swaps all do, and repacking them is not ours to do.
+ define check-jni-dex-compression
+   if (zipinfo $@ 'lib/*.so' '*.dex' 2>/dev/null | grep -v ' stor ' >/dev/null) ; then \
+-    $(call echo-error,$@,Contains compressed JNI libraries and/or dex files); \
+-    exit 1; \
++    echo "warning: $@: contains compressed JNI libraries and/or dex files (presigned, shipped as-is)" >&2; \
+   fi
+ endef
+ 

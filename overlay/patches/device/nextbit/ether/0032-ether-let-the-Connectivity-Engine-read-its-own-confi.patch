@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 24 Sep 2026 17:47:53 -0400
+Subject: [PATCH] ether: let the Connectivity Engine read its own configuration
+
+CNE is the component that tells the RIL which data technology to prefer, and it is the only path
+by which IWLAN becomes a candidate at all. On this port it cannot read a single one of its own
+properties:
+
+    avc: denied { read } comm="cnd" tcontext=u:object_r:default_prop:s0
+    avc: denied { read } comm="cnd" tcontext=u:object_r:wifi_hal_prop:s0
+
+persist.cne.feature is set to 1 and cnd never sees it, because every persist.cne.* name falls
+through to default_prop, which cnd is not allowed to read. wifi.interface -- which libcne reads to
+find the WLAN interface it is meant to be evaluating -- is wifi_hal_prop, also denied.
+
+The consequence is visible one layer up, in the RIL:
+
+    qcril_qmi_nas_update_data_rte: .. pref data tech UNKNOWN, is current 0
+    qcril_qmi_nas_update_data_rte: preferred data tech available UNKNOWN
+    qcril_qmi_nas_update_data_rte:  .. prep CDMA / prep EVDO / prep GSM / prep LTE
+
+CNE offers no preferred data technology, and IWLAN never appears among the candidates it prepares,
+so nothing ever asks the modem for an ePDG tunnel. That is the AP-side end of the Wi-Fi calling
+path: the modem accepts the configuration and then has nothing to act on.
+
+Give the prefixes cnd and libcne actually read their own type rather than widening default_prop,
+which would hand cnd read access to every unlabelled property on the system.
+
+persist.data.iwlan.* is deliberately left alone: netmgrd and qmuxd read those and are not denied
+default_prop, so relabelling would take away access they currently have.
+
+This is the same failure as the bluetooth.core.le.vendor_capabilities.enabled entry above it -- a
+property whose reader cannot see it, so the setting silently has no effect.
+
+Not claiming this alone brings up VoWiFi. persist.vendor.cnd.iwlan and persist.vendor.cnd.wqe are
+both read by libcne and both unset; they are the obvious next step, but they are worth nothing
+until CNE can read that part of the property space at all.
+---
+ sepolicy/cnd.te            | 12 ++++++++++++
+ sepolicy/property.te       |  1 +
+ sepolicy/property_contexts | 15 +++++++++++++++
+ 3 files changed, 28 insertions(+)
+ create mode 100644 sepolicy/cnd.te
+
+diff --git a/sepolicy/cnd.te b/sepolicy/cnd.te
+new file mode 100644
+index 0000000..29bd066
+--- /dev/null
++++ b/sepolicy/cnd.te
+@@ -0,0 +1,12 @@
++# The Connectivity Engine is the component that tells the RIL which data technology to prefer, and
++# it is the only path by which IWLAN becomes a candidate at all. It reads two sets of properties and
++# is denied both:
++#
++#   avc: denied { read } comm="cnd" tcontext=u:object_r:default_prop:s0
++#   avc: denied { read } comm="cnd" tcontext=u:object_r:wifi_hal_prop:s0
++#
++# The first is its own configuration -- persist.cne.feature above all, plus persist.vendor.cnd.iwlan
++# and persist.vendor.cnd.wqe -- now carried by vendor_cne_prop. The second is wifi.interface, which
++# libcne reads to find the WLAN interface it is supposed to be evaluating.
++get_prop(cnd, vendor_cne_prop)
++get_prop(cnd, wifi_hal_prop)
+diff --git a/sepolicy/property.te b/sepolicy/property.te
+index d3b31be..5c1b515 100644
+--- a/sepolicy/property.te
++++ b/sepolicy/property.te
+@@ -1,2 +1,3 @@
+ type audio_smartamp_init_prop, property_type;
+ type vendor_timekeep_prop, property_type;
++type vendor_cne_prop, property_type;
+diff --git a/sepolicy/property_contexts b/sepolicy/property_contexts
+index c9e974f..ba770ba 100644
+--- a/sepolicy/property_contexts
++++ b/sepolicy/property_contexts
+@@ -9,3 +9,18 @@ persist.vendor.timeadjust u:object_r:vendor_timekeep_prop:s0
+ #           "bluetooth.core.le.vendor_capabilities.enabled"
+ # so the gate silently defaulted to true and the APCF crash persisted.
+ bluetooth.core.le.vendor_capabilities.enabled    u:object_r:bluetooth_config_prop:s0 exact bool
++
++# CNE's own configuration. Every one of these falls through to default_prop, which cnd is not
++# allowed to read, so the Connectivity Engine cannot see its own master switch:
++#   avc: denied { read } comm="cnd" tcontext=u:object_r:default_prop:s0
++# persist.cne.feature is set to 1 and cnd never sees it. The visible consequence is at the RIL:
++#   qcril_qmi_nas_update_data_rte: .. pref data tech UNKNOWN
++#   qcril_qmi_nas_update_data_rte:  .. prep CDMA / EVDO / GSM / LTE
++# -- CNE offers no preferred data technology and IWLAN is never among the candidates, so nothing
++# ever asks the modem to try an ePDG tunnel.
++#
++# Only the prefixes cnd and libcne actually read are moved. persist.data.iwlan.* is deliberately
++# left in default_prop: netmgrd and qmuxd read those and are not denied it, so relabelling would
++# take away access they currently have.
++persist.cne.            u:object_r:vendor_cne_prop:s0
++persist.vendor.cnd.     u:object_r:vendor_cne_prop:s0

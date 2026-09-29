@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 4 Sep 2026 12:36:08 -0400
+Subject: [PATCH] msm8994 display: drop libbfqio (removed from LineageOS after
+ 18.1)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+vendor/lineage/libbfqio is a LineageOS compat shim that exists on lineage-18.1 and was removed for
+19.1 and later. The msm8994 display HAL still links it and calls android_set_rt_ioprio() from the
+vsync thread, so ckati fails:
+
+  hardware/qcom-caf/msm8994/display/libhwcomposer/../common.mk:
+    error: "hwcomposer.msm8992 missing libbfqio"
+
+This is exactly what upstream did for msm8996 when carrying it past 18.1 — the commit
+'Revert "hwc: Set ioprio for vsync thread"' plus dropping libbfqio from the link list. Found by
+diffing lineage-18.1-caf-msm8996 against lineage-20.0-caf-msm8996 before starting this build.
+
+Cost: the vsync thread no longer gets realtime IO priority. Upstream accepted the same trade.
+---
+ libhwcomposer/Android.mk    | 2 +-
+ libhwcomposer/hwc_vsync.cpp | 2 --
+ 2 files changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/libhwcomposer/Android.mk b/libhwcomposer/Android.mk
+index 9e6b4a52aa..c4d6be37df 100644
+--- a/libhwcomposer/Android.mk
++++ b/libhwcomposer/Android.mk
+@@ -9,7 +9,7 @@ LOCAL_MODULE_TAGS             := optional
+ LOCAL_SHARED_LIBRARIES        := $(common_libs) libEGL liboverlay \
+                                  libhdmi libqdutils libhardware_legacy \
+                                  libdl libmemalloc libqservice libsync \
+-                                 libbinder libmedia libbfqio
++                                 libbinder libmedia
+ 
+ ifeq ($(TARGET_USES_QCOM_BSP),true)
+ LOCAL_SHARED_LIBRARIES += libhwui
+diff --git a/libhwcomposer/hwc_vsync.cpp b/libhwcomposer/hwc_vsync.cpp
+index 275ff371e5..ea3f672d3b 100644
+--- a/libhwcomposer/hwc_vsync.cpp
++++ b/libhwcomposer/hwc_vsync.cpp
+@@ -18,7 +18,6 @@
+  * limitations under the License.
+  */
+ 
+-#include <bfqio/bfqio.h>
+ #include <cutils/properties.h>
+ #include <utils/Log.h>
+ #include <fcntl.h>
+@@ -119,7 +118,6 @@ static void *vsync_loop(void *param)
+     if (sched_setscheduler(gettid(), SCHED_FIFO, &sched_param) != 0) {
+         ALOGE("Couldn't set SCHED_FIFO for hwc_vsync");
+     }
+-    android_set_rt_ioprio(0, 1);
+ 
+     char vdata[MAX_DATA];
+     //Number of physical displays

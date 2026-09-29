@@ -1,0 +1,35 @@
+diff --git a/drivers/gpu/drm/drm_atomic_helper.c b/drivers/gpu/drm/drm_atomic_helper.c
+index f34b4e8455a6..4aa6008ebad8 100644
+--- a/drivers/gpu/drm/drm_atomic_helper.c
++++ b/drivers/gpu/drm/drm_atomic_helper.c
+@@ -2164,6 +2164,14 @@ int drm_atomic_helper_disable_plane(struct drm_plane *plane)
+ 	struct drm_plane_state *plane_state;
+ 	int ret = 0;
+ 
++	/* FORGE DIAGNOSTIC: name whoever disables a plane, and how they got here. Rate-limited --
++	 * this is also called legitimately. Declarations first: this file builds as C90. */
++	if (printk_ratelimit()) {
++		pr_info("FORGE: disable_plane [PLANE:%d] by %s(%d)\n",
++			plane->base.id, current->comm, current->pid);
++		dump_stack();
++	}
++
+ 	/*
+ 	 * FIXME: Without plane->crtc set we can't get at the implicit legacy
+ 	 * acquire context. The real fix will be to wire the acquire ctx through
+@@ -2323,6 +2331,15 @@ int drm_atomic_helper_set_config(struct drm_mode_set *set)
+ 	struct drm_crtc *crtc = set->crtc;
+ 	int ret = 0;
+ 
++	/* FORGE DIAGNOSTIC: a set_config with no mode is what switches the display off. Printing the
++	 * CRTC id and the caller turns "the panel died" into a stack trace naming the ioctl. */
++	if (printk_ratelimit()) {
++		pr_info("FORGE: set_config [CRTC:%d] mode=%s by %s(%d)\n",
++			set->crtc ? set->crtc->base.id : -1, set->mode ? "yes" : "NOMODE",
++			current->comm, current->pid);
++		dump_stack();
++	}
++
+ 	state = drm_atomic_state_alloc(crtc->dev);
+ 	if (!state)
+ 		return -ENOMEM;

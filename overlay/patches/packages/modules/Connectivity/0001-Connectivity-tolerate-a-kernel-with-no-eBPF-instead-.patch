@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:04:50 -0400
+Subject: [PATCH] Connectivity: tolerate a kernel with no eBPF instead of
+ crash-looping netd
+
+Part of the 19.1 'netd: restore the Android 11 no-eBPF fallback' patch,
+re-homed. A13 deleted TrafficController from system/netd (upstream commit
+"Delete TrafficController from Netd") and moved socket tagging into this
+module, so the 19.1 patch could not be rebased in place -- two of its five
+files no longer exist in netd at all.
+
+Without this, ether cannot boot past netd on 20.0. The chain is:
+BpfHandler::init() calls initPrograms()/initMaps(); on this 3.10.108 kernel
+there is no BPF syscall, so both fail; libnetd_updatable_init() propagates
+the error; and system/netd/server/main.cpp does exit(1) on it, which init
+turns into a permanent netd crash loop.
+
+So init() now probes rather than requires: on failure it logs, leaves
+mBpfEnabled false and returns ok, and tagSocket()/untagSocket() return 0
+early instead of touching maps that do not exist.
+
+Unlike 19.1 there is no legacy path to fall back to. That version called
+legacy_tagSocket() from system/core/libqtaguid, which A13 removed; the
+surviving libcutils qtaguid_tagSocket() only dlopens libnetd_client.so and
+calls back into this same code, so using it would recurse. Socket tagging is
+therefore a no-op here, which costs per-UID traffic accounting (data usage in
+Settings) and the BPF firewall and tethering-offload paths. That is the same
+class of degradation 19.1 accepted; the real fix remains a kernel with eBPF.
+---
+ netd/BpfHandler.cpp | 36 ++++++++++++++++++++++++++++++++++--
+ netd/BpfHandler.h   |  4 ++++
+ 2 files changed, 38 insertions(+), 2 deletions(-)
+
+diff --git a/netd/BpfHandler.cpp b/netd/BpfHandler.cpp
+index 6ae26c38f..27608f853 100644
+--- a/netd/BpfHandler.cpp
++++ b/netd/BpfHandler.cpp
+@@ -36,6 +36,8 @@ using bpf::NONEXISTENT_COOKIE;
+ using bpf::getSocketCookie;
+ using bpf::retrieveProgram;
+ using netdutils::Status;
++using netdutils::isOk;
++using netdutils::toString;
+ using netdutils::statusFromErrno;
+ 
+ constexpr int PER_UID_STATS_ENTRIES_LIMIT = 500;
+@@ -98,8 +100,31 @@ Status BpfHandler::init(const char* cg2_path) {
+     android::bpf::waitForProgsLoaded();
+     ALOGI("BPF programs are loaded");
+ 
+-    RETURN_IF_NOT_OK(initPrograms(cg2_path));
+-    RETURN_IF_NOT_OK(initMaps());
++    // ether/msm8992: probe for eBPF rather than requiring it.
++    //
++    // This kernel is 3.10.108: no kernel/bpf directory, no BPF syscall, so bpfloader can
++    // never succeed and the pinned maps/programs never appear. Upstream treats that as
++    // fatal -- init() returns an error, libnetd_updatable_init() propagates it, and
++    // netd/main.cpp does exit(1), which init turns into a permanent netd crash loop.
++    //
++    // Degrade instead of dying. See the tagSocket()/untagSocket() guards below.
++    Status progStatus = initPrograms(cg2_path);
++    if (!isOk(progStatus)) {
++        ALOGW("BPF programs unavailable (%s) -- continuing without eBPF. Per-socket traffic\n"
++              "tagging is disabled, so per-UID data accounting will be missing or inaccurate,\n"
++              "and BPF-based firewall and tethering-offload paths are unavailable.",
++              toString(progStatus).c_str());
++        mBpfEnabled = false;
++        return netdutils::status::ok;
++    }
++    Status mapStatus = initMaps();
++    if (!isOk(mapStatus)) {
++        ALOGW("BPF maps unavailable (%s) -- continuing without eBPF.",
++              toString(mapStatus).c_str());
++        mBpfEnabled = false;
++        return netdutils::status::ok;
++    }
++    mBpfEnabled = true;
+ 
+     return netdutils::status::ok;
+ }
+@@ -128,6 +153,11 @@ bool BpfHandler::hasUpdateDeviceStatsPermission(uid_t uid) {
+ 
+ int BpfHandler::tagSocket(int sockFd, uint32_t tag, uid_t chargeUid, uid_t realUid) {
+     std::lock_guard guard(mMutex);
++    // ether/msm8992: no eBPF -> nothing to tag into. Report success so callers (NetdClient,
++    // and every app that tags a socket through it) carry on normally. Note there is no
++    // legacy fallback to use here: A13 libcutils qtaguid_tagSocket just dlopens
++    // libnetd_client.so and calls back into this same path, so using it would recurse.
++    if (!mBpfEnabled) return 0;
+     if (chargeUid != realUid && !hasUpdateDeviceStatsPermission(realUid)) {
+         return -EPERM;
+     }
+@@ -236,6 +266,8 @@ int BpfHandler::tagSocket(int sockFd, uint32_t tag, uid_t chargeUid, uid_t realU
+ 
+ int BpfHandler::untagSocket(int sockFd) {
+     std::lock_guard guard(mMutex);
++    // ether/msm8992: see tagSocket().
++    if (!mBpfEnabled) return 0;
+     uint64_t sock_cookie = getSocketCookie(sockFd);
+ 
+     if (sock_cookie == NONEXISTENT_COOKIE) return -errno;
+diff --git a/netd/BpfHandler.h b/netd/BpfHandler.h
+index 5ee04d1a5..0c8d71c79 100644
+--- a/netd/BpfHandler.h
++++ b/netd/BpfHandler.h
+@@ -68,6 +68,10 @@ class BpfHandler {
+ 
+     std::mutex mMutex;
+ 
++    // ether/msm8992: false when the kernel has no eBPF, so the BPF maps and programs could
++    // not be initialised. Tag/untag then degrade to no-ops instead of netd exiting.
++    bool mBpfEnabled = false;
++
+     // The limit on the number of stats entries a uid can have in the per uid stats map. BpfHandler
+     // will block that specific uid from tagging new sockets after the limit is reached.
+     const uint32_t mPerUidStatsEntriesLimit;

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Nextbit Robin (ether, msm8992 / Snapdragon 808). A PORT, not a supported target: LineageOS
+     has no ether tree above lineage-18.1, and the only 19.1 tree (TipzTeam, GitLab) was deleted;
+     its recovered copy is vendored. Kernel and vendor blobs pin at 18.1; everything else syncs at
+     lineage-21.0. -->
+<manifest>
+  <!-- device/nextbit/ether is NOT synced: it is vendored, pristine, from ../vendored/device_nextbit_ether
+       (the recovered TipzTeam lineage-19.1 tree). Every change to it is a patch in
+       overlay/patches/device/nextbit/ether/. -->
+  <project name="LineageOS/android_kernel_nextbit_msm8992" path="kernel/nextbit/msm8992" remote="github" revision="lineage-18.1" />
+  <project name="TheMuppets/proprietary_vendor_nextbit"  path="vendor/nextbit"          remote="github" revision="lineage-18.1" />
+
+  <!-- Dependencies the ether tree needs that lineage-21.0's default manifest does NOT carry.
+       hardware/sony/timekeep: in ether's lineage.dependencies, absent from the 20.0 manifest; its
+       branch is "lineage-20" (sepolicy uses "lineage-20.0-legacy-um"; check with git ls-remote).
+       device/qcom/sepolicy-legacy is NOT synced: vendored from ../vendored/sepolicy-legacy. Upstream
+       android_device_qcom_sepolicy has no branch with the pre-rename layout this tree needs
+       (lowercase sepolicy.mk + common/ + legacy-common/ + per-SoC dirs); lineage-20.0-legacy-um
+       ships SEPolicy.mk with generic/ legacy/ qva/ only and no msm8992 dir. -->
+  <project name="LineageOS/android_hardware_sony_timekeep" path="hardware/sony/timekeep"     remote="github" revision="lineage-21" />
+
+  <!-- Legacy Qualcomm CAF HALs. msm8992 has no CAF tree of its own and shares msm8994's; 20.0
+       dropped every SoC older than msm8953 from hardware/qcom-caf, and lineage-18.1-caf-msm8994 is
+       the newest branch these repos have. -->
+  <project name="LineageOS/android_hardware_qcom_audio"   path="hardware/qcom-caf/msm8994/audio"   remote="github" revision="lineage-18.1-caf-msm8994" groups="pdk-qcom,qcom,qcom_audio"/>
+  <project name="LineageOS/android_hardware_qcom_display" path="hardware/qcom-caf/msm8994/display" remote="github" revision="lineage-18.1-caf-msm8994" groups="pdk-qcom,qcom,qcom_display"/>
+  <project name="LineageOS/android_hardware_qcom_media"   path="hardware/qcom-caf/msm8994/media"   remote="github" revision="lineage-18.1-caf-msm8994" groups="pdk-qcom,qcom,qcom_media"/>
+</manifest>

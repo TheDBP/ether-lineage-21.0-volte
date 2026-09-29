@@ -1,0 +1,32 @@
+From 284bad916833525ddce285ed1e1651d63bfd49fa Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 18:03:02 -0400
+Subject: [PATCH] Trebuchet: default themed icons to on
+
+The 19.1 version of this change flipped the inline default in
+Themes.isThemedIconEnabled():
+
+    Utilities.getPrefs(context).getBoolean(KEY_THEMED_ICONS, false)
+
+On lineage-20.0 that code is gone. Trebuchet moved to the typed LauncherPrefs
+API, so isThemedIconEnabled() is now just LauncherPrefs.get(context).get(
+THEMED_ICONS) and the default lives in the pref declaration instead. The
+FeatureFlags.ENABLE_THEMED_ICONS gate the 19.1 patch had to satisfy is also
+gone. So the equivalent change here is the false->true in backedUpItem().
+---
+ src/com/android/launcher3/LauncherPrefs.kt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/com/android/launcher3/LauncherPrefs.kt b/src/com/android/launcher3/LauncherPrefs.kt
+index fb4da0c019..110b46db74 100644
+--- a/src/com/android/launcher3/LauncherPrefs.kt
++++ b/src/com/android/launcher3/LauncherPrefs.kt
+@@ -274,7 +274,7 @@ class LauncherPrefs(private val encryptedContext: Context) {
+         @JvmStatic fun get(context: Context): LauncherPrefs = INSTANCE.get(context)
+ 
+         @JvmField val ICON_STATE = nonRestorableItem(LauncherAppState.KEY_ICON_STATE, "", true)
+-        @JvmField val THEMED_ICONS = backedUpItem(Themes.KEY_THEMED_ICONS, false, true)
++        @JvmField val THEMED_ICONS = backedUpItem(Themes.KEY_THEMED_ICONS, true, true)
+         @JvmField val PROMISE_ICON_IDS = backedUpItem(InstallSessionHelper.PROMISE_ICON_IDS, "")
+         @JvmField val WORK_EDU_STEP = backedUpItem(WorkProfileManager.KEY_WORK_EDU_STEP, 0)
+         @JvmField val WORKSPACE_SIZE = backedUpItem(DeviceGridState.KEY_WORKSPACE_SIZE, "", true)

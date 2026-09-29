@@ -1,0 +1,2 @@
+#!/system/bin/sh
+exec /data/adb/modules/linux_chroot/scripts/lx-docker "$@"

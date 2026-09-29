@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 02:41:59 -0400
+Subject: [PATCH] ether: enumerate once when switching USB to adb
+
+init.nbq.usb.rc carried its own "on property:sys.usb.config=adb" block, but
+sys.usb.configfs is 0 on this device, so AOSP's block in init.usb.rc fires for
+the same property and the gadget was disabled and re-enabled twice for every
+switch to adb: first as 18d1:4EE7, then as 2C3F:0009. Every enumeration is a
+FUNCTIONFS_DISABLE/ENABLE pair for adbd and a tear-down/re-open of its
+transport, and the host saw the device appear, vanish and appear again.
+
+Drop the device copy; AOSP's block does the same job once. The other
+configurations (mtp, ptp, rndis, midi, diag) have no AOSP counterpart in
+init.usb.rc and stay.
+---
+ rootdir/init.nbq.usb.rc | 16 ++++------------
+ 1 file changed, 4 insertions(+), 12 deletions(-)
+
+diff --git a/rootdir/init.nbq.usb.rc b/rootdir/init.nbq.usb.rc
+index 79bab9a..ebbbaef 100644
+--- a/rootdir/init.nbq.usb.rc
++++ b/rootdir/init.nbq.usb.rc
+@@ -32,18 +32,10 @@ on post-fs-data
+     write /sys/class/android_usb/android0/f_rndis_qc/rndis_transports BAM2BAM_IPA
+     write /sys/class/android_usb/android0/f_rndis_qc/max_pkt_per_xfer 1
+ 
+-# ADB
+-on property:sys.usb.config=adb
+-    write /sys/class/android_usb/android0/enable 0
+-    write /sys/class/android_usb/android0/idVendor 2C3F
+-    write /sys/class/android_usb/android0/idProduct 0009
+-    write /sys/class/android_usb/android0/bDeviceClass 0
+-    write /sys/class/android_usb/android0/bDeviceSubClass 0
+-    write /sys/class/android_usb/android0/bDeviceProtocol 0
+-    write /sys/class/android_usb/android0/functions adb
+-    write /sys/class/android_usb/android0/enable 1
+-    start adbd
+-    setprop sys.usb.state ${sys.usb.config}
++# No adb-only block: /system/etc/init/hw/init.usb.rc already handles
++# sys.usb.config=adb (18d1:4EE7) because sys.usb.configfs is 0 here. A second
++# block re-enumerated the gadget a second time on every switch to adb, and
++# each enumeration is a FUNCTIONFS_DISABLE/ENABLE cycle for adbd.
+ 
+ # MTP
+ on property:sys.usb.config=mtp

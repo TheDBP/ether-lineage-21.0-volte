@@ -1,0 +1,176 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 17:06:00 -0400
+Subject: [PATCH] ether: IMS daemons, JNI symlinks and denial-derived sepolicy
+ (VoLTE step 4)
+
+init.target.rc carries the four IMS services from ether's own stock ramdisk, with the two-stage
+property handshake. Android.mk symlinks the JNI libraries into vendor/app/ims/lib/arm64.
+
+sepolicy/ims_ether.te adds three rules, each from a denial seen on hardware rather than ported:
+net_raw for imsdatadaemon, get_prop(ims, default_prop) for both daemons, and -- the one that blocks
+everything -- get_prop(vendor_init, qcom_ims_prop), without which init cannot read the property its
+own trigger tests.
+
+Nothing is redeclared: device/qcom/sepolicy-legacy already owns the ims domain, its types and all
+four daemon labels, and a second declaration is a hard build failure.
+
+device.mk stages the IMS blobs and the rebuilt ims.apk out of the stock ROM at product-config time,
+rather than expecting someone to have run extract-ims-blobs.sh first. That prerequisite failed
+silently in the worst way: vendor/ims-blobs sits outside vendor/extra, so the overlay clear never
+touches it, and a tree where the script had been run once kept producing ROMs with IMS while a fresh
+clone produced ROMs without it and said nothing -- same command, same repo, different image. The
+blobs come from the user's own stock ROM and cannot be committed, so a wildcard guard runs the
+extraction once and every later build skips straight past it. The include is hard rather than
+-include on purpose: if staging did not produce the file the build must stop, because shipping a ROM
+whose VoLTE is quietly absent is the failure the whole block exists to prevent.
+
+Measured before this patch: imsqmidaemon runs, reaches the modem and sets QMI_DAEMON_STATUS=1, and
+the socket is created and correctly labelled -- the chain stalls only because init cannot read the
+property to fire stage two.
+---
+ Android.mk             | 15 +++++++++++++++
+ device.mk              | 25 +++++++++++++++++++++++++
+ rootdir/init.target.rc | 38 ++++++++++++++++++++++++++++++++++++++
+ sepolicy/ims_ether.te  | 26 ++++++++++++++++++++++++++
+ 4 files changed, 104 insertions(+)
+ create mode 100644 sepolicy/ims_ether.te
+
+diff --git a/Android.mk b/Android.mk
+index b5e39d7..1983362 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -55,4 +55,19 @@ $(RFS_MSM_MPSS_SYMLINKS): $(LOCAL_INSTALLED_MODULE)
+ 
+ ALL_DEFAULT_INSTALLED_MODULES += $(RFS_MSM_ADSP_SYMLINKS) $(RFS_MSM_MPSS_SYMLINKS)
+ 
++
++# IMS / VoLTE: org.codeaurora.ims looks for its JNI libraries inside its own APK directory rather
++# than on the normal library path, so they have to be symlinked into vendor/app/ims/lib/arm64.
++# Copied from device_lge_bullhead, which needed exactly this for the same APK. Missing these gives
++# an ims.apk that installs and then cannot place a call, with no obvious error.
++IMS_LIBS := libimscamera_jni.so libimsmedia_jni.so
++IMS_SYMLINKS := $(addprefix $(TARGET_OUT_VENDOR)/app/ims/lib/arm64/,$(notdir $(IMS_LIBS)))
++$(IMS_SYMLINKS): $(LOCAL_INSTALLED_MODULE)
++	@echo "IMS lib link: $@"
++	@mkdir -p $(dir $@)
++	@rm -rf $@
++	$(hide) ln -sf /vendor/lib64/$(notdir $@) $@
++
++ALL_DEFAULT_INSTALLED_MODULES += $(IMS_SYMLINKS)
++
+ endif
+diff --git a/device.mk b/device.mk
+index db1923d..aebacc8 100644
+--- a/device.mk
++++ b/device.mk
+@@ -339,6 +339,31 @@ endif
+ # this makefile, so the test below ran against an empty value and every WITH_OEM build silently fell
+ # through to the skin's. -include, so a build without the pack staged is still fine.
+ -include vendor/extra/oem-assets/assets-vars.mk
++
++# IMS / VoLTE blobs and the rebuilt ims.apk, staged out of the stock ROM at product-config time.
++#
++# This used to be a hand-run step before the build, and that failed silently in the worst way:
++# vendor/ims-blobs sits outside vendor/extra, so the overlay clear never touches it. A tree where the
++# script had been run once kept producing ROMs with IMS, while a fresh clone produced ROMs without it
++# and said nothing -- same command, same repo, different image.
++#
++# The blobs come from the user's own stock ROM and cannot be committed, so staging them is part of
++# the build rather than a prerequisite to remember. The wildcard guard makes it run once; every later
++# build sees the .mk and skips straight past.
++ifeq ($(wildcard vendor/ims-blobs/ims-blobs.mk),)
++  # /repo is the device repo inside the build container; the second path is for a host-side build.
++  _ether_stock := $(firstword $(wildcard /repo/Ether_Stock_ROM_*.zip) $(wildcard $(LOCAL_PATH)/../../../../Ether_Stock_ROM_*.zip))
++  ifeq ($(_ether_stock),)
++    $(error ether: no Ether_Stock_ROM_*.zip found, so the IMS blobs cannot be staged. Put the stock \
++ROM in the device repo root, or see VOLTE-BRINGUP.md. Refusing to build a ROM lacking VoLTE.)
++  endif
++  $(info ether: staging IMS blobs from $(notdir $(_ether_stock)) -- first build only, ~2 min)
++  $(info $(shell $(dir $(_ether_stock))extract-ims-blobs.sh $(_ether_stock) . 2>&1 | tail -4))
++endif
++# Deliberately a hard include, not -include: if the staging above did not produce this file the build
++# must stop. Shipping a ROM whose VoLTE is quietly absent is the failure this whole block exists to
++# prevent.
++include vendor/ims-blobs/ims-blobs.mk
+ ifeq ($(WITH_OEM),true)
+ ifneq ($(OEM_DEFAULT_WALLPAPER),)
+ ether_def_wallpaper := $(OEM_DEFAULT_WALLPAPER)
+diff --git a/rootdir/init.target.rc b/rootdir/init.target.rc
+index fbad491..9d89aac 100644
+--- a/rootdir/init.target.rc
++++ b/rootdir/init.target.rc
+@@ -129,3 +129,41 @@ service energy-awareness /vendor/bin/energy-awareness
+     user root
+     group system
+     oneshot
++
++# IMS / VoLTE. Ported from device_lge_bullhead (same msm8992, same QTI IMS generation), with the
++# paths moved from /system/bin to /vendor/bin where our blobs land. imsdatadaemon starts only once
++# imsqmidaemon has reached the modem and set sys.ims.QMI_DAEMON_STATUS, which is why it is disabled
++# here rather than class main.
++service imsqmidaemon /vendor/bin/imsqmidaemon
++    class main
++    user system
++    socket ims_qmid stream 0660 system radio
++    group radio net_raw log diag
++
++service imsdatadaemon /vendor/bin/imsdatadaemon
++    class main
++    user system
++    socket ims_datad stream 0660 system radio
++    group system wifi radio inet net_raw log diag net_admin
++    disabled
++
++on property:sys.ims.QMI_DAEMON_STATUS=1
++    start imsdatadaemon
++
++# ether's stock init runs a third stage bullhead never had: imsdatadaemon sets DATA_DAEMON_STATUS
++# and that starts the RTP daemon. Taken from the stock ramdisk's own init.target.rc, not ported.
++service ims_rtp_daemon /vendor/bin/ims_rtp_daemon
++    class main
++    user system
++    socket ims_rtpd stream 0660 system radio
++    group radio net_raw diag inet log
++    disabled
++
++on property:sys.ims.DATA_DAEMON_STATUS=1
++    start ims_rtp_daemon
++
++# No socket and no trigger on stock: it just runs.
++service imscmservice /vendor/bin/imscmservice
++    class main
++    user system
++    group radio net_raw diag inet log
+diff --git a/sepolicy/ims_ether.te b/sepolicy/ims_ether.te
+new file mode 100644
+index 0000000..1528f6e
+--- /dev/null
++++ b/sepolicy/ims_ether.te
+@@ -0,0 +1,26 @@
++# IMS deltas over device/qcom/sepolicy-legacy/common/ims.te.
++#
++# That policy already declares the ims domain and its types, labels all four daemons and their
++# sockets, and grants set_prop/get_prop on qcom_ims_prop -- so NOTHING is redeclared here. Adding
++# a second "type ims_socket" fails the build outright with 'Duplicate declaration of type'.
++#
++# Every rule below comes from a denial observed on hardware (2026-09-23, ether lineage-20.0), not
++# from porting: the legacy policy turned out not to be a superset of bullhead's after all.
++
++# imsdatadaemon opens raw sockets to set up the IMS data path. bullhead's ims.te granted this and
++# the qcom legacy policy does not:
++#   denied { net_raw } for comm="imsdatadaemon" capability=13 scontext=u:r:ims:s0 tclass=capability
++allow ims self:capability net_raw;
++
++# both daemons read a property that lands in the default bucket:
++#   denied { read open getattr } for comm="imsqmidaemon" path="/dev/__properties__/u:object_r:default_prop:s0"
++get_prop(ims, default_prop)
++
++# THE ONE THAT BLOCKS THE CHAIN. The handshake triggers live in a vendor init file, so vendor_init
++# evaluates them -- and it is denied reading the property they test:
++#   denied { read } for property=sys.ims.QMI_DAEMON_STATUS scontext=u:r:vendor_init:s0
++#                                                          tcontext=u:object_r:qcom_ims_prop:s0
++# Init registers "on property:" actions at PARSE time, so a denial at early boot drops the action
++# for the lifetime of init. Going permissive afterwards does not bring it back -- this has to be in
++# the image at boot, which is why it cannot be validated with setenforce 0.
++get_prop(vendor_init, qcom_ims_prop)

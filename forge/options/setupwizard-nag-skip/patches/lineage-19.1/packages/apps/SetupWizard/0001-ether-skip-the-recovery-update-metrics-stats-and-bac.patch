@@ -1,0 +1,45 @@
+From fd9c284b47b64437472a73500c947f12d9d4b0be Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 15:51:12 -0400
+Subject: [PATCH 1/2] ether: skip the recovery-update, metrics/stats, and
+ backup SetupWizard pages
+
+disableComponentsForMissingFeatures() already steps the wizard over optional
+pages by disabling their components. Add UpdateRecoveryActivity (the 'update
+recovery' prompt), LineageSettingsActivity (the 'help improve LineageOS'
+metrics/stats opt-in), and backup/RestoreIntroActivity (the Lineage backup/
+restore intro) so first-boot setup skips all three.
+---
+ src/org/lineageos/setupwizard/util/SetupWizardUtils.java | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/org/lineageos/setupwizard/util/SetupWizardUtils.java b/src/org/lineageos/setupwizard/util/SetupWizardUtils.java
+index d29c916..e90425b 100644
+--- a/src/org/lineageos/setupwizard/util/SetupWizardUtils.java
++++ b/src/org/lineageos/setupwizard/util/SetupWizardUtils.java
+@@ -54,6 +54,9 @@ import android.util.Log;
+ 
+ import org.lineageos.internal.util.PackageManagerUtils;
+ import org.lineageos.setupwizard.BiometricActivity;
++import org.lineageos.setupwizard.LineageSettingsActivity;
++import org.lineageos.setupwizard.UpdateRecoveryActivity;
++import org.lineageos.setupwizard.backup.RestoreIntroActivity;
+ import org.lineageos.setupwizard.BluetoothSetupActivity;
+ import org.lineageos.setupwizard.ChooseDataSimActivity;
+ import org.lineageos.setupwizard.MobileDataActivity;
+@@ -309,6 +312,12 @@ public class SetupWizardUtils {
+         if (!hasWifi(context) || isEthernetConnected(context)) {
+             disableComponent(context, WifiSetupActivity.class);
+         }
++        // ether: skip the LineageOS nag pages — the recovery-update prompt, the "help improve
++        // LineageOS" metrics/stats opt-in, and the backup/restore intro. Disabling the components
++        // makes the wizard flow step over them.
++        disableComponent(context, UpdateRecoveryActivity.class);
++        disableComponent(context, LineageSettingsActivity.class);
++        disableComponent(context, RestoreIntroActivity.class);
+     }
+ 
+     public static void disableHome(Context context) {
+-- 
+2.53.0
+

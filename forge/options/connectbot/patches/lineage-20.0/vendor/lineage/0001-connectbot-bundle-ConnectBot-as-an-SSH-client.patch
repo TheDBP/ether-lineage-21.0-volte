@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Sat, 19 Sep 2026 14:41:17 -0400
+Subject: [PATCH] connectbot: bundle ConnectBot as an SSH client
+
+vendor/lineage/prebuilts/connectbot module, installed unmodified, plus a guarded PRODUCT_PACKAGES
+line in config/common.mk. The APK is fetched by the connectbot option's fetch.sh (the current
+F-Droid build, signer-pinned); the module is a no-op without it.
+
+Lineage already ships the OpenSSH binaries, so this is not about reaching a host at all -- it is
+saved hosts, key generation and an agent, and port forwarding, without a terminal in the way.
+---
+ config/common.mk                |  7 +++++++
+ prebuilts/connectbot/.gitignore |  5 +++++
+ prebuilts/connectbot/Android.mk | 25 +++++++++++++++++++++++++
+ 3 files changed, 37 insertions(+)
+ create mode 100644 prebuilts/connectbot/.gitignore
+ create mode 100644 prebuilts/connectbot/Android.mk
+
+diff --git a/config/common.mk b/config/common.mk
+index 985e611c..226a028f 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -139,6 +139,13 @@ PRODUCT_PACKAGES += \
+     setcap \
+     vim
+ 
++# connectbot option: ConnectBot, an SSH client: saved hosts, keys and port forwarding.
++# Guarded on the fetched APK so a build without the option (no APK) is unaffected; require.sh
++# fails the build if the option is on and the APK is missing.
++ifneq ($(wildcard vendor/lineage/prebuilts/connectbot/ConnectBot.apk),)
++PRODUCT_PACKAGES += ConnectBot
++endif
++
+ PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += \
+     system/bin/curl \
+     system/bin/getcap \
+diff --git a/prebuilts/connectbot/.gitignore b/prebuilts/connectbot/.gitignore
+new file mode 100644
+index 00000000..1f0e43eb
+--- /dev/null
++++ b/prebuilts/connectbot/.gitignore
+@@ -0,0 +1,5 @@
++# Written by the connectbot option (forge/prebuilt/fetch-connectbot.sh): the APK, and the native
++# libraries it unpacks beside it should a release ever pack them compressed.
++ConnectBot.apk
++*.apk.download
++lib/
+diff --git a/prebuilts/connectbot/Android.mk b/prebuilts/connectbot/Android.mk
+new file mode 100644
+index 00000000..40126af5
+--- /dev/null
++++ b/prebuilts/connectbot/Android.mk
+@@ -0,0 +1,25 @@
++LOCAL_PATH := $(call my-dir)
++# ConnectBot (org.connectbot), PRESIGNED by its upstream. The APK is fetched, signer-verified, by the
++# connectbot option's fetch.sh and is gitignored, never committed. Defined only when it is present;
++# see config/common.mk.
++ifneq ($(wildcard $(LOCAL_PATH)/ConnectBot.apk),)
++include $(CLEAR_VARS)
++LOCAL_MODULE := ConnectBot
++LOCAL_MODULE_TAGS := optional
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
++LOCAL_BUILT_MODULE_STEM := package.apk
++LOCAL_CERTIFICATE := PRESIGNED
++# Ship the APK byte for byte: without LOCAL_SDK_VERSION the build rewrites it, which invalidates
++# the whole-file v2 signature and PackageManager then drops the package at boot scan, silently.
++LOCAL_SDK_VERSION := current
++# Stored and aligned in the APK today, so nothing is unpacked and this is empty. It is decided per
++# fetch, so a release that packs them compressed is installed from here instead.
++LOCAL_PREBUILT_JNI_LIBS := $(patsubst $(LOCAL_PATH)/%,%,$(wildcard $(LOCAL_PATH)/lib/arm64-v8a/*.so))
++# The <uses-library> check is off: the APK is whatever F-Droid's current build is at fetch time.
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_SRC_FILES := ConnectBot.apk
++LOCAL_PRODUCT_MODULE := true
++LOCAL_DEX_PREOPT := false
++include $(BUILD_PREBUILT)
++endif
+-- 
+2.53.0
+
