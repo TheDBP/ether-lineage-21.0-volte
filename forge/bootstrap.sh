@@ -438,14 +438,28 @@ fi
 # release.sh publishes them. release.sh reads out/ on purpose (it audits the tree); this is for
 # flashing.
 _out="$SRC/out/target/product/$DEVICE_CODENAME"
-_zip="$(ls -t "$_out"/lineage-*-"$DEVICE_CODENAME".zip 2>/dev/null | head -1 || true)"
+# Newest by mtime, and among equal mtimes the highest name -- which is the later date, since the name
+# carries it. `ls -t | head -1` is not enough: two names can be one inode, and then their mtimes are
+# necessarily equal and the winner is whichever the locale sorts first. That published a zip under the
+# previous day's name once.
+_zip="$(find "$_out" -maxdepth 1 -name "lineage-*-$DEVICE_CODENAME.zip" -printf '%T@\t%p\n' 2>/dev/null \
+        | sort -k1,1nr -k2,2r | head -1 | cut -f2)"
 if [ -n "$_zip" ]; then
   _keep="$BUILD_ROOT/artifacts"; mkdir -p "$_keep"
   _stem="$(basename "${_zip%.zip}")"
+  # Link, tolerating a destination that is already this very file. Without the -ef guard the cp fails
+  # with "are the same file" and takes the build's exit status with it -- after the rm above has
+  # already removed the previous set, so the failure also loses what it was replacing.
+  _keeplink() {
+    [ -f "$1" ] || return 0
+    [ "$1" -ef "$2" ] && return 0
+    rm -f "$2"
+    ln "$1" "$2" 2>/dev/null || cp "$1" "$2"
+  }
   rm -f "$_keep/$_stem".*
-  ln "$_zip" "$_keep/$_stem.zip" 2>/dev/null || cp "$_zip" "$_keep/$_stem.zip"
+  _keeplink "$_zip" "$_keep/$_stem.zip"
   for _img in recovery boot boot-magisk; do
-    [ -f "$_out/$_img.img" ] && { ln "$_out/$_img.img" "$_keep/$_stem-$_img.img" 2>/dev/null || cp "$_out/$_img.img" "$_keep/$_stem-$_img.img"; }
+    _keeplink "$_out/$_img.img" "$_keep/$_stem-$_img.img"
   done
   ( cd "$_keep" && sha256sum "$_stem.zip" > "$_stem.zip.sha256" )
 fi
