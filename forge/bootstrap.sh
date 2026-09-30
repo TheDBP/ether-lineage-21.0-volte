@@ -191,7 +191,12 @@ echo "   logs: $BUILD_ROOT/logs/  (Portainer container: aosp-${DEVICE_SLUG})"
 # ---- 2. repo init + manifests ----
 # REPO_REFERENCE: shared git object store (one object store shared by every repo) so a second
 # device on the same branch downloads only what differs. Identity-mounted by aosp.sh. Only applies
-# at `repo init` time; the reference is load-bearing until `repo sync --dissociate`.
+# at `repo init` time, and the reference stays load-bearing afterwards: every borrowing project keeps an
+# absolute path to it in git's alternates files, so deleting the reference tree breaks this one.
+#
+# `repo sync --dissociate` does not exist -- --dissociate is a `repo init` flag, and on an
+# already-synced tree re-running init with it fails with "pack has N unresolved deltas". Set
+# REPO_DISSOCIATE=1 instead; the step after sync detaches this tree for real.
 REF_ARG=""
 # An ALREADY-INITIALISED tree records its reference in git's alternates files, and git stores those
 # as ABSOLUTE paths. If that path is not mounted at the same location inside the container, sync dies
@@ -378,6 +383,54 @@ done
 
 echo ">> [3/5] waiting for prefetch to finish"
 wait "$PREFETCH_PID" || { echo "!! prefetch failed — see logs/prefetch.log (a missing input must stop the build)" >&2; exit 1; }
+
+# ---- 3b. optionally detach from REPO_REFERENCE ----
+# A --reference saves the FIRST sync, not disk: afterwards this tree cannot outlive the one it borrows
+# from. That matters when the reference is another device's tree -- deleting it silently breaks this
+# one, and the breakage surfaces much later as missing objects.
+#
+# Done by probe-and-delete rather than repo's own flag, because repo has no working path for it on an
+# already-synced tree. It is cheap because `repo sync` fetches into each project's OWN store as it
+# goes, so nearly every alternate is vestigial by the time the sync finishes -- on a fresh 24.0 tree
+# 1173 of 1174 were, and only .repo/manifests.git actually still needed its reference.
+#
+# Order matters: repack BEFORE removing the alternate, or the objects it would have absorbed are gone.
+# And `repack -d` is refused ("cannot delete packs in a precious-objects repo") because repo sets
+# extensions.preciousObjects, so this uses -a alone and leaves the old pack in place.
+if [ "${REPO_DISSOCIATE:-0}" = 1 ] && [ -d "$SRC/.repo" ]; then
+  echo ">> [3b/5] detaching from the git-object reference (REPO_DISSOCIATE=1)"
+  _map="$BUILD_ROOT/logs/alternates-before-dissociate.txt"
+  mkdir -p "$(dirname "$_map")"
+  find "$SRC/.repo" -name alternates 2>/dev/null | sort | while read -r _a; do
+    printf '%s	%s
+' "$_a" "$(cat "$_a" 2>/dev/null)"
+  done > "$_map"
+  _n=$(grep -c . "$_map" || true)
+  if [ "${_n:-0}" -eq 0 ]; then
+    echo "   already detached: no alternates"
+  else
+    echo "   $_n alternate(s); recorded in ${_map#"$DEVICE_REPO"/}"
+    _self=0; _absorbed=0; _stuck=0
+    while IFS= read -r _a; do
+      _gd="${_a%/objects/info/alternates}"
+      mv "$_a" "$_a.probe" 2>/dev/null || continue
+      if git --git-dir="$_gd" rev-list --all --objects >/dev/null 2>&1; then
+        rm -f "$_a.probe"; _self=$((_self+1)); continue        # vestigial: drop it
+      fi
+      mv -f "$_a.probe" "$_a"                                  # genuinely needed: absorb first
+      git --git-dir="$_gd" repack -a >/dev/null 2>&1 || true
+      rm -f "$_a"
+      if git --git-dir="$_gd" rev-list --all --objects >/dev/null 2>&1; then
+        _absorbed=$((_absorbed+1))
+      else
+        printf '%s\n' "$(grep -F "$_a" "$_map" | cut -f2)" > "$_a"   # put it back; do not ship a broken repo
+        _stuck=$((_stuck+1)); echo "   !! could not detach ${_gd#"$SRC"/.repo/}, reference kept"
+      fi
+    done < <(find "$SRC/.repo" -name alternates 2>/dev/null | sort)
+    echo "   dropped $_self vestigial, absorbed $_absorbed, kept $_stuck"
+    [ "$_stuck" -eq 0 ] && echo "   this tree no longer depends on $REPO_REFERENCE"
+  fi
+fi
 
 # ---- 4. apply patches ----
 echo ">> [4/5] apply overlay patches"
