@@ -389,13 +389,24 @@ wait "$PREFETCH_PID" || { echo "!! prefetch failed — see logs/prefetch.log (a 
 # from. That matters when the reference is another device's tree -- deleting it silently breaks this
 # one, and the breakage surfaces much later as missing objects.
 #
-# Done by probe-and-delete rather than repo's own flag, because repo has no working path for it on an
-# already-synced tree. It is cheap because `repo sync` fetches into each project's OWN store as it
-# goes, so nearly every alternate is vestigial by the time the sync finishes -- on a fresh 24.0 tree
-# 1173 of 1174 were, and only .repo/manifests.git actually still needed its reference.
+# Done here rather than with repo's own flag, because repo has no working path for it on an
+# already-synced tree.
 #
-# Order matters: repack BEFORE removing the alternate, or the objects it would have absorbed are gone.
-# And `repack -d` is refused ("cannot delete packs in a precious-objects repo") because repo sets
+# ABSORB, do not probe. An earlier version tested each store with `rev-list --all --objects` and
+# dropped the alternate when that passed. It reported 1173 of 1174 "self-sufficient" and left a tree
+# whose next sync died with `fatal: unable to read tree` -- commit present, its tree missing.
+#
+# The reason is worth keeping, because the obvious diagnosis is wrong. --all does cover refs/remotes,
+# so on a COMPLETED sync it would have seen those objects. That tree's sync had been interrupted, so
+# repo had fetched objects into the reference but not yet moved the refs that reach them: the probe was
+# blind because the refs were not there yet, not because --all is too narrow.
+#
+# Absorbing everything does not depend on refs being complete, so it is correct either way. This step
+# also only runs after a successful sync, which is the other half of not repeating that."
+#
+# So every store gets `git repack -a`, which rewrites a single pack containing everything reachable
+# INCLUDING via the alternate, and the alternate is only removed once that succeeds. Slower and
+# correct. `repack -d` is refused ("cannot delete packs in a precious-objects repo") because repo sets
 # extensions.preciousObjects, so this uses -a alone and leaves the old pack in place.
 if [ "${REPO_DISSOCIATE:-0}" = 1 ] && [ -d "$SRC/.repo" ]; then
   echo ">> [3b/5] detaching from the git-object reference (REPO_DISSOCIATE=1)"
@@ -410,24 +421,23 @@ if [ "${REPO_DISSOCIATE:-0}" = 1 ] && [ -d "$SRC/.repo" ]; then
     echo "   already detached: no alternates"
   else
     echo "   $_n alternate(s); recorded in ${_map#"$DEVICE_REPO"/}"
-    _self=0; _absorbed=0; _stuck=0
+    _absorbed=0; _stuck=0; _i=0
     while IFS= read -r _a; do
       _gd="${_a%/objects/info/alternates}"
-      mv "$_a" "$_a.probe" 2>/dev/null || continue
-      if git --git-dir="$_gd" rev-list --all --objects >/dev/null 2>&1; then
-        rm -f "$_a.probe"; _self=$((_self+1)); continue        # vestigial: drop it
-      fi
-      mv -f "$_a.probe" "$_a"                                  # genuinely needed: absorb first
-      git --git-dir="$_gd" repack -a >/dev/null 2>&1 || true
-      rm -f "$_a"
-      if git --git-dir="$_gd" rev-list --all --objects >/dev/null 2>&1; then
+      _i=$((_i+1))
+      [ $((_i % 200)) -eq 0 ] && echo "   ... $_i/$_n"
+      # Copy in everything reachable through the alternate, THEN drop it. fsck --connectivity-only
+      # afterwards is the check that matters: it walks every object, not just ref-reachable ones.
+      if git --git-dir="$_gd" repack -a >/dev/null 2>&1 \
+         && rm -f "$_a" \
+         && git --git-dir="$_gd" fsck --connectivity-only --no-dangling >/dev/null 2>&1; then
         _absorbed=$((_absorbed+1))
       else
-        printf '%s\n' "$(grep -F "$_a" "$_map" | cut -f2)" > "$_a"   # put it back; do not ship a broken repo
+        printf '%s\n' "$(grep -F "$_a" "$_map" | cut -f2)" > "$_a"   # put it back; never ship a store that cannot resolve
         _stuck=$((_stuck+1)); echo "   !! could not detach ${_gd#"$SRC"/.repo/}, reference kept"
       fi
     done < <(find "$SRC/.repo" -name alternates 2>/dev/null | sort)
-    echo "   dropped $_self vestigial, absorbed $_absorbed, kept $_stuck"
+    echo "   detached $_absorbed, kept $_stuck"
     [ "$_stuck" -eq 0 ] && echo "   this tree no longer depends on $REPO_REFERENCE"
   fi
 fi

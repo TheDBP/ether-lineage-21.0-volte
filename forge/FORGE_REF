@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=11ba673754543a134c64bc9a66f2ce539cab210d
-subject=bootstrap: REPO_DISSOCIATE=1, and stop naming a repo flag that does not exist
-synced=2026-09-30T18:27:01Z
+commit=8f6601b0b0166f157c6f96604be8d2c0a11ae45d
+subject=bootstrap: REPO_DISSOCIATE must absorb, not probe
+synced=2026-09-30T19:31:56Z
