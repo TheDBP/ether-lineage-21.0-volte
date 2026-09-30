@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=415af259894bc430f2ba9c23a4a3ae249d58e140
-subject=tools: dedup identical build inputs across device repos to hardlinks
-synced=2026-09-30T16:24:33Z
+commit=3e0284969a360018a94910f8a8f6364032de8477
+subject=nav-icons: retarget the 24.0 patch at the rewritten navigation layout
+synced=2026-09-30T18:24:49Z
