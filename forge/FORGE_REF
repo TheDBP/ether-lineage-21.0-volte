@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=1ca310b66bf30baf15e0267288e669e58299bfc8
-subject=release: let a device put its headline above the boilerplate
-synced=2026-09-29T21:02:55Z
+commit=415af259894bc430f2ba9c23a4a3ae249d58e140
+subject=tools: dedup identical build inputs across device repos to hardlinks
+synced=2026-09-30T16:24:33Z

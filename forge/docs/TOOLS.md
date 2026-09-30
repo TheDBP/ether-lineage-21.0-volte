@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-50 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+51 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -23,6 +23,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`check-platform-support.sh`](../tools/check-platform-support.sh) | find the upstream makefile gates that SILENTLY EXCLUDE this device's SoC | `check-platform-support.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`check-sigpipe.sh`](../tools/check-sigpipe.sh) | fail if any shell script that runs under `set -o pipefail` pipes into `grep -q` or `head` | `check-sigpipe.sh` | — |
 | [`check-tree-dirt.sh`](../tools/check-tree-dirt.sh) | every uncommitted change in a patched project should have been put there by forge | `check-tree-dirt.sh [AOSP_ROOT]` | — |
+| [`dedup-shared-inputs.sh`](../tools/dedup-shared-inputs.sh) | collapse identical large build INPUTS across device repos to hardlinks | `dedup-shared-inputs.sh [--dry-run] [--min-size BYTES] [DIR ...]` | — |
 | [`dev-shell.sh`](../tools/dev-shell.sh) | authoring container. Host needs only Docker. Runs the build image with the repos root mounted at /repos: clone/edit/format-patch/git-am/commit in-container. Only `git push` uses host auth (GH_TOKEN, else `gh auth token`). dev-shell.sh [cmd...]   # no args = interactive shell Env: REPOS (default: parent of this repo), IMAGE (default aosp-los22:24.04), GH_TOKEN | `dev-shell.sh [cmd...]   # no args = interactive shell` | — |
 | [`diag-efs.sh`](../tools/diag-efs.sh) | read a modem EFS/NV item file over /dev/diag, on a connected device | `diag-efs.sh <buildid\|hello\|ls DIR\|read PATH\|write PATH HEX [OFLAG MODE]\|rm PATH\|probe HEX>` | — |
 | [`dtbo-ramoops-alt.py`](../tools/dtbo-ramoops-alt.py) | make the live ramoops console survive a clean reboot | `dtbo-ramoops-alt.py <dtbo.img> <out.img> [--index N]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
