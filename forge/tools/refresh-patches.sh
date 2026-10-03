@@ -187,7 +187,7 @@ done
 # which silently reports every already-patched project as unbacked.
 PROJECTS_FLAT=" $(printf '%s\n' $PROJECTS | sort -u | tr '\n' ' ') "
 
-# Patches live in TWO places, and a scan that knows about only one raises false alarms that look
+# Patches live in THREE places, and a scan that knows about only one raises false alarms that look
 # exactly like lost work. overlay/patches/ holds device patches; forge/options/<opt>/patches/<branch>/
 # holds option patches, applied conditionally from COMMON_OPTIONS/PRESET. A project patched solely by
 # an enabled option has commits in the tree and nothing under overlay/patches -- which is correct,
@@ -200,6 +200,17 @@ if [ -d "$FORGE/options" ] && [ -n "${BRANCH:-}" ]; then
     | sed "s#^\./[^/]*/patches/$BRANCH/##" | sort -u)"
 fi
 OPT_FLAT=" $(printf '%s\n' $OPT_PROJECTS | sort -u | tr '\n' ' ') "
+
+# The third place: forge/patches/<branch>/<project>/ -- engine patches, applied to every device on
+# that branch regardless of options. build/soong carries two (the soong_build memory knobs and the
+# fsgen vendor-variant fix), so without this the scan reports build/soong as unbacked work on every
+# 24.0 device, which reads exactly like the real alarm it is meant to raise.
+ENGINE_PROJECTS=""
+if [ -d "$FORGE/patches/${BRANCH:-}" ]; then
+  ENGINE_PROJECTS="$(cd "$FORGE/patches/$BRANCH" 2>/dev/null && \
+    find . -name '*.patch' -printf '%h\n' 2>/dev/null | sed 's#^\./##' | sort -u)"
+fi
+ENGINE_FLAT=" $(printf '%s\n' $ENGINE_PROJECTS | sort -u | tr '\n' ' ') "
 
 # Anything with local commits but NO patches yet is invisible to the union above, because that union
 # is seeded from patches that already exist. That is not hypothetical: on ether, Trebuchet,
@@ -215,6 +226,7 @@ while read -r gitdir; do
   proj="${gitdir%/.git}"; proj="${proj#./}"
   case "$PROJECTS_FLAT" in *" $proj "*) continue ;; esac
   case "$OPT_FLAT"      in *" $proj "*) continue ;; esac
+  case "$ENGINE_FLAT"   in *" $proj "*) continue ;; esac
   mref=$(git -C "$AOSP/$proj" for-each-ref --format='%(refname:short)' refs/remotes/m/ 2>/dev/null | head -1)
   [ -n "$mref" ] || continue
   n=$(git -C "$AOSP/$proj" log --oneline "$mref..HEAD" 2>/dev/null | wc -l)

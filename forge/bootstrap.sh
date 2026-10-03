@@ -131,12 +131,18 @@ if [ -z "${JOBS:-}" ]; then
   JOBS=$(( _cores < _ramjobs ? _cores : _ramjobs ))
 fi
 export BUILD_ROOT
+# aosp.sh turns SOONG_MEM_LIMIT into the container's GOMEMLIMIT, but only sees it if it is in
+# the environment. Exporting it here lets device.conf carry the value instead of every caller
+# having to remember it on the command line: a device whose analysis OOMs needs the limit on
+# every run, not on the runs where someone typed it.
+[ -n "${SOONG_MEM_LIMIT:-}" ] && export SOONG_MEM_LIMIT
 
 echo "== $DEVICE_CODENAME ROM bootstrap ($BRANCH) =="
 echo "   device repo: $DEVICE_REPO"
 echo "   build root:  $BUILD_ROOT"
 echo "   building:    ${PRESET:-<ad-hoc>}  [${BUILD_OPTIONS:-no options}]"
 echo "   jobs:        $JOBS"
+[ -n "${SOONG_MEM_LIMIT:-}" ] && echo "   soong heap:  $SOONG_MEM_LIMIT (GOMEMLIMIT)"
 echo
 
 # ---- preflight ----

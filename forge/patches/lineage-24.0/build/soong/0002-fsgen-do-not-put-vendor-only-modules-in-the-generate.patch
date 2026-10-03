@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Wed, 30 Sep 2026 17:30:05 -0400
+Subject: [PATCH] fsgen: do not put vendor-only modules in the generated system
+ image
+
+A device with no separate vendor partition sets TARGET_COPY_OUT_VENDOR to
+system/vendor, so PartitionTag() answers "system" for a module built only
+as a vendor variant. collectDepsMutator then adds it to the generated
+system image, which resolves its dependencies with the core variation, and
+analysis fails:
+
+  dependency "android.hardware.health-service.qti" of
+  "lineage_<device>_generated_system_image" missing variant:
+    os:android,arch:arm64_armv8-a
+  available variants:
+    os:android,image:vendor,arch:arm64_armv8-a
+
+The mutator already has a list of variations that answer "system" without
+belonging to it -- ramdisk, vendor_ramdisk and recovery, which cc/image.go
+marks as platform. Vendor and product are the same situation for a device
+laid out this way, so add them.
+
+No effect where a vendor or product partition exists: there PartitionTag()
+returns that partition, so the branch is never reached.
+
+---
+ fsgen/fsgen_mutators.go | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/fsgen/fsgen_mutators.go b/fsgen/fsgen_mutators.go
+index 080cb39dc..1eff37b66 100644
+--- a/fsgen/fsgen_mutators.go
++++ b/fsgen/fsgen_mutators.go
+@@ -454,6 +454,12 @@ func collectDepsMutator(mctx android.BottomUpMutatorContext) {
+ 			android.RamdiskVariation,
+ 			android.VendorRamdiskVariation,
+ 			android.RecoveryVariation,
++			// A device with no vendor or product partition installs that image inside
++			// /system, so PartitionTag() answers "system" for a module whose only
++			// variants are vendor or product ones. Adding it to the generated system
++			// image then asks for a core variant the module does not have.
++			android.VendorVariation,
++			android.ProductVariation,
+ 		})
+ 		if isEligibleForFsDeps(mctx) && !systemPartitionFalsePositive {
+ 			appendDepIfAppropriate(mctx, fsGenState.fsDeps[installPartition], installPartition, android.NativeBridgeDisabled, mctx.ModuleName())
