@@ -21,11 +21,14 @@
 #      before the timeout (`reboot,<target>` with a recovery target): the last snapshot before
 #      the reboot is what pull shows, at most --every seconds short of the reason;
 #   3. exec's /init.boot.
-# Permissive by default because the watchdog stays in the `kernel` SELinux domain once init loads
-# the policy, and that domain may write kmsg and sysrq but not a block device (its misc node sits
-# on tmpfs: `dontaudit kernel tmpfs:blk_file`, so not even a denial shows). Enforcing, nothing
-# after step 1 reaches misc. Denials are still logged in permissive, so the console reads the same;
-# what --enforcing adds is a reboot *caused* by a denial, at the price of step 2.
+# Permissive by default: the watchdog stays in the `kernel` SELinux domain, and once init loads the
+# policy that domain may write kmsg and sysrq but exec nothing, open nothing and write no block
+# device (its misc node sits on tmpfs: `dontaudit kernel tmpfs:blk_file`, not even a denial shows).
+# --enforcing therefore takes two iterations: the watchdog only resets at --timeout, no snapshots;
+# the next boot of the same image finds a console with `wrap:` lines in ramoops, saves it (step 1)
+# and goes straight to recovery. Any boot whose previous boot was also this image does that, so
+# `adb reboot` from a running wrap boot lands in recovery too. Denials are logged in permissive as
+# well, so build permissive unless the question is which denial *stops* the boot.
 # pull: from that recovery, dumps the two misc slots as text, pstore slot first.
 #
 # Traps the watchdog has to dodge, each of which cost a flash:
@@ -150,6 +153,17 @@ if [ -n "\$MM" ]; then \$T mknod -m 600 /dev/misc b \$MM && echo "wrap: misc is 
   for f in /pstore/*; do [ -e "\$f" ] || continue; echo "===== \$f ====="; \$T cat "\$f"; done
   echo "===== WRAPLOG END ====="; } > /wraplog.txt
 [ -e /dev/misc ] && \$T dd if=/dev/zero of=/dev/misc bs=4096 seek=$SEEK count=256 conv=notrunc 2>/dev/null && \$T dd if=/wraplog.txt of=/dev/misc bs=4096 seek=$SEEK count=256 conv=notrunc 2>/dev/null && \$T sync && echo "wrap: pstore saved to misc"
+# A console that mentions the wrapper or its watchdog is the previous iteration's: it is saved,
+# so go straight to recovery. This is the step the watchdog cannot take once init loads the
+# policy (the kernel domain may write sysrq, not a block device), and the whole of a hang's
+# evidence is that console -- ramoops survives the watchdog's sysrq reset.
+if [ -e /dev/misc ] && \$T grep -qsE 'wrap: |watchdog: ' /pstore/console-ramoops*; then
+  \$T dd if=/dev/zero of=/dev/misc bs=2048 count=1 conv=notrunc 2>/dev/null
+  \$T printf boot-recovery | \$T dd of=/dev/misc conv=notrunc 2>/dev/null
+  \$T printf 'recovery\\n' | \$T dd of=/dev/misc bs=1 seek=64 conv=notrunc 2>/dev/null
+  \$T sync; echo "wrap: that console was the previous iteration's; BCB armed, rebooting to recovery"
+  \$T sleep 1; echo b > /proc/sysrq-trigger; \$T sleep 5
+fi
 # watchdog: own mount namespace (SwitchRoot moves every mount it can see and dies on one it
 # cannot), own tmpfs root (FreeRamdisk deletes the rootfs after switch_root)
 \$T unshare -m /system/bin/sh -c '
@@ -162,39 +176,54 @@ T=/system/bin/toybox
 \$T mknod -m 600 /diag/dev/kmsg c 1 11; \$T mknod -m 666 /diag/dev/null c 1 3; \$T mknod -m 666 /diag/dev/zero c 1 5
 \$T mount -t proc proc /diag/proc
 echo "watchdog: ns ready, chrooting"; \$T touch /diag-ready
-exec \$T chroot /diag /system/bin/sh -c "
-exec 0</dev/null 1>/dev/kmsg 2>/dev/kmsg
-T=/system/bin/toybox
-echo \\"watchdog: armed, dmesg every ${EVERY}s, reboot at ${TIMEOUT}s\\"
-t=0; n=0
-while [ \\\$t -lt $TIMEOUT ]; do
-  \\\$T sleep $EVERY; t=\\\$((t + $EVERY)); n=\\\$((n + 1))
-  { echo \\"DIAGLOG v1 snapshot=\\\$n uptime=\\\$(\\\$T cat /proc/uptime)\\"; \\\$T dmesg; echo \\"===== DIAGLOG END =====\\"; } > /log.txt 2>&1
-  if [ -e /dev/misc ]; then
-    \\\$T dd if=/dev/zero of=/dev/misc bs=4096 seek=$((SEEK + 256)) count=256 conv=notrunc 2>/dev/null
-    \\\$T dd if=/log.txt of=/dev/misc bs=4096 seek=$((SEEK + 256)) count=256 conv=notrunc 2>/dev/null; \\\$T sync
-  fi
-done
-echo \\"watchdog: timeout, last snapshot \\\$n\\"
-if [ -e /dev/misc ]; then
-  # bootloader_message: command[32] at 0 = boot-recovery, recovery[768] at 64 = recovery\\\\n
-  \\\$T dd if=/dev/zero of=/dev/misc bs=2048 count=1 conv=notrunc
-  \\\$T printf boot-recovery | \\\$T dd of=/dev/misc conv=notrunc
-  \\\$T printf 'recovery\\\\n' | \\\$T dd of=/dev/misc bs=1 seek=64 conv=notrunc
-  \\\$T sync
-  echo \\"watchdog: saved \\\$(\\\$T wc -c < /log.txt) bytes to misc, BCB armed, rebooting\\"
-else
-  echo \\"watchdog: no misc, rebooting anyway\\"
-fi
-\\\$T sleep 2
-echo b > /proc/sysrq-trigger
-"
+# passed as a string: once init loads the policy the kernel domain may not read a file, and the
+# shell must already hold all of it (mksh reads a script file as it goes)
+exec \$T chroot /diag /system/bin/sh -c "\$(\$T cat /watchdog.sh)"
 ' &
 n=0; while [ ! -e /diag-ready ] && [ \$n -lt 100 ]; do \$T sleep 0.1; n=\$((n+1)); done; echo "wrap: watchdog ready after \$n ticks"
 \$T umount /pstore 2>/dev/null; \$T umount /sys; \$T umount /proc
 echo "wrap: exec /init.boot"; exec /init.boot
 EOF
 chmod 755 "$W/root/wrap.sh"
+
+# The watchdog runs in the `kernel` SELinux domain. Until init loads the policy it may do anything;
+# after that it may execute NOTHING (no execute_no_trans on any type), read no tmpfs file or node
+# and write no block device -- but it may write /proc/sysrq-trigger, and may read and write the
+# pipes it already holds. So, armed, it must not exec: `sleep` is mksh's builtin (unconditional in
+# R59, not toybox's), the deadline is $SECONDS, and the dmesg snapshots (toybox) are attempted only
+# while toybox is still executable. An earlier version did `toybox sleep` per tick; enforcing, every
+# sleep failed instantly, the tick counter ran out in 50 ms and sysrq fired at 19.7 s into a
+# healthy boot. (`read -t` on a coprocess is not a sleep either: mksh closes the coprocess on the
+# first timeout.)
+cat > "$W/root/watchdog.sh" <<EOF
+exec 0</dev/null 1>/dev/kmsg 2>/dev/kmsg
+T=/system/bin/toybox
+echo "watchdog: armed, dmesg every ${EVERY}s, reboot at ${TIMEOUT}s"
+n=0; snap=1
+while [ \$SECONDS -lt $TIMEOUT ]; do
+  sleep $EVERY
+  [ \$snap = 1 ] && [ -x \$T ] || { [ \$snap = 1 ] && echo "watchdog: toybox no longer executable (enforcing); snapshots off, console comes from ramoops"; snap=0; continue; }
+  n=\$((n + 1))
+  { echo "DIAGLOG v1 snapshot=\$n uptime=\$(\$T cat /proc/uptime)"; \$T dmesg; echo "===== DIAGLOG END ====="; } > /log.txt 2>&1
+  if [ -e /dev/misc ]; then
+    \$T dd if=/dev/zero of=/dev/misc bs=4096 seek=$((SEEK + 256)) count=256 conv=notrunc 2>/dev/null
+    \$T dd if=/log.txt of=/dev/misc bs=4096 seek=$((SEEK + 256)) count=256 conv=notrunc 2>/dev/null; \$T sync
+  fi
+done
+echo "watchdog: timeout at \${SECONDS}s, last snapshot \$n"
+if [ \$snap = 1 ] && [ -e /dev/misc ]; then
+  # bootloader_message: command[32] at 0 = boot-recovery, recovery[768] at 64 = recovery\\n
+  \$T dd if=/dev/zero of=/dev/misc bs=2048 count=1 conv=notrunc
+  \$T printf boot-recovery | \$T dd of=/dev/misc conv=notrunc
+  \$T printf 'recovery\\n' | \$T dd of=/dev/misc bs=1 seek=64 conv=notrunc
+  \$T sync
+  echo "watchdog: saved \$(\$T wc -c < /log.txt) bytes to misc, BCB armed, rebooting"
+else
+  echo "watchdog: enforcing, cannot reach misc; the next boot of this image saves this console and goes to recovery"
+fi
+sleep 2
+echo b > /proc/sysrq-trigger
+EOF
 
 ( cd "$W/root" && find . -mindepth 1 | LC_ALL=C sort | cpio -o -H newc -R 0:0 --quiet ) > "$W/new.cpio"
 case "$COMP" in
@@ -212,4 +241,8 @@ kargs="$(sed "s|--cmdline '.*'$|--cmdline '$cmdline $add'|" <<<"$kargs")"
 eval "$HB/mkbootimg" $kargs --output "\"$OUT\""
 rm -rf "$W"
 echo ">> $OUT ($(stat -c %s "$OUT") bytes), ramdisk $COMP, cmdline += '$add'"
-echo ">> flash it to boot, let it loop/hang once (~$((TIMEOUT + 30)) s), enter recovery, then: $(basename "$0") pull console.txt --misc-offset-mib $OFF"
+if [ "$PERM" = 1 ]; then
+  echo ">> flash it to boot, let it loop/hang once (~$((TIMEOUT + 30)) s), enter recovery, then: $(basename "$0") pull console.txt --misc-offset-mib $OFF"
+else
+  echo ">> flash it to boot; it resets at ~$((TIMEOUT + 10)) s, boots once more and goes to recovery with that console saved (no DIAGLOG slot enforcing); then: $(basename "$0") pull console.txt --misc-offset-mib $OFF"
+fi

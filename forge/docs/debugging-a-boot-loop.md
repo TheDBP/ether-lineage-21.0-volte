@@ -62,9 +62,14 @@ init. The watchdog writes `dmesg` to the same place every few seconds and, at th
 `boot-recovery` BCB and reboots. One pass of the loop or the hang, then recovery, then
 `boot-console-wrap.sh pull`. The rolling snapshot also covers an init that reboots to recovery
 by itself (`reboot,<target>` with a recovery target) before the timeout: what pull shows is the
-last snapshot before that reboot. It boots permissive: after init loads the policy the watchdog is
-in the `kernel` domain, which may write kmsg and sysrq but not a block device, so an enforcing
-watchdog reboots on time and saves nothing. Dry-run the generated `/wrap.sh` up to the first misc
+last snapshot before that reboot. It boots permissive by default: after init loads the policy the
+watchdog is in the `kernel` domain, which may write kmsg and sysrq but exec nothing, open nothing
+and write no block device. `--enforcing` is therefore two iterations: the watchdog only resets at
+the timeout (exec-free: mksh's builtin `sleep`, `$SECONDS` for the deadline; a `toybox sleep` per
+tick fails instantly enforcing and fired sysrq 20 s into a healthy boot), and
+the next boot of the same image, seeing `wrap:` lines in ramoops, saves that console and goes to
+recovery before starting init. This needs console-ramoops to survive sysrq-b, which it does on
+the V20. Dry-run the generated `/wrap.sh` up to the first misc
 write in a chroot of the ramdisk from recovery before flashing, as PID 1 with stdio closed the way
 the kernel starts rdinit:
 `toybox unshare -p -f chroot <rd> /system/bin/sh -c 'exec <&- >&- 2>&-; exec /dry.sh'`. Closing
