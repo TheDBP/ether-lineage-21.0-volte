@@ -57,10 +57,13 @@ Bringing a kernel up to a newer branch (the *kernel gate* of a port — see
 
 | tool | run it | what you get |
 |---|---|---|
-| `check-bpf-objects.py` | before the first boot, on the built `.o` files | every BPF map/program/helper the old kernel cannot load, with the kver-gated ones marked skipped |
+| `check-bpf-objects.py` | before the first boot, on the built `.o`/`.bpf` files | every BPF map/program/helper the old kernel cannot load, with the kver-gated ones marked skipped; a cycle in a program's control flow (pre-5.3 verifiers reject it) and, given the live kernel's `available_events` from recovery, every `tracepoint/` program whose event it does not have |
+| `check-dt-needed.py` | before the first boot, on the out tree | every ELF whose `DT_NEEDED` nothing in the image provides — a prebuilt copied in by path that the branch's libraries have moved out from under, which the linker reports as `exited with status 1` and, when the user is `vold`, as a reboot loop with no adbd |
+| `rc-fatal-services.py` | before the first boot, on the out tree | the dozen services marked `critical`/`reboot_on_failure` — the only ones whose death becomes a loop — with their binaries checked; the names to grep a console dump for and to dry-run from recovery |
 | `hybrid-bootimg.sh` | before the first boot | new kernel + old *recovery* ramdisk: recovery/fastbootd on the candidate kernel, so the phone stays reachable |
 | `init-harness.sh` | from that recovery | the new ramdisk's `/init` run as PID 1 of a throwaway pidns on the live kernel; each FATAL in kmsg is a gap, no slot-retry burnt. Covers bionic → `selinux_setup` → start of second stage |
 | `dtbo-ramoops-alt.py` | for anything past that | a debug dtbo whose live ramoops ring survives a clean reboot; normal-boot, then read it from recovery — the only way to see `early-init` die (cgroups, apexd-bootstrap) on a device whose bootloader wipes pstore |
+| `boot-console-wrap.sh` | when it loops or hangs with no USB and pstore does not survive the bootloader | a boot image whose PID 1 saves the previous iteration's console-ramoops to a spare region of `misc` and arms a watchdog in its own mount namespace that dumps `dmesg` there every few seconds and, at the timeout, sets the BCB and reboots to recovery — so a hang is read like a loop; `pull` reads it back from recovery |
 | `pstore-pull.sh` | from recovery, after | every pstore record, plus the raw ring unrolled if the kernel did not expose it; `pmsg-ramoops-*` decoded to logcat text (`pmsg-decode.py`) |
 | `pixel-ramoops-pull.sh` | Pixel 3/3a class, after a *panic* | the encrypted klog the bootloader saved, decrypted with your own key |
 | `super-loop-mount.sh` | from recovery | a logical partition of the inactive slot mounted rw without device-mapper — edit `init.rc`, push a binary, chroot into it |

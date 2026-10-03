@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-51 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+54 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -14,9 +14,11 @@ carries the same data for anything that would rather not parse Markdown.
 | [`apply-overlay.sh`](../tools/apply-overlay.sh) | apply the composed customization stack onto a synced LineageOS tree: | `apply-overlay.sh` | — |
 | [`bench-launch.sh`](../tools/bench-launch.sh) | cold app-launch times over adb, for A/B-ing a runtime tuning on one phone | `bench-launch.sh` | — |
 | [`blob-attach.sh`](../tools/blob-attach.sh) | start a vendor binary under lldb-server and print the load base of one of its libraries, so you can set absolute breakpoints inside a stripped prebuilt | `blob-attach.sh <device-binary> <library-soname> [--port N] [-s SERIAL]` | [debugging-a-vendor-blob](debugging-a-vendor-blob.md) |
+| [`boot-console-wrap.sh`](../tools/boot-console-wrap.sh) | a boot image that gets the kernel console out of a boot loop or a hang, on a device whose bootloader gives you no serial, no ramoops across its resets, and no `fastboot boot` | `boot-console-wrap.sh build <boot.img> <recovery.img> <out.img> [--timeout 150] [--every 10] [--misc-offset-mib 16]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`boot-window-logcat.sh`](../tools/boot-window-logcat.sh) | catch the logcat of a boot that ends in a reboot, through the seconds adbd is reachable | `boot-window-logcat.sh <outdir> [-s SERIAL] [--timeout SECONDS]        default timeout 900` | — |
-| [`check-bpf-objects.py`](../tools/check-bpf-objects.py) | which BPF programs and maps of a built Android tree this kernel cannot load | `check-bpf-objects.py --kernel <kernel-src>/include/uapi/linux/bpf.h --kver 4.9.337 \` | [porting-a-branch-bump](porting-a-branch-bump.md) |
+| [`check-bpf-objects.py`](../tools/check-bpf-objects.py) | which BPF programs and maps of a built Android tree this kernel cannot load | `check-bpf-objects.py --kernel <old uapi bpf.h> --kver 4.9.337 [--api 3700] [--modern <new bpf.h>] [--available-events <file>] <objects...>` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`check-bpf-readiness.sh`](../tools/check-bpf-readiness.sh) | find what a kernel without eBPF (or other modern syscalls) will break, before you spend a build-flash-boot cycle finding out | `check-bpf-readiness.sh` | — |
+| [`check-dt-needed.py`](../tools/check-dt-needed.py) | every ELF in a built image whose DT_NEEDED libraries are not in the image | `check-dt-needed.py <out>/target/product/<device> [--partition system\|vendor\|all] [--quiet]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`check-hal-readiness.sh`](../tools/check-hal-readiness.sh) | find HAL problems BEFORE the build-flash-boot cycle | `check-hal-readiness.sh` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`check-image-labels.sh`](../tools/check-image-labels.sh) | find paths in the image that no file_contexts entry labels | `check-image-labels.sh` | — |
 | [`check-patch-series.sh`](../tools/check-patch-series.sh) | find patches that undo earlier patches in the same series | `check-patch-series.sh [DEVICE_REPO] [--quiet]` | — |
@@ -50,6 +52,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`propagate-forge.sh`](../tools/propagate-forge.sh) | push an engine change out to every device repo, now | `propagate-forge.sh` | — |
 | [`pstore-pull.sh`](../tools/pstore-pull.sh) | pull every pstore record from a phone in recovery, plus (optionally) the raw ramoops region behind it | `pstore-pull.sh <outdir> [--raw /dev/access-ramoops] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`publish-kernel-source.sh`](../tools/publish-kernel-source.sh) | publish the kernel source that actually built this ROM, as a normal kernel repo, so a GPL request (or an XDA moderator) can be answered with one link | `publish-kernel-source.sh` | — |
+| [`rc-fatal-services.py`](../tools/rc-fatal-services.py) | which init services of a built image can take the device down, and whether they can start | `rc-fatal-services.py <out>/target/product/<device> [--all]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`refresh-patches.sh`](../tools/refresh-patches.sh) | re-export overlay/patches/ from the local commits sitting on top of upstream in each patched project | `refresh-patches.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`release.sh`](../tools/release.sh) | publish the redistributable preset of a build, and refuse to publish anything else | `release.sh` | [OEM-ASSETS](OEM-ASSETS.md), [RELEASING](RELEASING.md) |
 | [`repack-erofs-apex.sh`](../tools/repack-erofs-apex.sh) | rebuild an APEX whose payload is EROFS so the payload is ext4 instead | `repack-erofs-apex.sh <dir-to-scan> [--aosp /aosp] [--keys DIR] [--dry-run]` | — |

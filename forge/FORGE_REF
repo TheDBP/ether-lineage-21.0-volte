@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=61f0dd53ff046c80427d929b88f34ecdde8022dc
-subject=bootstrap: export SOONG_MEM_LIMIT and record it in the banner
-synced=2026-10-03T17:39:03Z
+commit=0efabf350ed07d01c536d760dca022ee38e1c3e4
+subject=setupwizard-nag-skip: rebase lineage-24.0 onto SUW gesture-navigation startup
+synced=2026-10-03T19:59:18Z
