@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=cc42557b0ed5c69285edc7f7f609d941ddeec12a
-subject=bootstrap: reset projects edited by overlay/blob-fixups before repo sync
-synced=2026-10-04T08:51:19Z
+commit=3d493eb6546ec188e1b6fdfc71940550de7ad3d8
+subject=README: overlay/blob-fixups in the model section
+synced=2026-10-04T08:52:18Z

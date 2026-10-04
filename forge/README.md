@@ -292,6 +292,11 @@ live in `overlay/patches/<project>/` and are `git am`'d onto the projects named 
 `PATCHED_PROJECTS`. If something here would make sense on another phone, it belongs in an option
 instead.
 
+A binary blob is the one thing a patch cannot carry readably, so edits to prebuilts — a `DT_NEEDED`
+on a framework library the vendor linker namespace cannot load, a stale SONAME — go in
+`overlay/blob-fixups`, one line per edit (`<path> remove-needed libandroid.so`), applied with
+patchelf after the patches by `tools/blob-fixups.sh`.
+
 That is the whole model.
 
 ### Reclaiming a phone's own assets
