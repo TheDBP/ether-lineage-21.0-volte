@@ -453,6 +453,7 @@ GOTCHAS.md            known traps, indexed by symptom
 | [docs/debugging-a-vendor-blob.md](docs/debugging-a-vendor-blob.md) | A prebuilt HAL that worked on the old branch and crashes on the new one |
 | [docs/debugging-a-dead-panel.md](docs/debugging-a-dead-panel.md) | The screen goes black and stays black while the framework still reports the display on. |
 | [docs/debugging-volte.md](docs/debugging-volte.md) | IMS is present and running but the modem never registers, so calls fall back to circuit-switched. Reading registration off the wire instead of the framework's summary, and the two-legged availability gate that silently disables VoLTE. |
+| [docs/debugging-mobile-data.md](docs/debugging-mobile-data.md) | LTE registers, SMS and IMS work, but every data call fails with an error that explains nothing — on your ROM, the official one and a swapped modem alike. Ask the modem directly (QMI), read its own log (DIAG F3), and find the bootloader-to-modem flag in SMEM. |
 | [docs/lineage-branches.md](docs/lineage-branches.md) | Choosing which branch to target — and avoiding a higher branch number that is actually older code. |
 | [docs/debugging-a-boot-loop.md](docs/debugging-a-boot-loop.md) | It builds but will not boot. Start with `/data/tombstones`, not pstore — and why USB adb may be impossible on your kernel. |
 | [docs/RELEASING.md](docs/RELEASING.md) | Publishing a build without handing out someone else's assets by accident. |

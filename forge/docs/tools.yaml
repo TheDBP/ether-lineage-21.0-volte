@@ -134,7 +134,8 @@ tools:
     path: "tools/diag-f3.sh"
     summary: "capture the modem's F3 debug messages (the firmware's own printf log) over /dev/diag for N seconds and decode them to text on the host"
     usage: "diag-f3.sh <seconds> <out.txt>          # raw stream kept beside it as <out.txt>.bin"
-    docs: []
+    docs:
+      - "docs/debugging-mobile-data.md"
   - name: "diag-f3-parse.py"
     path: "tools/diag-f3/diag-f3-parse.py"
     summary: "Parse a raw DIAG HDLC stream (as written by diag-f3-capture) and print F3 EXT_MSG (0x79) text lines"
@@ -219,12 +220,14 @@ tools:
     path: "tools/kmod-build.sh"
     summary: "build an out-of-tree kernel module against the device's last kernel build in the forge container"
     usage: "kmod-build.sh"
-    docs: []
+    docs:
+      - "docs/debugging-mobile-data.md"
   - name: "kmod-rebase-crcs.py"
     path: "tools/kmod-rebase-crcs.py"
     summary: "make a .ko built against one kernel build load on another build of the same source"
     usage: "kmod-rebase-crcs.py <module.ko> <target-Image> <kallsyms.txt> [out.ko]"
-    docs: []
+    docs:
+      - "docs/debugging-mobile-data.md"
   - name: "make-apex-key.sh"
     path: "tools/make-apex-key.sh"
     summary: "create the signing key an EROFS-repacked APEX is re-signed with"
@@ -300,7 +303,8 @@ tools:
     path: "tools/qmi-sni.sh"
     summary: "bring up a modem data call from the AP as a direct QMI WDS client, bypassing the RIL, and print the modem's own answer:"
     usage: "qmi-sni.sh <node> <apn> <3gpp-profile> [v4|v6|v4v6] [epc|umts|none] [calltype] [keep] [sub] [muxN]"
-    docs: []
+    docs:
+      - "docs/debugging-mobile-data.md"
   - name: "rc-fatal-services.py"
     path: "tools/rc-fatal-services.py"
     summary: "which init services of a built image can take the device down, and whether they can start"

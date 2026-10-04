@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=efe51751e1865becb03db7dc1d83f0b73cf673d3
-subject=tools: README rows for diag-f3-parse.py and freestanding-arm64.sh
-synced=2026-10-04T22:56:33Z
+commit=a2408ec8370130d972df173bbbcfa63283fd7ff2
+subject=docs: debugging mobile data that never comes up (QMI direct, DIAG F3, SMEM vendor flags)
+synced=2026-10-04T23:14:49Z
