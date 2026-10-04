@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=d423c59ef6bd2ac78b13cb28cb0234eda5cea253
-subject=propagate-forge: skip a device repo while a build runs from it
-synced=2026-10-04T08:40:09Z
+commit=5b73bb1aa23e0f81ae0eb7303e229fe70c334b55
+subject=tools: check-vendor-needed.sh — vendor DT_NEEDED resolved against the vendor namespace, from out/
+synced=2026-10-04T08:49:07Z
