@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=826c1d939a3e5d96d17616b265fff1b63a77bd8c
-subject=tools: check-root-mountpoints.sh — top-level dirs init mounts or mkdirs into must exist in the root image
-synced=2026-10-04T10:07:58Z
+commit=54a15967c89af99f88fb427a717369791c796b6b
+subject=tools: check-lmkd-source.sh, does the kernel give Android 16+ lmkd a pressure source
+synced=2026-10-04T12:43:22Z
