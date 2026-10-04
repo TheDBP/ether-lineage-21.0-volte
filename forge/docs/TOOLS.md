@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-60 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+61 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -23,6 +23,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`check-hal-readiness.sh`](../tools/check-hal-readiness.sh) | find HAL problems BEFORE the build-flash-boot cycle | `check-hal-readiness.sh` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`check-image-labels.sh`](../tools/check-image-labels.sh) | find paths in the image that no file_contexts entry labels | `check-image-labels.sh` | — |
 | [`check-lmkd-source.sh`](../tools/check-lmkd-source.sh) | does this kernel give lmkd a memory-pressure source it can actually use? | `check-lmkd-source.sh <kernel .config or defconfig> [<cgroups.json>] [<kernel source dir>]` | — |
+| [`check-overlay-precedence.sh`](../tools/check-overlay-precedence.sh) | which overlay directory wins for every resource that more than one device overlay defines, and what each framework dimen the overlays touch resolves to | `check-overlay-precedence.sh <src-root> <product.mk>` | — |
 | [`check-patch-series.sh`](../tools/check-patch-series.sh) | find patches that undo earlier patches in the same series | `check-patch-series.sh [DEVICE_REPO] [--quiet]` | — |
 | [`check-platform-support.sh`](../tools/check-platform-support.sh) | find the upstream makefile gates that SILENTLY EXCLUDE this device's SoC | `check-platform-support.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`check-root-mountpoints.sh`](../tools/check-root-mountpoints.sh) | every top-level directory the init scripts mount or mkdir into must exist in the root filesystem image; the root is read-only, so a missing one fails silently | `check-root-mountpoints.sh <system.img> [<vendor.img> ...]` | — |

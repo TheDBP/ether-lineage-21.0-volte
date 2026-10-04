@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=975adc700f4f50bfdccfba8fd51cb4adaa99802a
-subject=tools: make check-sigpipe clean, and stop check-patch-series flagging list openers
-synced=2026-10-04T14:08:39Z
+commit=d260605fe8c99f702b989f4aa5ed1d3fbcb1a35f
+subject=tools: check-overlay-precedence — first-listed overlay dir wins, report collisions
+synced=2026-10-04T17:22:07Z
