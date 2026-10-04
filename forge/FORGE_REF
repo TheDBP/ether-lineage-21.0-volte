@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=b8413fc0891a3a614fc83057452f33a1b0613325
-subject=boot-console-wrap: make the watchdog exec-free so --enforcing works
-synced=2026-10-03T22:02:36Z
+commit=aaacd0e95a7befc8fe8adfe6e4515a4733f3e86f
+subject=tools: image-labels.sh reads the labels a built ext4 image carries
+synced=2026-10-04T07:28:29Z
