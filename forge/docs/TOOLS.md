@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-61 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+67 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -34,6 +34,8 @@ carries the same data for anything that would rather not parse Markdown.
 | [`dedup-shared-inputs.sh`](../tools/dedup-shared-inputs.sh) | collapse identical large build INPUTS across device repos to hardlinks | `dedup-shared-inputs.sh [--dry-run] [--min-size BYTES] [DIR ...]` | — |
 | [`dev-shell.sh`](../tools/dev-shell.sh) | authoring container. Host needs only Docker. Runs the build image with the repos root mounted at /repos: clone/edit/format-patch/git-am/commit in-container. Only `git push` uses host auth (GH_TOKEN, else `gh auth token`). dev-shell.sh [cmd...]   # no args = interactive shell Env: REPOS (default: parent of this repo), IMAGE (default aosp-los22:24.04), GH_TOKEN | `dev-shell.sh [cmd...]   # no args = interactive shell` | — |
 | [`diag-efs.sh`](../tools/diag-efs.sh) | read a modem EFS/NV item file over /dev/diag, on a connected device | `diag-efs.sh <buildid\|hello\|ls DIR\|read PATH\|write PATH HEX [OFLAG MODE]\|rm PATH\|probe HEX>` | — |
+| [`diag-f3.sh`](../tools/diag-f3.sh) | capture the modem's F3 debug messages (the firmware's own printf log) over /dev/diag for N seconds and decode them to text on the host | `diag-f3.sh <seconds> <out.txt>          # raw stream kept beside it as <out.txt>.bin` | — |
+| [`diag-f3-parse.py`](../tools/diag-f3/diag-f3-parse.py) | Parse a raw DIAG HDLC stream (as written by diag-f3-capture) and print F3 EXT_MSG (0x79) text lines | `diag-f3-parse.py` | — |
 | [`dtbo-ramoops-alt.py`](../tools/dtbo-ramoops-alt.py) | make the live ramoops console survive a clean reboot | `dtbo-ramoops-alt.py <dtbo.img> <out.img> [--index N]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`extract-gapps-apps.sh`](../tools/extract-gapps-apps.sh) | pull the Google versions of the stock apps out of a GApps zip and stage them as /product prebuilts, so a WITH_GAPPS build swaps the Lineage/AOSP apps for Google's | `extract-gapps-apps.sh` | — |
 | [`extract-nextbit-oem-assets.sh`](../tools/extract-nextbit-oem-assets.sh) | reclaim the Nextbit Robin OEM assets (system sounds, wallpapers, boot animation) from a Nextbit Robin stock ROM and bake them into the tree being built | `extract-nextbit-oem-assets.sh` | [OEM-ASSETS](OEM-ASSETS.md) |
@@ -41,11 +43,14 @@ carries the same data for anything that would rather not parse Markdown.
 | [`find-orphaned-sepolicy-types.sh`](../tools/find-orphaned-sepolicy-types.sh) | list SELinux types a device tree still references but that no longer exist, after an upstream branch bump deleted the policy that defined them | `find-orphaned-sepolicy-types.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`find-removed-platform-symbols.sh`](../tools/find-removed-platform-symbols.sh) | C/C++ constants a device tree uses that the new branch deleted | `find-removed-platform-symbols.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`find-soong-namespace-drift.sh`](../tools/find-soong-namespace-drift.sh) | Soong namespace and manifest changes between branches that will break a device tree the new branch no longer maintains | `find-soong-namespace-drift.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
+| [`freestanding-arm64.sh`](../tools/freestanding-arm64.sh) | cross-compile one of the freestanding arm64 helpers (no libc, raw syscalls, own _start) in the cached cross-compile container and push it to /data/local/tmp | `freestanding-arm64.sh` | — |
 | [`gen-tool-index.py`](../tools/gen-tool-index.py) | regenerate the tool index from the tools themselves | `gen-tool-index.py            # rewrite docs/TOOLS.md and docs/tools.yaml` | — |
 | [`hybrid-bootimg.sh`](../tools/hybrid-bootimg.sh) | a boot image with one build's kernel+dtb and another's ramdisk | `hybrid-bootimg.sh <kernel-from.img> <ramdisk-from.img> <out.img>` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`image-labels.sh`](../tools/image-labels.sh) | read the SELinux labels the image builder actually wrote, out of a built ext4 image, before flashing it | `image-labels.sh <image> <path> [<path>...]       one line per path: label, or MISSING` | — |
 | [`init-harness.sh`](../tools/init-harness.sh) | run a new ramdisk's /init on the live kernel, from recovery, without a boot | `init-harness.sh <boot.img \| ramdisk-dir> [-t SECONDS] [-o OUTDIR] [-c 'CMD ...'] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`kernel-rebuild.sh`](../tools/kernel-rebuild.sh) | rebuild just the boot image (or any make target) after a kernel change, with the environment of the last full build | `kernel-rebuild.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
+| [`kmod-build.sh`](../tools/kmod-build.sh) | build an out-of-tree kernel module against the device's last kernel build in the forge container | `kmod-build.sh` | — |
+| [`kmod-rebase-crcs.py`](../tools/kmod-rebase-crcs.py) | make a .ko built against one kernel build load on another build of the same source | `kmod-rebase-crcs.py <module.ko> <target-Image> <kallsyms.txt> [out.ko]` | — |
 | [`make-apex-key.sh`](../tools/make-apex-key.sh) | create the signing key an EROFS-repacked APEX is re-signed with | `make-apex-key.sh <apex-name> <keys-dir>` | — |
 | [`make-keys.sh`](../tools/make-keys.sh) | generate the signing keys for release builds, once, into a directory outside every repo | `make-keys.sh` | [RELEASING](RELEASING.md) |
 | [`mcfg-items.py`](../tools/mcfg-items.py) | list the EFS items a Qualcomm MCFG provisions, with their values | `mcfg-items.py mcfg_sw.mbn              # every EFS item: path, size, value` | — |
@@ -59,6 +64,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`propagate-forge.sh`](../tools/propagate-forge.sh) | push an engine change out to every device repo, now | `propagate-forge.sh` | — |
 | [`pstore-pull.sh`](../tools/pstore-pull.sh) | pull every pstore record from a phone in recovery, plus (optionally) the raw ramoops region behind it | `pstore-pull.sh <outdir> [--raw /dev/access-ramoops] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`publish-kernel-source.sh`](../tools/publish-kernel-source.sh) | publish the kernel source that actually built this ROM, as a normal kernel repo, so a GPL request (or an XDA moderator) can be answered with one link | `publish-kernel-source.sh` | — |
+| [`qmi-sni.sh`](../tools/qmi-sni.sh) | bring up a modem data call from the AP as a direct QMI WDS client, bypassing the RIL, and print the modem's own answer: | `qmi-sni.sh <node> <apn> <3gpp-profile> [v4\|v6\|v4v6] [epc\|umts\|none] [calltype] [keep] [sub] [muxN]` | — |
 | [`rc-fatal-services.py`](../tools/rc-fatal-services.py) | which init services of a built image can take the device down, and whether they can start | `rc-fatal-services.py <out>/target/product/<device> [--all]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`refresh-patches.sh`](../tools/refresh-patches.sh) | re-export overlay/patches/ from the local commits sitting on top of upstream in each patched project | `refresh-patches.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`release.sh`](../tools/release.sh) | publish the redistributable preset of a build, and refuse to publish anything else | `release.sh` | [OEM-ASSETS](OEM-ASSETS.md), [RELEASING](RELEASING.md) |

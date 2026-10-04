@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=d260605fe8c99f702b989f4aa5ed1d3fbcb1a35f
-subject=tools: check-overlay-precedence — first-listed overlay dir wins, report collisions
-synced=2026-10-04T17:22:07Z
+commit=efe51751e1865becb03db7dc1d83f0b73cf673d3
+subject=tools: README rows for diag-f3-parse.py and freestanding-arm64.sh
+synced=2026-10-04T22:56:33Z

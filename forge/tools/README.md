@@ -79,6 +79,13 @@ Bringing a kernel up to a newer branch (the *kernel gate* of a port — see
 | `check-patch-series.sh` | after regenerating patches | pairs where a later patch undoes an earlier one — one change written twice, which a replayed series cannot express |
 | `diag-efs.sh` | when a modem feature never runs | the modem's own EFS/NV items, read and written over `/dev/diag`. Tells "the modem refused" from "the modem was never told", which look identical from outside |
 | `mcfg-items.py` | when a feature works on one device and not another with the same modem | the EFS items a Qualcomm MCFG provisions, with values, without flashing it — diff carrier provisioning instead of cross-flashing firmware |
+| `diag-f3.sh` | when the modem refuses something and the RIL only says "failed" | the modem's own F3 debug log (file:line + message, what QXDM shows) captured over `/dev/diag` for N seconds and decoded — every modem-side decision, with the source line that made it |
+| `diag-f3/diag-f3-parse.py` | on a raw capture | the HDLC stream from `diag-f3-capture` decoded to `ts ssid file:line message` lines; `diag-f3.sh` runs it for you |
+| `freestanding-arm64.sh` | sourced by `diag-f3.sh`, `qmi-sni.sh` | one function: cross-compile a libc-free arm64 helper in the cached container and push it to `/data/local/tmp` |
+| `qmi-sni.sh` | when a data call fails and you need the modem's answer, not the RIL's | START_NETWORK_INTERFACE sent as a direct QMI WDS client, one TLV varied at a time; the raw error and call-end TLVs tell a modem policy refusal from a network reject |
+| `smem-poke/` (module, build with `kmod-build.sh`) | when a modem/bootloader handshake flag is suspect | the SMEM vendor items the bootloader fills in for the modem, dumped from the AP — and one word rewritten live to test a theory before patching the kernel |
+| `kmod-build.sh` | when you need a kernel module against the last build | an out-of-tree module built in the forge container with the ROM's exact kernel make env; a host `make O=KERNEL_OBJ` rebuilds the vdso and corrupts the build output |
+| `kmod-rebase-crcs.py` | when insmod says "disagrees about version of symbol" | the module's `__versions` CRCs rewritten from the target kernel's Image, so a module from your tree loads on an official nightly built with another toolchain |
 | `pmsg-decode.py` | when a boot never reached adb | the previous boot's logcat out of a pstore pmsg record, tombstones included |
 | `gen-tool-index.py` | after adding a tool or a doc | `docs/TOOLS.md` and `docs/tools.yaml` regenerated; `--check` fails if either is stale or a tool is missing from this table |
 
