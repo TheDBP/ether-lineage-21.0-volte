@@ -66,10 +66,10 @@ _fdroid_zipalign() { echo "${AOSP:-/aosp}/prebuilts/build-tools/linux-x86/bin/zi
 
 # apk -> versionCode as aapt2 reads it, or empty
 fdroid_apk_version_code() {
-  "$(_fdroid_aapt2)" dump badging "$1" 2>/dev/null | sed -n "s/^package:.*versionCode='\([0-9]*\)'.*/\1/p" | head -1
+  "$(_fdroid_aapt2)" dump badging "$1" 2>/dev/null | sed -n "s/^package:.*versionCode='\([0-9]*\)'.*/\1/p" | sed -n 1p
 }
 fdroid_apk_version_name() {
-  "$(_fdroid_aapt2)" dump badging "$1" 2>/dev/null | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" | head -1
+  "$(_fdroid_aapt2)" dump badging "$1" 2>/dev/null | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" | sed -n 1p
 }
 # apk -> sha256 of the first signer certificate, only if the signature verifies; empty otherwise
 fdroid_apk_signer() {
@@ -108,7 +108,7 @@ fdroid_apk_dex_compressed() {
 fdroid_latest_version_code() {
   local json
   json="$(curl -fsS --max-time 30 "$FDROID_API/$1")" || return 1
-  printf '%s' "$json" | sed -n 's/.*"suggestedVersionCode":\([0-9]*\).*/\1/p' | head -1 | grep -E '^[0-9]+$'
+  printf '%s' "$json" | sed -n 's/.*"suggestedVersionCode":\([0-9]*\).*/\1/p' | sed -n 1p | grep -E '^[0-9]+$'
 }
 
 # _fdroid_verify APK PKG SIGNER -> 0 if the apk is PKG, arm64, and signed by SIGNER
@@ -138,7 +138,7 @@ fdroid_fetch_latest() {
   local pkg="$1" out="$2" signer="$3" label="${4:-$1}" want have pin tmp
   mkdir -p "$(dirname "$out")"
 
-  pin="$(printf '%s\n' ${FDROID_PINS:-} | sed -n "s/^$pkg=\([0-9]*\)$/\1/p" | head -1)"
+  pin="$(printf '%s\n' ${FDROID_PINS:-} | sed -n "s/^$pkg=\([0-9]*\)$/\1/p" | sed -n 1p)"
   if [ -n "$pin" ]; then
     want="$pin"; echo "   $label: pinned to versionCode $want (FDROID_PINS)"
   elif ! want="$(fdroid_latest_version_code "$pkg")"; then

@@ -178,12 +178,12 @@ echo
 echo "  --- checkvintf (AOSP's own compatibility check) ---"
 CV="$SRC/out/host/linux-x86/bin/checkvintf"
 DM="$OUT/system/vendor/etc/vintf/manifest.xml"
-FM=$(ls "$OUT"/system/etc/vintf/compatibility_matrix*.xml 2>/dev/null | head -1)
+FM=$(ls "$OUT"/system/etc/vintf/compatibility_matrix*.xml 2>/dev/null | sed -n 1p)
 if [ -x "$CV" ] && [ -d "$OUT/system" ]; then
   VEN="$OUT/system/vendor"; [ -d "$OUT/vendor" ] && VEN="$OUT/vendor"
   "$CV" --check-compat --dirmap /system:"$OUT/system" --dirmap /vendor:"$VEN" \
         --dirmap /odm:"$OUT/odm" --dirmap /product:"$OUT/product" \
-        --dirmap /system_ext:"$OUT/system_ext" 2>&1 | head -20 | sed 's/^/    /' || true
+        --dirmap /system_ext:"$OUT/system_ext" 2>&1 | sed -n 1,20p | sed 's/^/    /' || true
 else
   echo "    (skipped — need out/host/.../checkvintf and a built system image)"
 fi

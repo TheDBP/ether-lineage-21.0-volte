@@ -63,7 +63,7 @@ app_post_build() {
   local out="$AOSP/out/target/product/${DEVICE_CODENAME:?DEVICE_CODENAME unset and device.conf not found}"
   for mod in "$@"; do
     src="$(_app_apk "$dir" "$mod")"
-    apk="$(find "$out" -name "$mod.apk" -path '*app*' -not -path '*/obj/*' 2>/dev/null | head -1)"
+    apk="$(find "$out" -name "$mod.apk" -path '*app*' -not -path '*/obj/*' 2>/dev/null | sed -n 1p)"
     [ -n "$apk" ] || { echo "!! $opt: no $mod.apk in the built image"; rc=1; continue; }
     [ -f "$src" ] || { echo "   $opt: $mod: no fetched copy to compare against, skipping"; continue; }
     if ! cmp -s "$src" "$apk"; then

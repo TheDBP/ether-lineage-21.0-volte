@@ -116,7 +116,7 @@ for proj in ${PATCHED_PROJECTS:-}; do
     # "# --- rom-forge:<frag>" to a defconfig on kernels with no %.config rule, and
     # KERNEL_EXTRA_CONFIGS appends "# added by rom-forge (...)" plus a TARGET_KERNEL_CONFIG line to
     # the device BoardConfig on kernels that have one.
-    if [ "$st" = "M" ] && git -C "$d" diff -- "$path" 2>/dev/null | grep -q '^+.*rom-forge'; then
+    if [ "$st" = "M" ] && [ "$(git -C "$d" diff -- "$path" 2>/dev/null | grep -c '^+.*rom-forge' || true)" -gt 0 ]; then
       continue
     fi
     hits="$hits$st $full"$'\n'

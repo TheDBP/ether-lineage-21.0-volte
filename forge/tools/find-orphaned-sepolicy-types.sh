@@ -141,7 +141,7 @@ for f in "$SEPOL"/*.te; do
     #     diag_use(mm-pp-daemon)
     # A '^'-anchored pattern silently misses those -- it reports a clean run while the build fails.
     for m in $(sed 's/#.*//' "$f" 2>/dev/null | grep -ohE '\b[a-z_][a-z_0-9]*\(' | tr -d '(' | sort -u); do
-    if ! printf '%s\n' "$AVAIL" | grep -qx "$m"; then
+    if ! printf '%s\n' "$AVAIL" | grep -qx "$m"; then   # sigpipe-ok: one write
       echo "  $m  (used in $(basename "$f"))"
       nm=$((nm+1))
     fi

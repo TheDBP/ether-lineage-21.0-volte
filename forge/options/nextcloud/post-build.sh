@@ -17,7 +17,7 @@ OUT="$AOSP/out/target/product/${DEVICE_CODENAME:?DEVICE_CODENAME unset and devic
 rc=0
 for mod in $(NEXTCLOUD_LIST_ONLY=1 bash "$FORGE_DIR/prebuilt/fetch-nextcloud.sh"); do
   SRC="$AOSP/vendor/lineage/prebuilts/nextcloud/$mod.apk"
-  APK="$(find "$OUT" -name "$mod.apk" -path '*app*' -not -path '*/obj/*' 2>/dev/null | head -1)"
+  APK="$(find "$OUT" -name "$mod.apk" -path '*app*' -not -path '*/obj/*' 2>/dev/null | sed -n 1p)"
   [ -n "$APK" ] || { echo "!! nextcloud: no $mod.apk in the built image"; rc=1; continue; }
   [ -f "$SRC" ] || { echo "   nextcloud: $mod: no fetched copy to compare against, skipping"; continue; }
   if cmp -s "$SRC" "$APK"; then

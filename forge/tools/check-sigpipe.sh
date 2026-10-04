@@ -6,7 +6,8 @@
 # count instead:  n=$(producer | grep -c NEEDLE || true).
 #
 # Run: tools/check-sigpipe.sh   (also wired as .githooks/pre-commit). Add a trailing `# sigpipe-ok`
-# to a line to suppress a genuine false positive.
+# to a line to suppress a genuine false positive. `| head -1 || true` is accepted as is: the `|| true`
+# absorbs the 141. For a first-line capture prefer `| sed -n 1p`, which reads to EOF.
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -16,9 +17,10 @@ while IFS= read -r f; do
   # Blank out comments first (pure-comment lines, and trailing ' #...') so a warning ABOUT the trap
   # in a comment isn't flagged as the trap. sed keeps the line count, so grep -n stays accurate.
   # Then: a single pipe ( '|' not '||' ) into grep -...q..., or into head. `[^|]\|` avoids `||`.
-  hits="$(sed -E 's/^[[:space:]]*#.*//; s/[[:space:]]#.*//' "$f" \
+  # Keep the sigpipe-ok marker alive through the comment strip, or the suppression never fires.
+  hits="$(sed -E 's/[[:space:]]#[^#]*sigpipe-ok.*/ sigpipe-ok/; s/^[[:space:]]*#.*//; s/[[:space:]]#.*//' "$f" \
           | grep -nE '[^|]\| *grep +-[A-Za-z]*q[A-Za-z]*|[^|]\| *head( |$)' 2>/dev/null \
-          | grep -v 'sigpipe-ok' || true)"
+          | grep -v 'sigpipe-ok' | grep -vE '\| *head[^|]*\|\| *true' || true)"
   [ -n "$hits" ] || continue
   echo "!! $f — unsafe pipe under pipefail (grep -q / head SIGPIPEs the producer):"
   echo "$hits" | sed 's/^/     /'

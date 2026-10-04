@@ -87,7 +87,7 @@ IMG="aosp-${DEVICE_SLUG}:${UBUNTU_VER}"
 # One run builds one image. PRESET names a saved set of options; OPTIONS gives one directly.
 # Neither given -> the first preset, which is the ordinary build for this device.
 if [ -z "${OPTIONS:-}" ] && [ -z "${PRESET:-}" ]; then
-  PRESET="$(forge_preset_names | head -1)"
+  PRESET="$(forge_preset_names | sed -n 1p)"
   [ -n "$PRESET" ] || { echo "!! device.conf defines no PRESETS, and neither PRESET nor OPTIONS was given" >&2; exit 1; }
 fi
 if [ -n "${PRESET:-}" ]; then
@@ -522,7 +522,7 @@ _out="$SRC/out/target/product/$DEVICE_CODENAME"
 # necessarily equal and the winner is whichever the locale sorts first. That published a zip under the
 # previous day's name once.
 _zip="$(find "$_out" -maxdepth 1 -name "lineage-*-$DEVICE_CODENAME.zip" -printf '%T@\t%p\n' 2>/dev/null \
-        | sort -k1,1nr -k2,2r | head -1 | cut -f2)"
+        | sort -k1,1nr -k2,2r | sed -n 1p | cut -f2)"
 if [ -n "$_zip" ]; then
   _keep="$BUILD_ROOT/artifacts"; mkdir -p "$_keep"
   _stem="$(basename "${_zip%.zip}")"

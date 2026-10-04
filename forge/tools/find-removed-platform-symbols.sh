@@ -71,10 +71,10 @@ while read -r sym; do
        --include='*.h' 2>/dev/null; then
     continue
   fi
-  where=$(grep -rlE "\b$sym\b" "$NEW_SRC/$DEV" --include='*.c' --include='*.cpp' --include='*.cc' 2>/dev/null | head -2 \
+  where=$(grep -rlE "\b$sym\b" "$NEW_SRC/$DEV" --include='*.c' --include='*.cpp' --include='*.cc' 2>/dev/null | sed -n 1,2p \
           | sed "s#$NEW_SRC/$DEV/##" | tr '\n' ' ')
   [ -n "$where" ] || continue
-  old_def=$(grep -rhE "^[[:space:]]*(#define[[:space:]]+)?$sym[[:space:]]*(=|[[:space:]])" "$OLD_SRC"/system/core/include "$OLD_SRC"/hardware/libhardware/include 2>/dev/null | head -1 | sed 's/^[[:space:]]*//')
+  old_def=$(grep -rhE "^[[:space:]]*(#define[[:space:]]+)?$sym[[:space:]]*(=|[[:space:]])" "$OLD_SRC"/system/core/include "$OLD_SRC"/hardware/libhardware/include 2>/dev/null | sed -n 1p | sed 's/^[[:space:]]*//')
   printf "  %s\n" "$sym"
   printf "      used by : %s\n" "$where"
   [ -n "$old_def" ] && printf "      was     : %s\n" "$(echo "$old_def" | cut -c1-96)"

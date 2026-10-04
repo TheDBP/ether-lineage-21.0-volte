@@ -103,7 +103,7 @@ else
   # Same tie-break as bootstrap's keep step: equal mtimes mean one inode under two names, and
   # picking by locale order can select the wrong date. Highest name wins the tie.
   ZIP="$(find "$OUTDIR" -maxdepth 1 -name "*-$VT-$DEVICE_CODENAME.zip" -printf '%T@\t%p\n' 2>/dev/null \
-         | sort -k1,1nr -k2,2r | head -1 | cut -f2)"
+         | sort -k1,1nr -k2,2r | sed -n 1p | cut -f2)"
 fi
 [ -n "$ZIP" ] && [ -f "$ZIP" ] || die "no built zip for preset '$VN' (expected $OUTDIR/*-${VT}-${DEVICE_CODENAME}.zip) -- build it first: PRESET=$VN ./forge/bootstrap.sh"
 info "artifact: $(basename "$ZIP") ($(du -h "$ZIP" | cut -f1))"
@@ -188,7 +188,7 @@ else
   # 4b. GApps packages, by the names Google ships them under
   for g in PrebuiltGmsCore Phonesky GoogleServicesFramework GoogleLoginService SetupWizard \
            PrebuiltGmsCoreSc GmsCore VelvetOverlay; do
-    if find "$OUT/system" -maxdepth 6 -type d -name "$g" 2>/dev/null | grep -q .; then
+    if [ -n "$(find "$OUT/system" -maxdepth 6 -type d -name "$g" 2>/dev/null)" ]; then
       echo "   !! GApps package present in image: $g"; hits=$((hits+1))
     fi
   done
@@ -207,7 +207,7 @@ else
     h="$(sha256sum "$w" | awk '{print $1}')"
     if grep -qx "$h" "$featsums"; then
       ok "wallpaper $(basename "$w") is one of this build's own feature assets"
-    elif printf '%s\n' "$allow_sums" | grep -qx "$h"; then
+    elif printf '%s\n' "$allow_sums" | grep -qx "$h"; then   # sigpipe-ok: one write
       ok "wallpaper $(basename "$w") cleared by RELEASE_AUDIT_ALLOW"
     else
       echo "   !! unaccounted wallpaper in image: ${w#"$OUT/system"/}"
@@ -247,7 +247,7 @@ TAGNAME="${BRANCH}-$(date +%Y%m%d)-${DEVICE_CODENAME}"
 TITLE="${REL_NAME} — ${BRANCH} (${VN})"
 DENY="${RELEASE_NAME_DENY:-nextbit razer robin pixel google nexus motorola samsung oneplus xiaomi}"
 for word in $DENY; do
-  if printf '%s %s' "$TITLE" "$TAGNAME" | grep -qi "\b$word\b"; then
+  if printf '%s %s' "$TITLE" "$TAGNAME" | grep -qi "\b$word\b"; then   # sigpipe-ok: one write
     die "refusing: release name contains '$word'.
    '$TITLE' / tag '$TAGNAME'
    Set RELEASE_NAME in device.conf to something that is yours, or adjust RELEASE_NAME_DENY if this
@@ -336,7 +336,7 @@ sha256  $RECOVERY_SUM}
 EOF
 cat "$SECTION" >> "$NOTES"
 # The notes are published verbatim: nothing from this host may be in them.
-grep -qF -e "$REPO" -e "$TMPDIR" -e "$HOME" "$NOTES" && die "refusing: release notes contain a path from this machine: $(grep -F -e "$REPO" -e "$TMPDIR" -e "$HOME" "$NOTES" | head -1)"
+grep -qF -e "$REPO" -e "$TMPDIR" -e "$HOME" "$NOTES" && die "refusing: release notes contain a path from this machine: $(grep -F -e "$REPO" -e "$TMPDIR" -e "$HOME" "$NOTES" | sed -n 1p)"
 HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
 # ---- 7. publish -----------------------------------------------------------------------------------
@@ -371,7 +371,7 @@ if [ "$DRY" = 1 ]; then
 fi
 
 command -v gh >/dev/null || die "gh CLI not installed"
-if gh repo view "$TARGET" --json isPrivate -q .isPrivate 2>/dev/null | grep -qx true; then
+if [ "$(gh repo view "$TARGET" --json isPrivate -q .isPrivate 2>/dev/null)" = true ]; then
   echo "   note: $TARGET is PRIVATE — the release will not be publicly downloadable until it is public."
 fi
 

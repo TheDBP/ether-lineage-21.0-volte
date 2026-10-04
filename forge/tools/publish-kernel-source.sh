@@ -51,7 +51,7 @@ export LC_ALL=C
 # device it was written against and fail on the next.
 DDIR="$AOSP/device/${DEVICE:?device.conf missing DEVICE}"
 [ -d "$DDIR" ] || { echo "!! no device tree at $DDIR — is the tree synced?" >&2; exit 1; }
-KSRC_LINE=$(grep -rhE '^[[:space:]]*TARGET_KERNEL_SOURCE[[:space:]]*:?=' "$DDIR" --include='*.mk' 2>/dev/null | head -1)
+KSRC_LINE=$(grep -rhE '^[[:space:]]*TARGET_KERNEL_SOURCE[[:space:]]*:?=' "$DDIR" --include='*.mk' 2>/dev/null | sed -n 1p)
 KPATH=$(printf '%s' "$KSRC_LINE" | sed 's/^[[:space:]]*TARGET_KERNEL_SOURCE[[:space:]]*:\?=[[:space:]]*//' | tr -d ' ')
 if [ -z "$KPATH" ]; then
   echo ">> $DDIR declares no TARGET_KERNEL_SOURCE: prebuilt kernel, nothing to publish"
@@ -62,11 +62,11 @@ KDIR="$AOSP/$KPATH"
 
 # Upstream base: the ref repo syncs to. Not HEAD -- HEAD already has the patches applied, and
 # republishing that would bake in whatever state the working tree happened to be in.
-MREF=$(git -C "$KDIR" for-each-ref --format='%(refname:short)' refs/remotes/m/ 2>/dev/null | head -1)
+MREF=$(git -C "$KDIR" for-each-ref --format='%(refname:short)' refs/remotes/m/ 2>/dev/null | sed -n 1p)
 BASE="${MREF:-${BASE_REF:-}}"
 [ -n "$BASE" ] || { echo "!! cannot determine the upstream base ref for $KPATH" >&2; exit 1; }
 BASE_SHA=$(git -C "$KDIR" rev-parse "$BASE" 2>/dev/null) || { echo "!! no such ref: $BASE" >&2; exit 1; }
-UPSTREAM=$(git -C "$KDIR" remote get-url "$(git -C "$KDIR" remote | head -1)" 2>/dev/null)
+UPSTREAM=$(git -C "$KDIR" remote get-url "$(git -C "$KDIR" remote | sed -n 1p)" 2>/dev/null)
 
 PDIR="$DEVICE_REPO/overlay/patches/$KPATH"
 PATCHES=$(ls "$PDIR"/*.patch 2>/dev/null | sort)

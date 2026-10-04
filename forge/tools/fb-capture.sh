@@ -56,7 +56,7 @@ W=${VIRT%,*}; VH=${VIRT#*,}
 # The panel height comes from `modes` (e.g. "U:1080x1920p-360"), not from dividing virtual_size by a
 # guessed buffer count: on a 1080x1920 panel virtual_size is 1080,3840 and dividing by 3 gives 1280,
 # which is >= the width and so looks perfectly reasonable while being wrong.
-H=$(printf '%s' "$MODES" | sed -nE 's/.*[:_]?([0-9]+)x([0-9]+)p.*/\2/p' | head -1)
+H=$(printf '%s' "$MODES" | sed -nE 's/.*[:_]?([0-9]+)x([0-9]+)p.*/\2/p' | sed -n 1p)
 if [ -z "$H" ]; then
   H=$(( VH / 2 ))
   echo "   note: no usable 'modes'; assuming double buffering, panel height $H" >&2

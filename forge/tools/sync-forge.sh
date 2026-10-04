@@ -31,7 +31,7 @@ DEVICE_REPO="$(cd "$(dirname "$ORIG")/../.." && pwd)"   # tools -> forge -> devi
 FORGE_DIR="$DEVICE_REPO/forge"
 # Default to wherever this forge/ came from, so a device repo synced from a fork keeps following
 # the fork; the upstream URL is only the fallback for a FORGE_REF that records none.
-FORGE_URL="${FORGE_URL:-$(sed -n 's/^url=//p' "$FORGE_DIR/FORGE_REF" 2>/dev/null | head -1)}"
+FORGE_URL="${FORGE_URL:-$(sed -n 's/^url=//p' "$FORGE_DIR/FORGE_REF" 2>/dev/null | sed -n 1p)}"
 FORGE_URL="${FORGE_URL:-https://github.com/TheDBP/rom-forge.git}"
 REF="${1:-main}"
 

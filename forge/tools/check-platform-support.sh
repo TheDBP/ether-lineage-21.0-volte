@@ -30,7 +30,7 @@ PLAT="${3:-}"
 
 if [ -z "$PLAT" ]; then
   PLAT=$(grep -rhE '^[[:space:]]*TARGET_BOARD_PLATFORM[[:space:]]*:?=' "$SRC/$DEV"/BoardConfig*.mk 2>/dev/null \
-         | head -1 | sed -E 's/.*:?=[[:space:]]*//' | tr -d ' ')
+         | sed -n 1p | sed -E 's/.*:?=[[:space:]]*//' | tr -d ' ')
 fi
 [ -n "$PLAT" ] || { echo "!! could not determine TARGET_BOARD_PLATFORM; pass it as arg 3" >&2; exit 1; }
 
@@ -52,7 +52,7 @@ grep -rhnE '\$\(filter[^,]*,[[:space:]]*\$\(TARGET_BOARD_PLATFORM\)\)' "${scan_d
     list=$(echo "$line" | sed -E 's/.*\$\(filter[[:space:]]*//; s/,[[:space:]]*\$\(TARGET_BOARD_PLATFORM\).*//')
     # "ifeq (,$(filter ...))" is an INVERTED gate: the block runs when the SoC is NOT listed.
     inverted=no
-    echo "$line" | grep -qE 'ifeq[[:space:]]*\([[:space:]]*,' && inverted=yes
+    echo "$line" | grep -qE 'ifeq[[:space:]]*\([[:space:]]*,' && inverted=yes   # sigpipe-ok: one write
     # A list that is itself a make variable ($(UM_PLATFORMS), $(B64_FAMILY)...) cannot be expanded
     # statically. Reporting those as excluded would be a guess; flag them for manual expansion.
     case "$list" in

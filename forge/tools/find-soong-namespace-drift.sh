@@ -176,7 +176,7 @@ cat "$TMP/product_ns.txt" "$TMP/bp_imports.txt" | sort -u | while read -r ns; do
     if grep -rqE --include=Android.bp "name:\s*\"$m\"" "$NEW_SRC/hardware" "$NEW_SRC/vendor" "$NEW_SRC/system" "$NEW_SRC/frameworks" 2>/dev/null; then
       continue
     fi
-    old_bp=$(grep -rlE --include=Android.bp "name:\s*\"$m\"" "$OLD_SRC/$ns" 2>/dev/null | head -1 | sed "s#^$OLD_SRC/##")
+    old_bp=$(grep -rlE --include=Android.bp "name:\s*\"$m\"" "$OLD_SRC/$ns" 2>/dev/null | sed -n 1p | sed "s#^$OLD_SRC/##")
     printf '  %-50s was in %s\n' "$m" "$old_bp"
     echo x >> "$TMP/hits3"
   done

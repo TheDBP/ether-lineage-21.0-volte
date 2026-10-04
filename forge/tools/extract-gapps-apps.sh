@@ -103,7 +103,7 @@ mkdir -p "$OUT"
 # so this tracks the tree instead of a hardcoded version boundary.
 PREPROCESSED_OK=0
 _app_import_go="$AOSP/build/soong/java/app_import.go"
-if [ -f "$_app_import_go" ] && awk '/^type AndroidAppImportProperties struct/{f=1; next} f&&/^}/{exit} f&&/Preprocessed \*bool/{print "yes"; exit}' "$_app_import_go" | grep -q yes; then
+if [ -f "$_app_import_go" ] && awk '/^type AndroidAppImportProperties struct/{f=1; next} f&&/^}/{exit} f&&/Preprocessed \*bool/{print "yes"; exit}' "$_app_import_go" | grep -q yes; then   # sigpipe-ok: awk exits first
   PREPROCESSED_OK=1
 fi
 echo "   soong android_app_import 'preprocessed' supported: $([ "$PREPROCESSED_OK" = 1 ] && echo yes || echo no)"
@@ -132,7 +132,7 @@ while IFS=: read -r mod pkg priv override; do
   if [ "$priv" = 1 ]; then
     _pdir="$(dirname "$(dirname "$apk")")"
     _perm="$_pdir/___etc___permissions/$pkg.xml"
-    [ -f "$_perm" ] || _perm="$(find "$_pdir" -name "$pkg.xml" -path '*permission*' 2>/dev/null | head -1)"
+    [ -f "$_perm" ] || _perm="$(find "$_pdir" -name "$pkg.xml" -path '*permission*' 2>/dev/null | sed -n 1p)"
     if [ -n "$_perm" ] && [ -f "$_perm" ]; then
       mkdir -p "$OUT/permissions"; cp -f "$_perm" "$OUT/permissions/$pkg.xml"
       echo "   + privapp allowlist: $pkg.xml ($(grep -c '<permission ' "$_perm" 2>/dev/null || echo ?) permissions)"

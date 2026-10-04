@@ -119,7 +119,7 @@ refresh() {
   local shas="" sha id
   for sha in $(git -C "$d" rev-list --reverse "$base"..HEAD); do
     id="$(git -C "$d" show --format= "$sha" | git patch-id --stable | cut -d' ' -f1)"
-    if [ -n "$id" ] && printf '%s' "$optids" | grep -qx "$id"; then
+    if [ -n "$id" ] && printf '%s' "$optids" | grep -qx "$id"; then   # sigpipe-ok: one write
       echo "   (not exporting \"$(git -C "$d" log -1 --format=%s "$sha" | cut -c1-60)\" -- an option's patch)"
       continue
     fi
@@ -227,7 +227,7 @@ while read -r gitdir; do
   case "$PROJECTS_FLAT" in *" $proj "*) continue ;; esac
   case "$OPT_FLAT"      in *" $proj "*) continue ;; esac
   case "$ENGINE_FLAT"   in *" $proj "*) continue ;; esac
-  mref=$(git -C "$AOSP/$proj" for-each-ref --format='%(refname:short)' refs/remotes/m/ 2>/dev/null | head -1)
+  mref=$(git -C "$AOSP/$proj" for-each-ref --format='%(refname:short)' refs/remotes/m/ 2>/dev/null | sed -n 1p)
   [ -n "$mref" ] || continue
   n=$(git -C "$AOSP/$proj" log --oneline "$mref..HEAD" 2>/dev/null | wc -l)
   [ "$n" -gt 0 ] || continue

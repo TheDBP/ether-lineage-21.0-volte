@@ -66,7 +66,7 @@ echo "    $n_classes distinct signatures across $n_failed failed edges."
 if [ "$SHOW_TARGETS" = "--targets" ]; then
   echo
   echo "    failing targets:"
-  grep -ah '^FAILED: ' "$LOG" | sed 's/^FAILED: //' | sort -u | head -40 | sed 's/^/      /'
+  grep -ah '^FAILED: ' "$LOG" | sed 's/^FAILED: //' | sort -u | awk 'NR<=40 {print "      " $0}'
 fi
 
 # Point at the usual one-line fixes when their fingerprints show up.

@@ -65,7 +65,12 @@ PDIR="$DEVICE_REPO/overlay/patches"
 export LC_ALL=C
 
 python3 - "$PDIR" "$QUIET" <<'PY'
-import os, sys, glob
+import os, sys, glob, re
+
+# A makefile/shell list opener -- "PRODUCT_COPY_FILES += \\" -- carries no content of its own; the
+# entries on the following lines do. Two patches that add and remove unrelated blocks of the same
+# list both touch an opener, and that is not an undo.
+OPENER = re.compile(r'^[A-Za-z_][A-Za-z0-9_.$(){}-]*\s*[:+?]?=\s*\\$')
 
 pdir, quiet = sys.argv[1], sys.argv[2] == "1"
 total_pairs = 0
@@ -95,7 +100,7 @@ for root, dirs, files in os.walk(pdir):
                     continue
                 body = raw[1:].strip()
                 # short lines are punctuation and noise: braces, blank lines, "endif"
-                if len(body) < 12:
+                if len(body) < 12 or OPENER.match(body):
                     continue
                 key = (cur, body)
                 if raw.startswith('+'):

@@ -52,7 +52,7 @@ for pkg in "${PKGS[@]}"; do
   done
   [ ${#times[@]} -gt 0 ] || { printf '%-28s  no TotalTime from am start\n' "$pkg"; continue; }
   printf '%-28s %5s %6s %5s\n' "$pkg" \
-    "$(printf '%s\n' "${times[@]}" | sort -n | head -n1)" \
+    "$(printf '%s\n' "${times[@]}" | sort -n | sed -n 1p)" \
     "$(printf '%s\n' "${times[@]}" | _median)" \
     "$(printf '%s\n' "${times[@]}" | sort -n | tail -n1)"
 done

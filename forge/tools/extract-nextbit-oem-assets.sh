@@ -71,7 +71,7 @@ esac
 # into this pack (the Pixel borrows the Robin boot animation), but pointing it at
 # another manufacturer's firmware would silently bake nothing useful. A Nextbit
 # ROM carries its own build fingerprint in system/build.prop.
-if ! unzip -p "$ZIP" 'system/build.prop' 2>/dev/null | grep -qiE 'ro\.product\.(brand|manufacturer)=(nextbit|Nextbit)|ro\.product\.device=ether'; then
+if [ "$(unzip -p "$ZIP" 'system/build.prop' 2>/dev/null | grep -ciE 'ro\.product\.(brand|manufacturer)=(nextbit|Nextbit)|ro\.product\.device=ether' || true)" = 0 ]; then
   echo "!! $(basename "$ZIP") does not look like a Nextbit Robin stock ROM."
   echo "!! This script handles exactly one asset pack (nextbit-robin, Android 7)."
   echo "!! Generic OEM extraction is a separate project: https://github.com/TheDBP/extract-oem-assets"
@@ -461,7 +461,7 @@ if [ "$tot_snd" -gt 0 ]; then
                "ro.config.notification_sound:BayBridgeLights.ogg" \
                "ro.config.alarm_alert:PalaceOfFineArts.ogg"; do
     _prop="${_pair%%:*}"; _snd="${_pair#*:}"
-    if find "$OEM/sounds/media/audio" -name "$_snd" 2>/dev/null | grep -q .; then
+    if [ -n "$(find "$OEM/sounds/media/audio" -name "$_snd" 2>/dev/null)" ]; then
       echo "PRODUCT_PROPERTY_OVERRIDES += $_prop=$_snd" >> "$OEM/assets.mk"
     else
       echo "   note: $_snd not in this ROM; leaving $_prop alone"
