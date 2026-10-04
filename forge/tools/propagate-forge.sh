@@ -55,6 +55,17 @@ if [ ${#TARGETS[@]} -eq 0 ]; then
 fi
 [ ${#TARGETS[@]} -eq 0 ] && { echo "no device repos found beside $FORGE"; exit 0; }
 
+# True if some bootstrap.sh process has <repo> as its working directory. The process cmdline is
+# the relative ./forge/bootstrap.sh, so the path has to come from /proc/<pid>/cwd, not from -f.
+building_in() {
+  local repo pid
+  repo=$(cd "$1" && pwd -P) || return 1
+  for pid in $(pgrep -f 'forge/bootstrap\.sh' 2>/dev/null); do
+    [ "$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" = "$repo" ] && return 0
+  done
+  return 1
+}
+
 echo
 ok=0; skip=0; fail=0
 for d in "${TARGETS[@]}"; do
@@ -67,6 +78,12 @@ for d in "${TARGETS[@]}"; do
   # `repo` it is a symlink. Ask git instead of guessing at the filesystem layout.
   if ! git -C "$d" rev-parse --git-dir >/dev/null 2>&1; then
     printf "  %-24s SKIP — not a git repo\n" "$name"; skip=$((skip+1)); continue
+  fi
+  # A build reads forge/ for its whole run -- bootstrap, then the post-build tools -- so replacing
+  # the directory under it produces an image no commit describes. A running bootstrap.sh whose cwd
+  # is this repo means this repo is building; leave it alone and come back after `=== end`.
+  if building_in "$d"; then
+    printf "  %-24s SKIP — a build is running from this repo (forge/bootstrap.sh)\n" "$name"; skip=$((skip+1)); continue
   fi
   # Untracked files count. This used to filter out '?? ' entries, which meant a NEW file outside
   # forge/ -- a device patch that had just been written, say -- sailed past the guard and was then
