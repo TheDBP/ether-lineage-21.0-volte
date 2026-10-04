@@ -28,7 +28,7 @@ command -v debugfs >/dev/null || { echo "debugfs not found (install e2fsprogs)" 
 
 RAW="$IMG"; CLEAN=""
 if [ "$(head -c4 "$IMG" | od -An -tx1 | tr -d ' \n')" = "3aff26ed" ]; then
-  S2I=$(command -v simg2img || ls "${ANDROID_HOST_OUT:-/nonexistent}/bin/simg2img" "$(dirname "$IMG")"/../../../host/linux-x86/bin/simg2img 2>/dev/null | head -1)
+  S2I=$(command -v simg2img || { ls "${ANDROID_HOST_OUT:-/nonexistent}/bin/simg2img" "$(dirname "$IMG")"/../../../host/linux-x86/bin/simg2img 2>/dev/null || true; } | sed -n 1p)
   [ -n "$S2I" ] && [ -x "$S2I" ] || { echo "sparse image and no simg2img (set ANDROID_HOST_OUT)" >&2; exit 2; }
   RAW="$(mktemp "$TMPDIR/image-labels.XXXXXX")"; CLEAN="$RAW"
   "$S2I" "$IMG" "$RAW" || exit 1
