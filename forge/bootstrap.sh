@@ -362,12 +362,22 @@ for _o in ${BUILD_OPTIONS:-}; do
   [ -d "$_od" ] && RESET_PROJECTS="$RESET_PROJECTS $(cd "$_od" && find . -name '*.patch' -printf '%h\n' | sed 's#^\./##' | sort -u)"
 done
 RESET_PROJECTS=$(printf '%s\n' $RESET_PROJECTS | sort -u | tr '\n' ' ')
+# Blobs edited in place by overlay/blob-fixups leave their project dirty without a commit, which is
+# the one state repo sync refuses to touch. The list names files, not projects, and the project
+# boundary is only known inside the tree, so resolve each path to its git toplevel there.
+BLOBFIX_PATHS=""
+[ -f "$OVL/blob-fixups" ] && BLOBFIX_PATHS=$(awk '!/^[[:space:]]*(#|$)/ {print $1}' "$OVL/blob-fixups" | sort -u | tr '\n' ' ')
 echo ">> [3/5] reset patched projects so repo sync can check them out: $RESET_PROJECTS"
 LOG_TAG=reset "$AOSP" bash -lc "
   for p in $RESET_PROJECTS; do
     d=/aosp/\$p; [ -d \"\$d/.git\" ] || continue
     git -C \"\$d\" am --abort 2>/dev/null
     git -C \"\$d\" reset --hard >/dev/null 2>&1 && echo \"   reset \$p\"
+  done
+  for f in $BLOBFIX_PATHS; do
+    d=\$(git -C \"/aosp/\$(dirname \"\$f\")\" rev-parse --show-toplevel 2>/dev/null) || continue
+    git -C \"\$d\" diff --quiet 2>/dev/null && continue
+    git -C \"\$d\" reset --hard >/dev/null 2>&1 && echo \"   reset \${d#/aosp/} (blob-fixups)\"
   done; exit 0"
 
 DL="$BUILD_ROOT/dl"; mkdir -p "$DL"
