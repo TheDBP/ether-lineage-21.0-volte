@@ -40,6 +40,7 @@ Called for you by `bootstrap.sh`, listed here so you know what they are:
 | tool | what it does |
 |---|---|
 | `apply-overlay.sh` | installs local_manifests, applies the selected options and this device's patches, vendors recovered trees (`VENDORED_PROJECTS`), merges kernel fragments (`KERNEL_EXTRA_CONFIGS`) and kernel patches (`KERNEL_EXTRA_PATCHES`) |
+| `blob-fixups.sh` | by apply-overlay.sh, or by hand | `remove-needed` / `add-needed` / `replace-needed` / `set-soname` on prebuilt blobs from the one-line-per-fact list `overlay/blob-fixups`, with the tree's own patchelf; idempotent, verifies each edit took, `--check` reports what is still unapplied. For a blob whose DT_NEEDED names a framework lib the vendor linker namespace is never linked to (libandroid.so, libandroid_runtime.so) -- check `nm -D --undefined-only` shows no import from it first |
 | `extract-gapps-apps.sh` | matches APKs in a GApps zip by package name via aapt2, stages them as `android_app_import` prebuilts with `overrides:` so they replace the Lineage equivalents |
 | `release.sh` | publishes the redistributable preset and refuses anything else — see [docs/RELEASING.md](../docs/RELEASING.md) |
 | `run-one.sh` | builds one device repo and refuses if another build is already running; timestamped log, one start/finish line for a queue to read |

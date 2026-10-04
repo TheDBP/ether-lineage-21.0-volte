@@ -228,6 +228,16 @@ if [ -d "$OVL/patches" ]; then
   done
 fi
 
+# ---- 2'. prebuilt blob fixups (this repo's overlay/blob-fixups) ----
+# DT_NEEDED edits to vendor blobs, one line each (tools/blob-fixups.sh documents the format). After
+# the device patches on purpose: a patched vendor project was just reset to upstream, so its blobs
+# are back to what the OEM shipped and every fixup has to go on again. Idempotent, so a project that
+# was not reset is simply reported as already in place.
+if [ -f "$OVL/blob-fixups" ]; then
+  echo ">> blob fixups (overlay/blob-fixups)"
+  bash "$FORGE/tools/blob-fixups.sh" "$AOSP" "$OVL/blob-fixups" || { echo "   !! blob fixups failed"; exit 1; }
+fi
+
 # ---- 2a. enabled options: placement that needs the device patches applied ----------------------
 # fetch.sh deliberately runs BEFORE device patches: a module named in PRODUCT_PACKAGES that does not
 # exist yet fails lunch outright, so the APK has to be on disk early. But some options must drop

@@ -310,6 +310,7 @@ Three words that are easy to blur:
 | **option** | a capability any device could want — nav icons, GApps, root | `forge/options/<name>/` |
 | **preset** | a *name* for a set of options, plus a build tag | `PRESETS` in `device.conf` |
 | **device patch** | a fact about one phone — a kernel config, a HAL fix | `overlay/patches/` |
+| **blob fixup** | a DT_NEEDED edit to one prebuilt the OEM shipped — a framework lib the vendor namespace cannot load | `overlay/blob-fixups` |
 
 A preset has no behaviour of its own. It is a saved selection, nothing more:
 

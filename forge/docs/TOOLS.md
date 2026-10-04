@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-56 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+57 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -14,6 +14,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`apply-overlay.sh`](../tools/apply-overlay.sh) | apply the composed customization stack onto a synced LineageOS tree: | `apply-overlay.sh` | — |
 | [`bench-launch.sh`](../tools/bench-launch.sh) | cold app-launch times over adb, for A/B-ing a runtime tuning on one phone | `bench-launch.sh` | — |
 | [`blob-attach.sh`](../tools/blob-attach.sh) | start a vendor binary under lldb-server and print the load base of one of its libraries, so you can set absolute breakpoints inside a stripped prebuilt | `blob-attach.sh <device-binary> <library-soname> [--port N] [-s SERIAL]` | [debugging-a-vendor-blob](debugging-a-vendor-blob.md) |
+| [`blob-fixups.sh`](../tools/blob-fixups.sh) | rewrite DT_NEEDED / DT_SONAME in prebuilt vendor blobs from a declarative list, the way LineageOS extract-files.sh `blob_fixup` does, but at overlay time against a synced tree | `blob-fixups.sh <aosp-root> <list-file>        (apply-overlay.sh runs this on overlay/blob-fixups)` | — |
 | [`boot-console-wrap.sh`](../tools/boot-console-wrap.sh) | a boot image that gets the kernel console out of a boot loop or a hang, on a device whose bootloader gives you no serial, no ramoops across its resets, and no `fastboot boot` | `boot-console-wrap.sh build <boot.img> <recovery.img> <out.img> [--timeout 150] [--every 10] [--misc-offset-mib 16]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`boot-window-logcat.sh`](../tools/boot-window-logcat.sh) | catch the logcat of a boot that ends in a reboot, through the seconds adbd is reachable | `boot-window-logcat.sh <outdir> [-s SERIAL] [--timeout SECONDS]        default timeout 900` | — |
 | [`check-bpf-objects.py`](../tools/check-bpf-objects.py) | which BPF programs and maps of a built Android tree this kernel cannot load | `check-bpf-objects.py --kernel <old uapi bpf.h> --kver 4.9.337 [--api 3700] [--modern <new bpf.h>] [--available-events <file>] <objects...>` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
