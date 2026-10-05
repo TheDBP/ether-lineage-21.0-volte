@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=125332a4012383c421ebf7fecea2fb36c56836fd
-subject=qmi-services.py: idl mode decodes the TLV layout of every message in a QMI client lib
-synced=2026-10-05T00:33:01Z
+commit=6d001a2bbede8ab1b598afed13a95674b6ac05c7
+subject=tools: push-system-app.sh + app-fw-api-gap.py + runtime-bringup method doc (get a reworked OEM app to RUN)
+synced=2026-10-05T17:48:39Z

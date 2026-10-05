@@ -168,7 +168,176 @@ stores into the buffer before the call (the V20 one is a 32-byte `{type, last, l
 session, seq, 0}` with 220-byte fragments). The indication handler's jump table gives the
 modem-to-AP message types the same way.
 
-Check the stock app's Binder surface the same way as on the Robin (`deodex-app.sh`,
-`gen-legacy-aidl.py`): the TRANSACTION_* order in the stock framework's `I*$Stub` is the wire
+## Trace how the OEM app talks to the modem, layer by layer
+
+An AP-side IMS stack still has to tell the modem it is registered (domain selection, SRVCC, CSFB
+decisions live in the modem). That path is not where you expect -- on the V20 the private QMI hook
+turned out to be only the media pipe, and registration went through the OEM's RIL. Trace it rather
+than guess, and bank each hop; every one is a hook a bridge can call directly:
+
+1. **App -> framework.** `oat-to-smali.sh <stock Ims apk/odex>`, grep the registration agent for
+   `invoke-interface` on OEM Binder interfaces (`I*Phone`, `setSysInfo`, `LgSvcCmd`). The interface
+   name in `asInterface` (`"com.lge.ims.phone"`) tells you which process implements it; the stub is
+   wherever `strings` on the boot oats finds the class (`boot-telephony-common.oat`, not the
+   telephony app).
+2. **Framework -> RIL request.** `oat-to-smali.sh` on that boot oat; follow the dispatch
+   (`setSysInfo(type, ..)` is a switch -- record the whole type table, it is the OEM's modem API) to
+   a `RILRequest;->obtain(I..)` whose `const/16` is the RIL request number. The `RIL.smali` method
+   also shows the parcel layout (`writeInt` order).
+3. **RIL request -> qcril handler.** `strings vendor/lib64/libril-qc-qmi-1.so | grep -i <keyword>`
+   names the handler (`qcril_qmi_lge_vss_set_modem_info`, `lge_qcril_qmi_nas_hvolte_update_ims_status_request`).
+4. **Handler -> QMI message.** `fn-calls.sh <qcril lib> <handler>`: the immediates in front of the
+   `*_send_cmd`/`qmi_client_send_msg_sync` call are the message id, request length and timeout.
+   `qmi-services.py idl <idl lib> <svc>` gives that message's TLV layout; its C struct size must equal
+   the length passed, which is the check that you read the right id. A handler that goes through a
+   generic `raw_cmd(kind, item, ..)` dispatcher picks the id from a stack slot -- use `--dis`.
+5. **Modem side.** `modem-strings.sh <modem.image> <out>`: `qmi-req.txt` names the server handler
+   (`qmi_vss_set_ims_status_req`), `all.txt` the code it feeds (`cmss.c lgp_set_ims_status`, then
+   `cmsds.c` domain-selection lines), `efs.txt` the NV items that gate it.
+6. **Inside the compressed modem code.** `modem-strings.sh` only recovers plaintext; ~85% of a Hexagon
+   modem is q6zip-compressed, so a log line you can see does not mean its *branch* is visible. To read
+   the code: `modem-decompress.sh <modem.image|elf> <out>` reassembles the ELF, decompresses the q6zip
+   code segment to a flat VA image and disassembles it (`out/q6.dis`, based at the dlpager VA, typically
+   0xd0000000). Then `modem-xrefs.py <modem.elf> msg <rodata VA>` turns a QShrink msg_const into its
+   string, and `grep` in `q6.dis` for the `immext(#<strptr>)` that loads it finds the exact log site --
+   read the enclosing function to see the condition. This is how you confirm whether a mode is real or
+   dead code: trace the flag the branch tests back to its writer. A flag that is **read but never
+   written** anywhere (no store in q6.dis nor the uncompressed `llvm-objdump -d modem.elf`, no data
+   pointer via `modem-xrefs.py ptr`, and `modem-xrefs.py read <VA>` returns nothing = it is in
+   demand-zero BSS) defaults to 0 -- the mode exists in the binary but nothing arms it. (Real example:
+   LG's "3rd Party IMS Enabled" domain-selection mode on the V20 is gated on a `cmsds` global byte that
+   nothing sets, so no EFS item turns it on.)
+
+Expect more than one route for the same fact, split by operator (`setRegiStateForVZW` vs the
+generic path), and expect one of them to be a standard Qualcomm message hiding behind an OEM RIL
+number -- `RIL 292 -> NAS 0x0072 update_ims_status` is what any non-OEM IMS stack would send, and
+it does not need the OEM's RIL at all.
+
+Check the stock app's Binder surface the same way as on the Robin (`oat-to-smali.sh`, then
+`ether-20.0/gen-legacy-aidl.py`): the TRANSACTION_* order in the stock framework's `I*$Stub` is the wire
 protocol, and one inserted method (7.0 -> 7.1 added `IImsService.addRegistrationListener`) shifts
 every later id.
+
+## Prove the OEM's native stack loads before building it in
+
+Reusing the OEM's own IMS libraries (the SIP stack is theirs; the modem serves no IMS QMI) means a
+2016 32-bit blob against a current framework. Before any app/sepolicy/make work, answer one question:
+does it even dlopen? `abi-gap.sh` estimates the symbol gap; `dlopen-probe.sh` proves it, closure and
+constructors included.
+
+1. `abi-gap.sh <lib>` first for the shape: the SIP core usually needs a tiny, ABI-stable slice of
+   libutils/libbinder (on the V20, `libims.so` was 7 missing symbols -- 5 `uuid_*` from the dropped
+   `libext2_uuid.so`, 2 libutils helpers). The media lib carries the real drift (Surface ctor sizeof,
+   camera/GraphicBufferMapper/AudioSystem), and it is all video -- irrelevant to voice.
+2. `dlopen-probe.sh <lib> --supply <stock extract> --stub <cut-out libs> --preload <your shims>`:
+   it dlopens on the device from the shell default namespace (which, unlike an app's classloader
+   namespace, can reach /system/lib + the staging dir -- so this isolates the ABI question from the
+   packaging one), auto-walks the DT_NEEDED closure out of the stock extract, and reports the first
+   real symbol gap. Supply the pure-libc/vendor deps from stock (uuid, the QMI client stack); empty-
+   `--stub` the subsystems you are cutting (video codecs: libOmx*, libstagefrighthw -- co-loading the
+   stock ones fails on libbinder vtable thunks anyway); `--preload` the shims you author.
+3. Author two kinds of shim, freestanding (`-nostdlibinc`, declare the handful of libc funcs you call,
+   link against the device's pulled libutils/libc):
+   - **real reimpl** for a dropped helper whose behaviour you can reproduce (`String8::getPathLeaf`
+     calls the live String8 ctor; `strndup16to8` is a self-contained UTF16->UTF8).
+   - **load-only stub** for a symbol on a path you will never call: give it the exact mangled name
+     with an `__asm__("<mangled>")` label on a function returning 0. Mark it clearly -- a stubbed
+     `Surface` ctor or `AudioSystem::setParameters` satisfies the loader and crashes if used. Make the
+     one symbol on the path you DO need (voice audio: `AudioSystem::setParameters`) real before relying
+     on it.
+   Preload shims via `LD_PRELOAD`, not a dlopen-RTLD_GLOBAL: on 32-bit bionic RTLD_GLOBAL is 0x2 and
+   the global-group route does not reliably expose a preload's symbols to a later dlopen.
+
+A clean "OK ... loaded" means the closure resolves and no constructor faulted -- the dlopen/onCreate-
+native layer is cleared. It does NOT mean the lib works (abi-gap.sh's header: semantic drift, grown
+types). The remaining order is: real-shim the few on-path symbols, package as an app namespace
+(ld.config.txt + sepolicy) or host the stack in the telephony process (how the Robin bridge dodged the
+namespace wall), then the Binder/AIDL bridge, then feed the modem.
+
+## Rework an OEM legacy IMS app to run on a newer Android
+
+When the IMS implementation is an OEM app (LG `Ims4`, QTI `ims.apk`) built against a framework API the
+new release deleted (`com.android.ims.*`, gone since P), the app must be made self-contained: rename the
+removed package to a private one and merge that package's classes into the app's own dex. Done on the
+Robin (QTI, A13) and the V20 (LG, A17). The pieces, in order:
+
+1. **Deodex the app and the legacy framework jar.** `oat-to-smali.sh` on the app's clean classes.dex;
+   `deodex-jar.sh <oat> <system.image|bootcp> <out>` on the framework jar(s) that hold the legacy API
+   (on the V20: `boot-ims-common.oat` has the concrete classes). deodex-jar resolves the quickened
+   opcodes against the stock boot classpath -- a plain `baksmali d --allow-odex-opcodes` leaves them in
+   and the smali then will not reassemble. It fails loudly if any quick opcode survives (partial deodex
+   installs fine and only breaks at runtime).
+2. **Regenerate the AIDL interfaces, do NOT deodex them.** The `I*$Stub/$Proxy` binder classes rarely
+   deodex cleanly (invoke-virtual-quick into Parcel by vtable index). `gen-legacy-aidl.py` rebuilds the
+   `.aidl` from the smali instead -- transaction order from the `$Stub`'s `TRANSACTION_` constants
+   (which survive quickening), signatures from the interface's abstract methods. Set `LEGACY_PKG` to the
+   private package. Then compile: `aidl` (aidl must sit at its package path; `-I` the tree's framework +
+   `telecomm/framework/aidl-export` for VideoProfile + `frameworks/native/aidl/gui` for Surface) ->
+   `javac` against `prebuilts/sdk/current/public/android.jar` -> **R8's D8** (`prebuilts/r8/r8.jar`
+   `com.android.tools.r8.D8`; the old `d8.jar` lacks `--min-api`) -> baksmali. Verify the regenerated
+   `$Stub` transaction codes match the stock ones byte-for-byte -- that is the binder-compatibility check.
+   The AIDL compile needs each referenced parcelable as a build-time stub `.java` (CREATOR +
+   writeToParcel) on the classpath.
+3. **Parcelables: stub for load, real for calls.** AOSP parcelables whose only quick op is
+   `return-void-no-barrier` are clean after one sed. The rest (OEM parcelables, UCE/RCS) can be minimal
+   `implements Parcelable` stubs for the *load* milestone (they are off the service-start path), made
+   real only when a call actually marshals them.
+4. **Rename + merge.** `merge-legacy-classes.py --app <smali> --legacy <clean-dirs> --old com/android/ims
+   --new <private/pkg> --out <merged>` renames every type descriptor and exact-match AIDL descriptor
+   string (not broadcast actions), merges the legacy closure in, and redirects the @hide specialized
+   `System.arraycopy` overloads to the public generic one (a 2016 app calling the specialized form dies
+   with IllegalAccessError at onCreate under hidden-API enforcement). Then `smali.jar assemble` ->
+   replace classes.dex -> strip META-INF -> ship via `android_app_import certificate:platform` (the OEM
+   `sharedUserId` must stay signed by the platform key).
+5. **Bitness.** The OEM SIP libs are 32-bit. An app with no bundled native libs launches 64-bit on a
+   zygote64_32 device and cannot load them. Bundle the 32-bit libs in the apk (`lib/armeabi-v7a/`,
+   `extractNativeLibs=true`) -- that forces the process 32-bit AND puts the libs in the app namespace's
+   own permitted path, so only the framework libs need public.libraries; see the load section above.
+6. **Then** the Binder/AIDL bridge (the compat ImsService), the ImsResolver config, sepolicy (author it;
+   expect runtime denials), and the modem reg path.
+
+## Get the reworked OEM app to RUN (the runtime-bringup layer)
+
+Rebuilding the app so it *assembles* (previous section) is half of it; getting the process to survive
+onCreate and register its service is the other half, and it comes as a sequence of distinct failures,
+each with its own signature. Observed bringing LG's `Ims4` up on A17; the order is general.
+
+1. **Boot hang, system_server FATAL at `onSystemReady`**: `"Signature|privileged permissions not in
+   privileged permission allowlist: <pkg> <perm>"`. A priv-app requesting `signature|privileged`
+   permissions must be allowlisted. Generate the allowlist from the app's own manifest --
+   `aapt2 dump permissions app.apk | grep uses-permission` -> a `privapp-permissions-<pkg>.xml` in
+   `/system/etc/permissions` (or system_ext). Missing this takes the whole boot down, not just the app.
+2. **`NoClassDefFoundError` for an OEM framework class** (`com.lge.os.Build`, ...): the app calls into
+   the OEM's framework extensions, absent on AOSP. Hand-write a minimal smali stub with exactly the
+   fields/methods the app reads (check the `sget`/`invoke` sites) and merge it in (an `extra-smali`
+   dir). Scope them with `grep -rhoE "Lcom/<oem>/[A-Za-z0-9_/$]+;"` on the app smali minus what the apk
+   itself defines.
+3. **Package silently not installed, PM log `"Signature mismatch for shared user"`**: an app with
+   `sharedUserId` (android.uid.phone/.system) must be signed with the SAME key as the others in that
+   uid. That is the key THIS build signed platform apps with -- frequently build/make's default
+   `platform` key, NOT testkey and NOT a custom release key. Read the device's actual platform cert
+   from an installed platform app and match it (`push-system-app.sh` does this).
+4. **`NoSuchMethodError` on a framework class** (`SubscriptionManager.getSlotId` -> `getSlotIndex`):
+   API drift -- the class survived, the method was renamed/removed. Redirect old->new in smali
+   (same signature) via a `method-redirects.txt`. Find these ahead of time with `app-fw-api-gap.py`.
+5. **`SecurityException`/property-set failure, then avc denials**: sepolicy. The app sets properties
+   (`avc denied { set } property=... tclass=property_service`), opens sockets, reads files. It runs in
+   whatever domain its uid maps to (android.uid.phone -> `radio`). **You usually cannot iterate this at
+   runtime** -- `setenforce 0` is denied on a locked policy -- so sepolicy changes need a reflash. The
+   efficient path is the standard vendor-component bringup: make the domain permissive (its own seapp
+   domain, or the shared one) for one reflash, let it run through surfacing every denial, `audit2allow`,
+   then write real rules and lock down.
+
+**Iterate dex/resource fixes without reflashing** with `push-system-app.sh` (a ~3-min loop vs a ~45-min
+rebuild+reflash). It handles the three traps: shared-uid signing (matches the device cert), and the
+flaky block-`/system` remount (only the first `mount -o rw,remount /` after a clean boot persists, so
+it pushes to /data and `cp`s within one root shell on a fresh boot, then reboots for PM to rescan).
+sepolicy and anything in the boot image still need a real reflash.
+
+**Preflight the API drift** with `app-fw-api-gap.py --app <smali> --fw <all framework jars>`: it finds
+the `NoSuchMethod`/`NoClassDef` the app will throw, statically, so you fix them in one batch instead of
+one reboot each. It is inheritance-aware and conservative (won't flag a method whose class's full
+ancestry is not in the DB), so ACCURACY HINGES ON A COMPLETE `--fw`: on modern Android the framework is
+split across mainline modules (SubscriptionManager is in framework-telephony, not framework.jar), so
+pass EVERY `/system/framework/*.jar` + all apex `/javalib/*.jar` (incl. core-oj/core-libart for the
+java.* ancestry) or it stays silent on classes it cannot see. It complements, not replaces, the runtime.

@@ -86,6 +86,7 @@ class Idl:
         seg = subprocess.check_output(['readelf', '-lW', path]).decode()
         self.loads = [(int(p[1], 16), int(p[2], 16), int(p[5], 16)) for p in (l.split() for l in seg.splitlines()) if p and p[0] == 'LOAD']
         self.elf32 = b[4] == 1
+        self.ps = 4 if self.elf32 else 8        # pointer size; the tables are C structs of the target ABI
         self.tables = {}
         # symbol-relocated slots (zero in the file): file offset -> symbol, e.g. common_qmi_idl_type_table_object_v01.
         # Android blobs use packed SHT_ANDROID_REL relocations, which readelf cannot list, so decode them here.
@@ -101,7 +102,7 @@ class Idl:
                 except ValueError: pass
         o = svc_off
         self.libver, self.idlver, self.sid, self.mml = struct.unpack('<IIII', b[o:o+16])
-        self.n = struct.unpack('<HHH', b[o+16:o+22]); self.ptrs = struct.unpack('<III', b[o+24:o+36]); self.p_tt = self.u32(o+36)
+        self.n = struct.unpack('<HHH', b[o+16:o+22]); self.ptrs = [self.ptr(o+24+i*self.ps) for i in range(3)]; self.p_tt = self.ptr(o+24+3*self.ps)
     def relocs(self, path):
         """(r_offset, r_info) of every dynamic relocation: plain REL/RELA sections plus APS2-packed ANDROID_REL(A)."""
         out = []
@@ -111,7 +112,7 @@ class Idl:
             kind, off, size = m.group(2), int(m.group(4), 16), int(m.group(5), 16)
             d = self.b[off:off+size]
             if kind in ('REL', 'RELA'):
-                ent = (8 if kind == 'REL' else 12) if self.elf32 else (16 if kind == 'RELA' else 16)
+                ent = (8 if kind == 'REL' else 12) if self.elf32 else (16 if kind == 'REL' else 24)
                 fmt = ('<II' if kind == 'REL' else '<IIi') if self.elf32 else ('<QQ' if kind == 'REL' else '<QQq')
                 out += [(r[0], r[1]) for r in struct.iter_unpack(fmt, d[:len(d)//ent*ent])]
                 continue
@@ -144,15 +145,17 @@ class Idl:
     def u8(self, o): return self.b[o]
     def u16(self, o): return struct.unpack('<H', self.b[o:o+2])[0]
     def u32(self, o): return struct.unpack('<I', self.b[o:o+4])[0]
+    def ptr(self, o): return self.u32(o) if self.elf32 else struct.unpack('<Q', self.b[o:o+8])[0]
     def table(self, va):            # qmi_idl_type_table_object
         if va not in self.tables:
             o = self.v2o(va)
-            self.tables[va] = dict(n_types=self.u16(o), n_msgs=self.u16(o+2), p_types=self.u32(o+8), p_msgs=self.u32(o+12), p_ref=self.u32(o+16))
+            ps = self.ps
+            self.tables[va] = dict(n_types=self.u16(o), n_msgs=self.u16(o+2), p_types=self.ptr(o+8), p_msgs=self.ptr(o+8+ps), p_ref=self.ptr(o+8+2*ps))
         return self.tables[va]
     def ref(self, top, i):
         """referenced table i of `top`: ('va', addr) or ('ext', symbol) when it lives in another lib (n_referenced_tables
         does not count the imported common table, so index past it)."""
-        o = self.v2o(top['p_ref']) + 4*i; va = self.u32(o)
+        o = self.v2o(top['p_ref']) + self.ps*i; va = self.ptr(o)
         if va: return ('va', va)
         name, val = self.rel.get(o, ('?', 0))     # symbol-relocated: defined here (val) or imported
         return ('va', val) if val else ('ext', name)
@@ -183,9 +186,9 @@ class Idl:
         k, v = self.ref(top, tbl)
         if k == 'ext':
             print('  '*ind + f'(type {idx} of {v}, imported' + (f': {self.COMMON_TYPES.get(idx, "")}' if 'common_qmi' in v else '') + ')'); return
-        tt = self.table(v); ent = self.v2o(tt['p_types']) + 8*idx
+        tt = self.table(v); ent = self.v2o(tt['p_types']) + 2*self.ps*idx     # {u32 c_struct_sz; ptr encoded}
         print('  '*ind + f'struct type[{tbl}][{idx}] (sizeof {self.u32(ent)}):')
-        o = self.v2o(self.u32(ent+4))
+        o = self.v2o(self.ptr(ent+self.ps))
         while True:
             o, r = self.element(o, ind+1)
             if r is None: break
@@ -201,8 +204,8 @@ class Idl:
                 k, v = self.ref(top, tmid >> 12)
                 if k == 'ext':
                     print(f'\n== {kind} 0x{msg_id:04x}  wire max {maxlen}: message {tmid & 0xfff} of {v}' + (f' = {self.COMMON_MSGS.get(tmid & 0xfff, "")}' if 'common' in v else '')); continue
-                mt = self.table(v); ment = self.v2o(mt['p_msgs']) + 8*(tmid & 0xfff)
-                csz, pt = self.u32(ment), self.u32(ment+4)
+                mt = self.table(v); ment = self.v2o(mt['p_msgs']) + 2*self.ps*(tmid & 0xfff)
+                csz, pt = self.u32(ment), self.ptr(ment+self.ps)
                 print(f'\n== {kind} 0x{msg_id:04x}  wire max {maxlen}, C struct {csz} bytes')
                 if pt == 0 or csz == 0: print('   (empty)'); continue
                 o = self.v2o(pt)
