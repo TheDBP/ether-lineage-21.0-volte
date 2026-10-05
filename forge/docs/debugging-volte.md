@@ -154,11 +154,19 @@ framework plus the OEM hook -- so settle this first:
 
     qmi-services.py live            # rooted phone: service table by processor; names the IMS ids
     qmi-services.py lib <oem .so>   # service id + message ids an OEM QMI client library talks to
+    qmi-services.py idl <oem .so> [svc-hex]   # TLV layout of every message (types, offsets, array sizes)
 
 A vendor id on the modem (0x2bd..0x2c3 on the V20) that also appears in an OEM lib
 (`libvss_ims_qcci.so` -> 0x2bf, two messages) is the OEM hook, and it is reachable from a plain
 QMI client without the OEM's RIL. `strings` on the modem image confirms the split: a modem IMS
 stack has SIP method names and `imsa_`/`imss_` symbols; an AP-side design has only the hook names.
+
+When `idl` shows the hook's payload as an opaque `u8[N]` TLV, the protocol is one layer up: find the
+single lib that imports the qcci lib (grep the raw system image for its name, map the offsets with
+`debugfs icheck`/`ncheck`), disassemble its `*_send_msg`, and read the framing header off the
+stores into the buffer before the call (the V20 one is a 32-byte `{type, last, len, offset, hdrsize,
+session, seq, 0}` with 220-byte fragments). The indication handler's jump table gives the
+modem-to-AP message types the same way.
 
 Check the stock app's Binder surface the same way as on the Robin (`deodex-app.sh`,
 `gen-legacy-aidl.py`): the TRANSACTION_* order in the stock framework's `I*$Stub` is the wire

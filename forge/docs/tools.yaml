@@ -302,7 +302,7 @@ tools:
   - name: "qmi-services.py"
     path: "tools/qmi-services.py"
     summary: "list the QMI services a device's processors publish, by name, and the QMI service descriptors (service id, IDL version, message ids) a vendor library carries"
-    usage: "qmi-services.py live|table|lib <args>"
+    usage: "qmi-services.py live|table|lib|idl <args>"
     docs:
       - "docs/debugging-volte.md"
   - name: "qmi-sni.sh"
