@@ -1,0 +1,38 @@
+//
+// ImsBridge -- lets the modern telephony stack talk to the OEM's legacy (7.x com.android.ims API) @OEM_APP@.
+//
+// platform_apis because everything it touches is @hide: android.telephony.ims.compat.*,
+// com.android.ims.internal.*, android.os.ServiceManager.
+//
+// certificate "platform" because it shares android.uid.phone with @OEM_APP@.
+//
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+android_app {
+    name: "ImsBridge",
+
+    srcs: [
+        "src/**/*.java",
+        "aidl/**/*.aidl",
+    ],
+
+    aidl: {
+        local_include_dirs: ["aidl"],
+        // The legacy interfaces take framework parcelables -- Surface, VideoProfile and its nested
+        // CameraCapabilities -- whose .aidl declarations live in the platform, not with us.
+        include_dirs: [
+            "frameworks/base/core/java",
+            "frameworks/base/telecomm/framework/aidl-export",
+        ],
+    },
+
+    platform_apis: true,
+    certificate: "platform",
+    privileged: true,
+
+    optimize: {
+        enabled: false,
+    },
+}

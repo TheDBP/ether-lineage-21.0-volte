@@ -55,8 +55,15 @@ else
 fi
 
 mkdir -p "$OUT"
-echo "  deodexing $(basename "$IN") against the boot classpath"
-java -jar "$BAKSMALI" x -d "$BOOTCP" "$IN" -o "$OUT" 2>/dev/null || { echo "!! baksmali deodex failed" >&2; exit 1; }
+# A multidex jar's oat holds several dex entries (`baksmali list dex` prints them); `x <oat>` alone
+# deodexes only the first and silently drops the rest (framework.jar's com/* lives in classes2.dex).
+# Address each entry as <oat>/<entry-name> and merge into one tree.
+entries=$(java -jar "$BAKSMALI" list dex "$IN" 2>/dev/null | sed 's#^[^:]*:##' | awk 'NR==1{print "";next}{print}')
+echo "  deodexing $(basename "$IN") against the boot classpath ($(echo "$entries" | wc -l) dex entr$( [ "$(echo "$entries" | wc -l)" = 1 ] && echo y || echo ies))"
+while IFS= read -r e; do
+  tgt="$IN"; [ -n "$e" ] && tgt="$IN/$e"
+  java -jar "$BAKSMALI" x -d "$BOOTCP" "$tgt" -o "$OUT" 2>/dev/null || { echo "!! baksmali deodex failed for $tgt" >&2; exit 1; }
+done <<< "$entries"
 nfiles=$(find "$OUT" -name '*.smali' | wc -l)
 q=$(grep -rhoE '\b(invoke-virtual-quick|invoke-super-quick|iget[-a-z]*-quick|iput[-a-z]*-quick|return-void-no-barrier|execute-inline)\b' "$OUT" 2>/dev/null | wc -l)
 echo "  $nfiles smali files, leftover quick opcodes: $q"

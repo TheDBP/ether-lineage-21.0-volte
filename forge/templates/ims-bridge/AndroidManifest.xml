@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.lineageos.ims.bridge"
+    android:sharedUserId="android.uid.phone">
+
+    <!--
+      READ_PRIVILEGED_PHONE_STATE and MODIFY_PHONE_STATE are deliberately NOT declared. Both are
+      signature|privileged, and a priv-app that requests one without a matching entry in a
+      privapp-permissions allowlist makes PackageManagerService throw at systemReady  -  which kills
+      system_server before boot completes, on every boot, with the apk itself as the only clue.
+
+      They are also unnecessary: this shares android.uid.phone, so it already runs with the phone
+      process's granted permissions, and the bridge makes no permission-guarded calls of its own.
+      If a future wrapper genuinely needs one, add it here AND to a privapp-permissions allowlist
+      in the device tree, together.
+    -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <application
+        android:label="IMS Bridge"
+        android:directBootAware="true"
+        android:persistent="true">
+
+        <!--
+          ImsResolver looks for this action, requires the service to be protected by
+          BIND_IMS_SERVICE, and reads the MMTEL_FEATURE metadata to learn what the service offers.
+          Miss any of the three and it is skipped without a useful log line.
+        -->
+        <service
+            android:name=".ImsBridgeService"
+            android:directBootAware="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_IMS_SERVICE">
+            <intent-filter>
+                <action android:name="android.telephony.ims.compat.ImsService" />
+            </intent-filter>
+            <meta-data android:name="android.telephony.ims.MMTEL_FEATURE" android:value="true" />
+        </service>
+    </application>
+</manifest>

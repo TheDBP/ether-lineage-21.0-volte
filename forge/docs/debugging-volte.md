@@ -281,7 +281,14 @@ Robin (QTI, A13) and the V20 (LG, A17). The pieces, in order:
 3. **Parcelables: stub for load, real for calls.** AOSP parcelables whose only quick op is
    `return-void-no-barrier` are clean after one sed. The rest (OEM parcelables, UCE/RCS) can be minimal
    `implements Parcelable` stubs for the *load* milestone (they are off the service-start path), made
-   real only when a call actually marshals them.
+   real only when a call actually marshals them. Before relying on "real": check WHICH jar the OEM's
+   parcelables live in and that the merged tree actually got them -- `grep -c '^.field'` the merged
+   `ImsCallProfile.smali`. On the V20 they are in `boot-framework` (not `boot-ims-common`), so the
+   build-time stubs (1 field) silently shipped and REGISTER worked while a call would have arrived
+   with no number. The stock framework oat is **multidex**: `baksmali x <oat>` deodexes only the first
+   dex entry (framework.jar's `com/*` is in `classes2.dex`) -- `deodex-jar.sh` now walks every entry
+   from `baksmali list dex`; a single-entry deodex of framework.jar is the classic partial that LOOKS
+   complete (5990 files, zero quick opcodes, no `com/`).
 4. **Rename + merge.** `merge-legacy-classes.py --app <smali> --legacy <clean-dirs> --old com/android/ims
    --new <private/pkg> --out <merged>` renames every type descriptor and exact-match AIDL descriptor
    string (not broadcast actions), merges the legacy closure in, and redirects the @hide specialized
@@ -294,7 +301,14 @@ Robin (QTI, A13) and the V20 (LG, A17). The pieces, in order:
    `extractNativeLibs=true`) -- that forces the process 32-bit AND puts the libs in the app namespace's
    own permitted path, so only the framework libs need public.libraries; see the load section above.
 6. **Then** the Binder/AIDL bridge (the compat ImsService), the ImsResolver config, sepolicy (author it;
-   expect runtime denials), and the modem reg path.
+   expect runtime denials), and the modem reg path. Bridge gotcha for a 7.0-shape `IImsService` (one
+   listener slot, `setRegistrationListener` REPLACES, no `addRegistrationListener`): the compat layer
+   adds two listeners after `startSession`, so hand ONE multicast adapter to `open()`, fan out, and
+   cache the last connected/disconnected/feature-bitmap/URIs to replay to late joiners. The OEM app
+   replays only connected/disconnected to a new listener and emits the feature bitmap only on a UC
+   state CHANGE -- a bridge that opens after registration completed reports "registered, voice
+   disabled" forever (every call goes CS); rebuild the bitmap from `isConnected(id, NORMAL, VOICE/VT)`
+   after `open()` returns (not inside the callback: that is a nested binder call).
 
 ## Get the reworked OEM app to RUN (the runtime-bringup layer)
 
@@ -379,7 +393,46 @@ How to close one:
 - **Ship them the way the app is shipped**: proprietary -> staged, not committed (`cc_prebuilt_binary`
   with `srcs` pointing at the staged file, `compile_multilib: "32"` for 32-bit stock, `init_rc`), and a
   domain per helper in the device's *product private* sepolicy (platform file_contexts may label
-  `/system/bin`; vendor file_contexts may not). A helper that `ctl.start`s another needs
+  `/system/bin`; vendor file_contexts may not). `cc_prebuilt_binary` resolves the binary's imports
+  only against the libs *listed* in `shared_libs` (check_elf_file), not against the libs those pull
+  in -- a stock helper that reaches `__android_log_print` through libcutils still needs `liblog`
+  listed, or the ROM build fails long after the preflight passed. A helper that `ctl.start`s another needs
   `ctl.start$<svc>` in property_contexts mapped to a prop type the starter may set -- a coredomain may
   only set `system_property_type`, so declare it with `system_internal_prop(...)`, not a bare
   `property_type`.
+
+## Bridge the reworked app into the modern telephony stack (the compat ImsService)
+
+The reworked OEM app registering with the network is invisible to the framework until something
+implements `ImsService` on its behalf. Still true on 17: `ImsResolver` binds services declaring the
+`android.telephony.ims.compat.ImsService` action (`ImsServiceControllerCompat`), so a small priv-app
+that implements the compat `MMTelFeature` over the OEM's legacy `IImsService` binder is enough -- no
+framework patch. `new-ims-bridge.sh` writes it from `templates/ims-bridge`; what is per-device:
+
+- **The legacy AIDL.** Generated from the OEM's deodexed `$Stub` smali with `gen-legacy-aidl.py`
+  into the bridge's `aidl/` (same `LEGACY_PKG` the app was renamed to) and *committed*. Do not
+  assume another port's copy fits: `aidl-tx-diff.py <stub-smali> <aidl-dir>` -- LG's 7.0
+  `IImsService` has 15 transactions, QTI's 7.1 has 16 (`addRegistrationListener` inserted at 6).
+- **Parcelable wire order.** The bridge carries Java copies of the 7.x parcelables (`ImsCallProfile`,
+  `ImsReasonInfo`, ...). Read each one's `writeToParcel` in the stock framework smali and compare:
+  OEMs append fields (LG: `restrictCause` after `mediaProfile`, `--restrict-cause`), and a mismatch
+  shifts every later read instead of throwing. The same real classes must also be in the reworked
+  *app* (previous section, item 3) -- stubs on one side and real on the other is the same bug.
+- **Listener shape.** One multicast adapter handed to `open()`; the feature bitmap probed from
+  `isConnected(id, NORMAL, VOICE/VT)` after `open()` returns (see item 6 above). Both are in the
+  template; nothing to configure.
+- **Wiring** (device repo, one patch): `PRODUCT_PACKAGES += ImsBridge android.hardware.telephony.ims.
+  prebuilt.xml` (without the feature xml PhoneGlobals never constructs an ImsResolver -- no log line);
+  Telephony overlay `config_ims_mmtel_package = org.lineageos.ims.bridge`;
+  `ro.telephony.block_binder_thread_on_incoming_calls=false` (the compat path delivers
+  `onIncomingCall` on the bridge's main thread and ImsPhoneCallTracker would join() it). The bridge
+  shares `android.uid.phone` with the OEM app: platform cert, and seapp_contexts puts it in `radio`
+  with the app -- no new domain.
+- **17 build facts**: `platform_apis: true` is enough for `android.telecom.*` (telecom is a mainline
+  module; its `VideoProfile.aidl` sits at `frameworks/base/telecomm/framework/aidl-export`, so that is
+  an `aidl.include_dirs` entry next to `frameworks/base/core/java`); `android/view/Surface.aidl` is
+  gone from core/java, the template ships its own parcelable declaration.
+- **Verify**: `dumpsys telephony.registry` shows IMS registered; logcat tag `ImsBridge` for open()/
+  replay/bitmap probe; an MT INVITE now rings the InCallUI instead of being CANCELled by the network
+  with `480 CC_NOT_REACHABLE` ~18 s later (that CANCEL is the signature of "SIP works, nothing is
+  listening above it").

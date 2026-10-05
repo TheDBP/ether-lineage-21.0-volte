@@ -440,6 +440,8 @@ options/              build options -- one capability each, usable on any device
 kernel-configs/       kernel fragments (e.g. container.config)
 kernel-patches/       generic kernel patches applied across devices
 modules/              on-device Magisk modules (linux-chroot)
+templates/            source templates instantiated into device trees by tools/ (ims-bridge: the compat
+                      ImsService over an OEM legacy IMS app, see tools/new-ims-bridge.sh)
 prebuilt/             fetchers for Magisk, F-Droid, Firefox, Fulguris, K-9, KDE Connect, TermOne Plus,
                       Nextcloud, Linphone, ConnectBot
 GOTCHAS.md            known traps, indexed by symptom

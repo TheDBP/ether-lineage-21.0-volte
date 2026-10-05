@@ -333,3 +333,12 @@ will not mount:
 When comparing a broken apex against a reference, compare against one that MOUNTS, not against the
 original prebuilt: on such a device the original is broken too, so it agrees with your broken copy
 and "proves" the wrong thing.
+
+## 34. `timeout` on the docker wrapper kills the wrapper, not the build
+
+`timeout 590 ./forge/docker/aosp.sh ...` exits 143 on the host and the container keeps building: the
+signal reaches `docker run`'s client, not the process inside. A preflight that "timed out" is still
+holding the tree and `out/`, and the next build you start races it. Wait on `docker ps` to drop the
+container (or `docker stop` it) before touching the tree; never read a host `timeout` as the build
+having stopped.
+

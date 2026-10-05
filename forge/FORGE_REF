@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=e88ebfaad056dc20ad7b4438f2e72ea3f26f18d1
-subject=debugging-volte: closing the OEM stack's native helpers (abstract sockets, on-demand init services)
-synced=2026-10-05T20:59:43Z
+commit=f9ba77024c1ceb34aa4c766f62ce959522230729
+subject=ims-bridge template, new-ims-bridge.sh, aidl-tx-diff.py; VoLTE doc: bridge section
+synced=2026-10-05T23:58:29Z

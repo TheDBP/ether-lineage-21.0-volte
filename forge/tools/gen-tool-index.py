@@ -59,7 +59,7 @@ def scan():
                 break
             chunk.append(text)
         summary = ' '.join(chunk)
-        summary = re.sub(r'^' + re.escape(base) + r'\s*[' + DASHES + r']\s*', '', summary)
+        summary = re.sub(r'^' + re.escape(base) + r'\s*[' + DASHES + r']+\s*', '', summary)
         sentence = re.match(r'(.+?[.:])(\s|$)', summary)
         if sentence and len(sentence.group(1)) > 25:
             summary = sentence.group(1)
