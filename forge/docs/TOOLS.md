@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-84 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+85 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -12,6 +12,7 @@ carries the same data for anything that would rather not parse Markdown.
 |---|---|---|---|
 | [`abi-gap.sh`](../tools/abi-gap.sh) | list the symbols a prebuilt blob imports that the running platform no longer provides | `abi-gap.sh <blob> [-s SERIAL] [--keep DIR]` | [debugging-a-vendor-blob](debugging-a-vendor-blob.md), [debugging-volte](debugging-volte.md) |
 | [`app-fw-api-gap.py`](../tools/app-fw-api-gap.py) | - preflight a ported app against a target framework: | `app-fw-api-gap.py --app <app-smali-dir> --fw <framework.jar\|dir\|smali-dir>[,<more>...] [--pkg android,javax,...]` | [debugging-volte](debugging-volte.md) |
+| [`apply-method-redirects.py`](../tools/apply-method-redirects.py) | - rewrite framework-API-drift call sites in a smali tree from a rules file | `apply-method-redirects.py <redirects.txt> <smali-dir>` | [debugging-volte](debugging-volte.md) |
 | [`apply-overlay.sh`](../tools/apply-overlay.sh) | apply the composed customization stack onto a synced LineageOS tree: | `apply-overlay.sh` | — |
 | [`aps2-relocs.py`](../tools/aps2-relocs.py) | decode the Android-packed (APS2) dynamic relocations of a prebuilt ELF .so and print each one with its target symbol, because llvm-readelf/readelf cannot symbolise SHT_ANDROID_REL ("unable to read an entry | `aps2-relocs.py <lib.so> [HEXOFFSET ...]      # all relocs, or only those at the given file offsets` | [debugging-a-vendor-blob](debugging-a-vendor-blob.md) |
 | [`bench-launch.sh`](../tools/bench-launch.sh) | cold app-launch times over adb, for A/B-ing a runtime tuning on one phone | `bench-launch.sh` | — |
@@ -51,7 +52,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`freestanding-arm64.sh`](../tools/freestanding-arm64.sh) | cross-compile one of the freestanding arm64 helpers (no libc, raw syscalls, own _start) in the cached cross-compile container and push it to /data/local/tmp | `freestanding-arm64.sh` | — |
 | [`gen-legacy-aidl.py`](../tools/gen-legacy-aidl.py) | (no description) | `gen-legacy-aidl.py <deodex-workdir> <out-aidl-dir> [iface ...]` | [debugging-volte](debugging-volte.md) |
 | [`gen-tool-index.py`](../tools/gen-tool-index.py) | regenerate the tool index from the tools themselves | `gen-tool-index.py            # rewrite docs/TOOLS.md and docs/tools.yaml` | — |
-| [`gen-verify-stubs.py`](../tools/gen-verify-stubs.py) | - emit minimal smali "verify stubs" for framework/vendor classes a ported app references but the target ROM lacks | `gen-verify-stubs.py --app <app-smali-dir> --out <extra-smali-dir> CLASS [CLASS ...]` | — |
+| [`gen-verify-stubs.py`](../tools/gen-verify-stubs.py) | - emit minimal smali "verify stubs" for framework/vendor classes a ported app references but the target ROM lacks | `gen-verify-stubs.py --app <app-smali-dir> --out <extra-smali-dir> CLASS [CLASS ...]` | [debugging-volte](debugging-volte.md) |
 | [`hybrid-bootimg.sh`](../tools/hybrid-bootimg.sh) | a boot image with one build's kernel+dtb and another's ramdisk | `hybrid-bootimg.sh <kernel-from.img> <ramdisk-from.img> <out.img>` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`image-labels.sh`](../tools/image-labels.sh) | read the SELinux labels the image builder actually wrote, out of a built ext4 image, before flashing it | `image-labels.sh <image> <path> [<path>...]       one line per path: label, or MISSING` | — |
 | [`init-harness.sh`](../tools/init-harness.sh) | run a new ramdisk's /init on the live kernel, from recovery, without a boot | `init-harness.sh <boot.img \| ramdisk-dir> [-t SECONDS] [-o OUTDIR] [-c 'CMD ...'] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |

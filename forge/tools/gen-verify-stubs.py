@@ -132,6 +132,17 @@ def main():
         else:
             open(base+'.smali','w').write(emit_class(cls, methods, fields))
             print(f'  class {cls}  ({len(methods)} methods, {len(fields)} fields)')
+            # Enum-like (self-typed constants + a scalar accessor / int factory): every constant here
+            # returns the SAME code (0), so a `x.getCode() == EMERGENCY.getCode()` gate is always true
+            # and a `fromInt(n) == CONST` identity compare always false. That silently redirects the
+            # app's control flow (LG Ims4: isLteEmergencyOnly() became constant-true -> IMS APN blocked
+            # forever). Copy the real names/ordinals/codes from the stock deodex for these.
+            selftyped = [n for n,(n_,t,st) in fields.items() if st and t == f'L{cls};']
+            scalar = [n for n,(n_,sig,st) in methods.items() if not st and sig.split(')')[1] in 'IJZ' and sig.startswith('()')]
+            factory = [n for n,(n_,sig,st) in methods.items() if st and sig.split(')')[1] == f'L{cls};' and sig.startswith('(I)')]
+            if selftyped and (scalar or factory):
+                print(f'    !! enum-like {cls}: constants {sorted(selftyped)} with {sorted(set(scalar+factory))} -- '
+                      f'all codes stub to 0; make the codes faithful or compares misfire', file=sys.stderr)
         if has_proxy: print(f'    !! $Stub$Proxy referenced for {cls} -- app may need a real proxy', file=sys.stderr)
 
 if __name__ == '__main__': main()

@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=5c74ac43cbfd1f7f20564a0b0add6162530bcf21
-subject=tools/README: list aps2-relocs, rename-import, gen-verify-stubs, ninja-commands
-synced=2026-10-05T17:49:33Z
+commit=63eaff83367c81a9e0d7048ce0017142dab7e2d5
+subject=docs: regenerate tool index (apply-method-redirects linked from debugging-volte)
+synced=2026-10-05T18:21:28Z

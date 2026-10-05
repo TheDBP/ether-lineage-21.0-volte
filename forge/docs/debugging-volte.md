@@ -319,7 +319,12 @@ each with its own signature. Observed bringing LG's `Ims4` up on A17; the order 
    from an installed platform app and match it (`push-system-app.sh` does this).
 4. **`NoSuchMethodError` on a framework class** (`SubscriptionManager.getSlotId` -> `getSlotIndex`):
    API drift -- the class survived, the method was renamed/removed. Redirect old->new in smali
-   (same signature) via a `method-redirects.txt`. Find these ahead of time with `app-fw-api-gap.py`.
+   via a `method-redirects.txt` applied by `apply-method-redirects.py`: a literal rename when the
+   method moved; `|static Lcompat;->m(Lrecv;...)` when it is GONE (`TelephonyManager.getPcscfAddress`
+   -> a compat static over `LinkProperties.getPcscfServers()`, receiver as arg 0, compiled against the
+   `system` stub jar for @SystemApi). Note the failure only surfaces when the path RUNS -- here on the
+   ConnectivityThread the first time the IMS PDN came up, so it hid behind the APN gate (6) for days.
+   Find these ahead of time with `app-fw-api-gap.py`.
 5. **`SecurityException`/property-set failure, then avc denials**: sepolicy. The app sets properties
    (`avc denied { set } property=... tclass=property_service`), opens sockets, reads files. It runs in
    whatever domain its uid maps to (android.uid.phone -> `radio`). **You usually cannot iterate this at
@@ -327,6 +332,13 @@ each with its own signature. Observed bringing LG's `Ims4` up on A17; the order 
    efficient path is the standard vendor-component bringup: make the domain permissive (its own seapp
    domain, or the shared one) for one reflash, let it run through surfacing every denial, `audit2allow`,
    then write real rules and lock down.
+6. **The app runs but a gate is stuck** ("APN is blocked; LTE only supports the emergency service"
+   forever, no exception anywhere): a verify stub changed the app's control flow. Stubs that stand in
+   for OEM *enums* return the same code from every constant, so `state.getCode() ==
+   EMERGENCY.getCode()` is always true and `fromInt(n) == CONST` never is. `gen-verify-stubs.py` warns
+   `!! enum-like` for this shape; for those classes copy the real names/ordinals/codes from the stock
+   deodex (`fromInt` must return the singletons -- callers compare by reference). Audit a stuck gate by
+   reading the condition's smali back to which stub it consults, before suspecting the platform.
 
 **Iterate dex/resource fixes without reflashing** with `push-system-app.sh` (a ~3-min loop vs a ~45-min
 rebuild+reflash). It handles the three traps: shared-uid signing (matches the device cert), and the
