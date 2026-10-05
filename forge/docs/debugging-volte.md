@@ -353,3 +353,33 @@ ancestry is not in the DB), so ACCURACY HINGES ON A COMPLETE `--fw`: on modern A
 split across mainline modules (SubscriptionManager is in framework-telephony, not framework.jar), so
 pass EVERY `/system/framework/*.jar` + all apex `/javalib/*.jar` (incl. core-oj/core-libart for the
 java.* ancestry) or it stays silent on classes it cannot see. It complements, not replaces, the runtime.
+
+## The OEM stack's native helpers: find them from the error, not the strings
+
+An OEM IMS app rarely does everything in-process. Past the point where the SIP stack runs, the next
+class of failure is a step it delegates to a small daemon that stock init started and your build does
+not have. Two LG examples, both only visible once the stack got that far: the SIP REGISTER security
+agreement (RFC 3329 `Security-Client: ipsec-3gpp`) -- libims computes the ESP SAs after the 401 but
+hands them to `ipsecstarter`/`ipsecclient` (netlink xfrm) to install, and SMS-over-IMS, which goes
+through `imswmsproxy`. Without the helper the log shows a *send* failing, the step marked failed, and
+the whole registration torn down and retried forever.
+
+How to close one:
+- **Check what the socket is before chasing a directory.** `ECONNREFUSED (111)` on a unix socket path
+  that does not exist on disk means an **abstract** socket (`sun_path[0] == 0`): a missing *path* gives
+  `ENOENT`. Confirm with `grep <name> /proc/net/unix` -- abstract names show with a leading `@`. The
+  path-like string in the binary is just a name; no `/tmp` directory, no `mkdir`, no file label, and
+  sepolicy checks the *peer domains'* `unix_dgram_socket sendto`, not a file type.
+- **Reproduce the chain by hand first, then make it an init service.** Pull the stock binaries, `ldd`
+  them (these helpers are typically libc/libcutils/libc++ only and run unmodified), run them from
+  `/data/local/tmp` as root while the app is up, and watch the step succeed. Expect a launch-order
+  dependency: LG's `ipsecclient` exits immediately if the app's socket is not bound, which is why stock
+  ran it `disabled` and had the starter `ctl.start` it on demand. Copy stock's rc lines (from the boot
+  image ramdisk, `init.<device>_product.rc`), not your guess of them.
+- **Ship them the way the app is shipped**: proprietary -> staged, not committed (`cc_prebuilt_binary`
+  with `srcs` pointing at the staged file, `compile_multilib: "32"` for 32-bit stock, `init_rc`), and a
+  domain per helper in the device's *product private* sepolicy (platform file_contexts may label
+  `/system/bin`; vendor file_contexts may not). A helper that `ctl.start`s another needs
+  `ctl.start$<svc>` in property_contexts mapped to a prop type the starter may set -- a coredomain may
+  only set `system_property_type`, so declare it with `system_internal_prop(...)`, not a bare
+  `property_type`.
