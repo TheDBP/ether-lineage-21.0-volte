@@ -194,6 +194,32 @@ Fix by pinning the vendor copy to the old ABI. A whole-tree revert of the upgrad
 version; the upstreamable one is a vendor variant built from the old source, leaving the platform
 on the new one.
 
+**When you cannot pin the type -- it is `android::Parcel` and the blob uses it in 200 functions --
+interpose it.** The second worked example: a 2016 IMS stack stack-allocates `Parcel` at 52 bytes;
+A17's `Parcel::Parcel()` writes past that (`__stack_chk_fail`). The blob's *imports* are the lever:
+a shim lib placed FIRST in its DT_NEEDED (patchelf `--add-needed`, then reorder) defines every
+Parcel method the blob imports, with `this` reinterpreted as a magic-tagged `{MAGIC, real*}`
+wrapper over a heap-allocated real Parcel; methods check the tag and forward to either the wrapped
+object or, untagged, to `this` itself (a real Parcel the platform handed in). Forward via the real
+libbinder symbols. Three traps in that pattern:
+
+- `dlsym(RTLD_NEXT)` is useless inside an app classloader namespace: every lib there is
+  RTLD_LOCAL and bionic's RTLD_NEXT walk skips them all, returning NULL. Resolve from
+  `dlopen("libbinder.so")`'s own handle. And ABORT if a symbol is missing -- a null-guarded resolver
+  turns it into a tail-jump to 0 later, which debuggerd reports as `pc 00000000` with frame #1 in
+  the blob at "+N": for frames >0 pc is the return address - 4, so +N names the CALL instruction,
+  i.e. the fault is inside the callee (your shim), not at the next instruction in the blob.
+- `dlopen` resolves in the CALLER's namespace. A public system lib cannot dlopen an apk-bundled
+  lib even though it is loaded in the same process; walk `dl_iterate_phdr` (all namespaces) and
+  read the symbol out of its GNU hash table by hand.
+- Before shimming a base class too, measure it: 32-bit `BBinder` is 16 bytes on both 7.0 and 17
+  and the IBinder/BBinder vtable order is unchanged, so only Parcel needed the shim. Check the
+  size AND the virtual order, not the field names.
+
+When you need to know which symbol a vtable slot or GOT entry *should* hold, `aps2-relocs.py`
+decodes the Android-packed relocations readelf cannot symbolise. Rebuild the shim between
+iterations with `ninja-commands.sh <module> --run`, not `m` (see the header).
+
 ## A property its reader cannot see is a silent no-op
 
 Setting a property and getting no behaviour change has three possible causes, and people usually

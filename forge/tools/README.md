@@ -14,6 +14,10 @@ container.
 | `find-removed-platform-symbols.sh` | before porting | C/C++ platform constants it lost |
 | `abi-gap.sh` | when a prebuilt will not load, or loads and misbehaves | the symbols a blob imports that the running platform no longer exports, demangled. The runtime counterpart to `find-removed-platform-symbols.sh`: that one catches what will not compile, this one what will not link |
 | `dlopen-probe.sh` | to prove (not estimate) a prebuilt loads on the device | dlopens the blob + its whole DT_NEEDED closure on-device, running the init-array; auto-walks the closure from a stock extract (`--supply`), empty-stubs cut-out subsystems (`--stub`), LD_PRELOADs your shim libs (`--preload`). Ground truth behind `abi-gap.sh` |
+| `aps2-relocs.py` | when readelf says "unable to read an entry" on a blob's relocations | the Android-packed (APS2) dynamic relocs decoded with their target symbols, so a crash offset maps to the import it was resolving |
+| `rename-import.py` | when ONE blob calls a platform function wrongly (NULL fmt, changed semantics) | its import redirected to a shim symbol of the same name length by rewriting .dynstr in place -- no process-wide interposition; pair with `patchelf --add-needed <shim>` |
+| `gen-verify-stubs.py` | when a deodexed app references framework classes/methods this ROM lacks (NoSuchMethodError / verify failures) | smali stub classes for the missing symbols, each method returning a chosen constant |
+| `ninja-commands.sh` | when `m <module>` would re-analyse the whole tree on a thrashing host | the exact compile/link commands ninja would run for one module, optionally executed |
 | `find-soong-namespace-drift.sh` | before porting | Soong namespaces the device must now import, modules and HIDL libraries the branch deleted (including what the blobs link against), makefile paths that moved |
 | `triage-build-log.sh` | after a failed build | a wall of errors collapsed into a few classes |
 | `check-image-labels.sh` | when packaging fails | every unlabeled path at once, instead of one per build |

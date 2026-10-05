@@ -42,18 +42,32 @@ for t in "$ZA" "$AS"; do [ -x "$t" ] || { echo "!! missing $t (set BUILD_ROOT)" 
 base=$(basename "$DIR"); devapk=$("${A[@]}" shell "ls $DIR/*.apk 2>/dev/null | head -1" | tr -d '\r')
 [ -n "$devapk" ] || { echo "!! no apk in $DIR on device -- is the dir right?" >&2; exit 1; }
 W="${TMPDIR:-$(dirname "$APK")}/.push-sysapp"; mkdir -p "$W"
-"${A[@]}" pull "$devapk" "$W/ref.apk" >/dev/null 2>&1
-DEVFP=$("$AS" verify --print-certs "$W/ref.apk" 2>/dev/null | awk '/SHA-256 digest/{print $NF; exit}')
-[ -n "$DEVFP" ] || { echo "!! could not read device platform cert from $devapk" >&2; exit 1; }
-KEY=""
-for k in "$S"/build/make/target/product/security/platform "$S"/build/make/target/product/security/testkey \
-         "${KEYS_DIR:-/nonexistent}"/platform "${KEYS_DIR:-/nonexistent}"/releasekey; do
-  [ -f "$k.x509.pem" ] || continue
-  fp=$(openssl x509 -in "$k.x509.pem" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//;s/://g' | tr 'A-Z' 'a-z')
-  [ "$fp" = "$DEVFP" ] && { KEY="$k"; break; }
+DEVFP=""
+for try in 1 2 3; do
+  "${A[@]}" pull "$devapk" "$W/ref.apk" >/dev/null 2>&1
+  [ -s "$W/ref.apk" ] && DEVFP=$("$AS" verify --print-certs "$W/ref.apk" 2>/dev/null | awk '/SHA-256 digest/{print $NF; exit}')
+  [ -n "$DEVFP" ] && break
+  sleep 3   # device may be mid-reboot / crash-looping; retry
 done
-[ -n "$KEY" ] || { echo "!! no candidate key matches the device platform cert ($DEVFP); set KEYS_DIR" >&2; exit 1; }
-echo ">> signing with $(basename "$KEY") (matches device platform cert)"
+CANDS=("$S/build/make/target/product/security/platform" "$S/build/make/target/product/security/testkey"
+       "${KEYS_DIR:-/nonexistent}/platform" "${KEYS_DIR:-/nonexistent}/releasekey")
+KEY=""
+if [ -n "$DEVFP" ]; then
+  for k in "${CANDS[@]}"; do
+    [ -f "$k.x509.pem" ] || continue
+    fp=$(openssl x509 -in "$k.x509.pem" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//;s/://g' | tr 'A-Z' 'a-z')
+    [ "$fp" = "$DEVFP" ] && { KEY="$k"; break; }
+  done
+  [ -n "$KEY" ] || { echo "!! no candidate key matches the device platform cert ($DEVFP); set KEYS_DIR" >&2; exit 1; }
+  echo ">> signing with $(basename "$KEY") (matches device platform cert)"
+else
+  # Could not read the device cert (device unstable, or the ref app is itself the one we're replacing
+  # and is unsigned mid-iteration). Fall back to build/make's default platform key -- the usual signer
+  # for a bringup -- rather than bail. Set KEYS_DIR / edit CANDS if your build uses a custom platform key.
+  KEY="$S/build/make/target/product/security/platform"
+  [ -f "$KEY.x509.pem" ] || { echo "!! could not read device cert AND no fallback platform key at $KEY" >&2; exit 1; }
+  echo ">> WARN: could not read device platform cert; falling back to build/make platform key"
+fi
 
 # 2. zipalign + sign
 "$ZA" -p -f 4 "$APK" "$W/aligned.apk" >/dev/null 2>&1

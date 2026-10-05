@@ -27,7 +27,16 @@
 import argparse, os, re, subprocess, sys, tempfile, glob
 
 def baksmali_jar(jar, outdir, bk):
-    subprocess.run(['java', '-jar', bk, 'd', jar, '-o', outdir], stderr=subprocess.DEVNULL, check=False)
+    # A .jar/.apk is MULTIDEX (framework.jar is classes.dex..classesN.dex). `baksmali d <jar>` only
+    # disassembles the first classes.dex -- the classic partial-disassemble trap -- so enumerate every
+    # dex entry and disassemble each into the same outdir. A bare .dex is disassembled directly.
+    if jar.endswith('.dex'):
+        subprocess.run(['java', '-jar', bk, 'd', jar, '-o', outdir], stderr=subprocess.DEVNULL, check=False)
+        return
+    dexes = subprocess.run(['java', '-jar', bk, 'list', 'dex', jar],
+                           capture_output=True, text=True).stdout.split()
+    for dx in (dexes or ['classes.dex']):
+        subprocess.run(['java', '-jar', bk, 'd', jar + '/' + dx, '-o', outdir], stderr=subprocess.DEVNULL, check=False)
 
 def collect_db(fw_args, bk, work):
     methods, classes, supers = set(), set(), {}
