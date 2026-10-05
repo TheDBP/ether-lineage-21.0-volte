@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-67 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+68 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -64,6 +64,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`propagate-forge.sh`](../tools/propagate-forge.sh) | push an engine change out to every device repo, now | `propagate-forge.sh` | — |
 | [`pstore-pull.sh`](../tools/pstore-pull.sh) | pull every pstore record from a phone in recovery, plus (optionally) the raw ramoops region behind it | `pstore-pull.sh <outdir> [--raw /dev/access-ramoops] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`publish-kernel-source.sh`](../tools/publish-kernel-source.sh) | publish the kernel source that actually built this ROM, as a normal kernel repo, so a GPL request (or an XDA moderator) can be answered with one link | `publish-kernel-source.sh` | — |
+| [`qmi-services.py`](../tools/qmi-services.py) | list the QMI services a device's processors publish, by name, and the QMI service descriptors (service id, IDL version, message ids) a vendor library carries | `qmi-services.py live\|table\|lib <args>` | [debugging-volte](debugging-volte.md) |
 | [`qmi-sni.sh`](../tools/qmi-sni.sh) | bring up a modem data call from the AP as a direct QMI WDS client, bypassing the RIL, and print the modem's own answer: | `qmi-sni.sh <node> <apn> <3gpp-profile> [v4\|v6\|v4v6] [epc\|umts\|none] [calltype] [keep] [sub] [muxN]` | [debugging-mobile-data](debugging-mobile-data.md) |
 | [`rc-fatal-services.py`](../tools/rc-fatal-services.py) | which init services of a built image can take the device down, and whether they can start | `rc-fatal-services.py <out>/target/product/<device> [--all]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`refresh-patches.sh`](../tools/refresh-patches.sh) | re-export overlay/patches/ from the local commits sitting on top of upstream in each patched project | `refresh-patches.sh` | [porting-a-branch-bump](porting-a-branch-bump.md) |

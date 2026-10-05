@@ -141,3 +141,26 @@ UI, or call the API.
 One trap while doing that: setting `wfc_ims_enabled` makes the framework start honouring
 `wfc_ims_mode` from the same row. If that column holds a stale `0`, you have just put the device in
 WIFI_ONLY and it will refuse cellular calls. Set the mode explicitly at the same time.
+
+## Find out where the IMS stack lives before porting anything
+
+Two designs ship on the same SoC. Qualcomm's: IMS runs on the modem, the AP only has
+`imsqmidaemon`/`imsdatadaemon`/`ims_rtp_daemon` and the modem publishes QMI services IMSS 0x12,
+IMSA 0x21, IMSP 0x1f, IMS_RTP 0x28 (the Robin, the Pixels). An OEM AP-side design (LG V20): a SIP
+stack in AP libraries driven by an OEM app, the modem publishes none of those, and the only
+modem/AP coupling is a small private QMI service. The porting work is different in kind -- a bridge
+to a modem IMS stack is a Binder shim; an AP-side stack is 32-bit 2016 blobs against a current
+framework plus the OEM hook -- so settle this first:
+
+    qmi-services.py live            # rooted phone: service table by processor; names the IMS ids
+    qmi-services.py lib <oem .so>   # service id + message ids an OEM QMI client library talks to
+
+A vendor id on the modem (0x2bd..0x2c3 on the V20) that also appears in an OEM lib
+(`libvss_ims_qcci.so` -> 0x2bf, two messages) is the OEM hook, and it is reachable from a plain
+QMI client without the OEM's RIL. `strings` on the modem image confirms the split: a modem IMS
+stack has SIP method names and `imsa_`/`imss_` symbols; an AP-side design has only the hook names.
+
+Check the stock app's Binder surface the same way as on the Robin (`deodex-app.sh`,
+`gen-legacy-aidl.py`): the TRANSACTION_* order in the stock framework's `I*$Stub` is the wire
+protocol, and one inserted method (7.0 -> 7.1 added `IImsService.addRegistrationListener`) shifts
+every later id.

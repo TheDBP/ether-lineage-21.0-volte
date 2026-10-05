@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=a2408ec8370130d972df173bbbcfa63283fd7ff2
-subject=docs: debugging mobile data that never comes up (QMI direct, DIAG F3, SMEM vendor flags)
-synced=2026-10-04T23:14:49Z
+commit=0861a0404158b71dd64fb97154322614ffe211a7
+subject=tools/README: qmi-services.py row
+synced=2026-10-05T00:03:53Z
