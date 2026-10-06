@@ -306,6 +306,19 @@ build, reclaimed from that phone's stock firmware — the `oem` option. It works
 exactly one firmware family so far, so for most devices it is not yet an answer.
 See [docs/OEM-ASSETS.md](docs/OEM-ASSETS.md) if your phone is the one.
 
+### Keeping a 2016 phone able to make calls
+
+Carriers have been shutting down the 2G/3G circuit-switched voice these devices fall back to, so on
+a handset whose VoLTE the platform does not provide, VoLTE is the difference between a phone and a
+tablet. Where the OEM put the IMS stack in its own app, the `volte` option rebuilds that stack from
+the phone's own stock firmware — which the user supplies, because none of it may be redistributed.
+
+It is the one option that turns itself on: present firmware means on, absent means off with the
+image tagged `-novolte`, and asking for it without the firmware stops the build rather than shipping
+something that cannot call. See [options/volte/README.md](options/volte/README.md) for why that
+default is shaped that way, and [docs/debugging-volte.md](docs/debugging-volte.md) for doing the
+port itself.
+
 ### Options and presets
 
 Three words that are easy to blur:

@@ -120,6 +120,53 @@ for _o in $BUILD_OPTIONS; do
     esac
   done
 done
+# ---- volte: on when this checkout can build it, off when it cannot, silent never ----------------
+# VoLTE on a ported device is the manufacturer's own IMS stack, rebuilt from firmware the user
+# supplies and that no repo may redistribute. So it cannot be unconditionally on -- a fresh clone
+# would not build at all -- and it must not be quietly off, because that is "same command, same
+# repo, two different images", which is the exact failure options/README.md's sub-switch rule and
+# the Robin's device.mk staging were both written against.
+#
+# Hence three states rather than two. Asked for and unbuildable stops the build: an explicit request
+# is never silently downgraded. Not asked for and buildable turns it on, because nobody who supplied
+# their phone's firmware wanted a phone that cannot make calls. Not asked for and unbuildable turns
+# it off, says so in terms that matter to the person holding the phone, and marks the tag -- the
+# absence is the surprising artifact here, so the absence is what the filename records.
+if [ -n "${VOLTE_STOCK_GLOB:-}" ] || [ -n "${VOLTE_STAGED_MARKER:-}" ]; then
+  _volte_have=""
+  for _c in "$DEVICE_REPO"/${VOLTE_STOCK_GLOB:-__none__} "$BUILD_ROOT"/${VOLTE_STOCK_GLOB:-__none__}; do
+    [ -e "$_c" ] && { _volte_have="$(basename "$_c")"; break; }
+  done
+  # Staged by an earlier build counts: the stock input only ever existed to produce those artifacts,
+  # and requiring it forever would mean keeping a multi-gigabyte image around to rebuild.
+  if [ -z "$_volte_have" ] && [ -n "${VOLTE_STAGED_MARKER:-}" ] && [ -e "$SRC/$VOLTE_STAGED_MARKER" ]; then
+    _volte_have="already staged"
+  fi
+  case " $BUILD_OPTIONS " in
+    *" volte "*)
+      if [ -z "$_volte_have" ]; then
+        echo "!! volte was asked for, but there is no ${VOLTE_STOCK_GLOB:-stock firmware} in $DEVICE_REPO" >&2
+        echo "!! and nothing staged in the tree." >&2
+        echo "!! VoLTE is the manufacturer's IMS stack rebuilt from the phone's own firmware; it" >&2
+        echo "!! cannot be built from source and cannot ship in this repo. See the VoLTE/IMS doc." >&2
+        echo "!! Refusing to build an image tagged for VoLTE that would not have it." >&2
+        exit 1
+      fi
+      echo ">> volte: on (asked for) -- $_volte_have" ;;
+    *)
+      if [ -n "$_volte_have" ]; then
+        BUILD_OPTIONS="$BUILD_OPTIONS volte"
+        echo ">> volte: on -- $_volte_have"
+      else
+        echo ">> volte: OFF -- no ${VOLTE_STOCK_GLOB:-stock firmware} found in $DEVICE_REPO"
+        echo "   This image will NOT be able to place calls over LTE. Carriers have been shutting"
+        echo "   down the 2G/3G voice these devices fall back to, so on many networks that means no"
+        echo "   calls at all. Supply the stock firmware to get VoLTE; see the VoLTE/IMS doc."
+        TURBO_BUILD_ID="${TURBO_BUILD_ID}-novolte"
+      fi ;;
+  esac
+fi
+
 # Signing is a per-checkout choice (device.conf.local), so say which one this build gets.
 if [ -n "${KEYS_DIR:-}" ]; then echo ">> signing: release keys from $KEYS_DIR"
 else echo ">> signing: AOSP test keys (set KEYS_DIR in device.conf.local for a publishable image)"; fi

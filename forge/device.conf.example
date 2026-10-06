@@ -56,6 +56,25 @@ PRESETS="
 #STOCK_ROM_GLOB="MyPhone_Stock_*.zip"
 #STOCK_ROM_URL=
 
+# ---- VoLTE from the phone's own stock firmware (optional) ----
+# On a device whose IMS stack is the manufacturer's rather than the platform's, VoLTE has to be
+# rebuilt from the firmware the phone shipped with: there is no source for it, and none of it may
+# be committed here. Setting these three turns the `volte` option on by itself whenever that
+# firmware is present, and off -- loudly, and marked in the build tag -- when it is not. Asking for
+# `volte` explicitly without it stops the build rather than shipping an image that cannot call.
+# Leave them unset on a device whose VoLTE the platform handles; the option then never engages.
+#
+#   VOLTE_STOCK_GLOB     what the user supplies, matched in the device repo root and build_output/.
+#                        Whatever your stage script can read -- a full OTA zip, a raw system image.
+#   VOLTE_STAGE_SCRIPT   repo-relative, executable, run as `<script> <stock-file> <aosp-root>` after
+#                        the device patches are applied. Omit if the device tree stages itself from
+#                        its own device.mk; require.sh still checks the result.
+#   VOLTE_STAGED_MARKER  aosp-relative path that exists only once staging succeeded. This is the
+#                        whole safety net: it is what "already staged" and "refuse to build" test.
+#VOLTE_STOCK_GLOB="MyPhone_Stock_*.zip"
+#VOLTE_STAGE_SCRIPT=stage-volte.sh
+#VOLTE_STAGED_MARKER=device/myvendor/mydevice/ims/Ims-reworked.apk
+
 # ---- Android version (only needed for GApps, and only if BRANCH does not imply it) ----
 # GApps are Android-version specific and the wrong set installs silently: the build succeeds, the
 # apps run, they are simply built for another platform. The forge derives the version from BRANCH for

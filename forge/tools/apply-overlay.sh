@@ -251,7 +251,7 @@ for _o in ${BUILD_OPTIONS:-}; do
   echo ">> option $_o: post-patch placement"
   # device.conf is sourced above but not exported, and `bash <script>` is a new process: a
   # hook only sees what is named here, otherwise it silently reads as unset.
-  ( cd "$AOSP" && FORGE_DIR="$FORGE" OPTION_DIR="$_od" \
+  ( cd "$AOSP" && FORGE_DIR="$FORGE" OPTION_DIR="$_od" DEVICE_REPO="$DEVICE_REPO" \
       DEVICE="${DEVICE:-}" VENDOR="${VENDOR:-}" DEVICE_SLUG="${DEVICE_SLUG:-}" \
       APEX_EROFS_UNSUPPORTED="${APEX_EROFS_UNSUPPORTED:-false}" \
       bash "$_od/post-patch.sh" "$AOSP" ) \
