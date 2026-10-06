@@ -56,7 +56,7 @@ if [ "$ARCH" = 64 ]; then TRIPLE=aarch64-linux-android21; CRTA="android_arm64_ar
 W="${WORKDIR:-$(dirname "$BLOB")/.dlopen-probe}"; mkdir -p "$W/stage" "$W/dev"
 CL=$(ls "$SRC"/prebuilts/clang/host/linux-x86/clang-r*/bin/clang 2>/dev/null | tail -1)
 [ -x "${CL:-}" ] || { echo "!! clang not found under $SRC/prebuilts/clang (set BUILD_ROOT)" >&2; exit 1; }
-cbo(){ ls "$SRC"/out/soong/.intermediates/bionic/libc/"$1"/"$CRTA"/"$1".o 2>/dev/null | head -1; }
+cbo(){ ls "$SRC"/out/soong/.intermediates/bionic/libc/"$1"/"$CRTA"/"$1".o 2>/dev/null | head -1 || true; }
 
 # device libc/libdl to link against (their dynsym only)
 for l in libc.so libdl.so; do
@@ -101,11 +101,11 @@ run(){ "${ADB[@]}" push "$W/stage/." "$DEVDIR/" >/dev/null 2>&1; "${ADB[@]}" she
 
 for i in $(seq 1 60); do
   out=$(run)
-  if echo "$out" | grep -q "^OK"; then echo "$out"; echo ">> stage: $W/stage"; [ $KEEP = 0 ] && : ; exit 0; fi
-  miss=$(echo "$out" | grep -oE 'library "[^"]+" not found' | head -1 | sed 's/library "//;s/" not found//')
+  if grep -q "^OK" <<<"$out"; then echo "$out"; echo ">> stage: $W/stage"; [ $KEEP = 0 ] && : ; exit 0; fi
+  miss=$(grep -oE 'library "[^"]+" not found' <<<"$out" | head -1 | sed 's/library "//;s/" not found//' || true)  # sigpipe-ok: the || true already absorbs a SIGPIPEd grep
   if [ -n "$miss" ]; then
     if [ -n "$SUPPLY" ] && [ -f "$SUPPLY/$miss" ]; then cp "$SUPPLY/$miss" "$W/stage/"; echo "  +supply $miss"; continue
-    elif printf '%s\n' "${STUBS[@]+"${STUBS[@]}"}" | grep -qx "$miss"; then continue
+    elif grep -qx "$miss" <<<"$(printf '%s\n' "${STUBS[@]+"${STUBS[@]}"}")"; then continue
     else echo "$out"; echo ">> missing lib '$miss' -- add it with --supply <dir containing it> or --stub $miss"; exit 1; fi
   fi
   # not a missing-lib failure: a symbol gap or constructor crash -- report, human must shim

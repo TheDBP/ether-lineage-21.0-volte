@@ -48,7 +48,7 @@ fi
 [ -f "$CONFIG" ] || { echo "!! no such file: $CONFIG"; exit 1; }
 
 # rules: service id -> gid list
-rule_for(){ grep -E "^[[:space:]]*$1:" "$CONFIG" | head -1; }
+rule_for(){ grep -E "^[[:space:]]*$1:" "$CONFIG" | head -1 || true; }
 ids=$(grep -oE '^[[:space:]]*[0-9]+:' "$CONFIG" | tr -d ' :' | sort -n -u)
 echo ">> $(echo "$ids" | grep -c .) service(s) have a rule"
 

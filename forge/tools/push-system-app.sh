@@ -39,7 +39,7 @@ for t in "$ZA" "$AS"; do [ -x "$t" ] || { echo "!! missing $t (set BUILD_ROOT)" 
 "${A[@]}" root >/dev/null 2>&1; sleep 2
 
 # 1. find the platform key that matches the device's platform signer.
-base=$(basename "$DIR"); devapk=$("${A[@]}" shell "ls $DIR/*.apk 2>/dev/null | head -1" | tr -d '\r')
+base=$(basename "$DIR"); devapk=$("${A[@]}" shell "ls $DIR/*.apk 2>/dev/null | head -1" | tr -d '\r')  # sigpipe-ok: that head runs on the device
 [ -n "$devapk" ] || { echo "!! no apk in $DIR on device -- is the dir right?" >&2; exit 1; }
 W="${TMPDIR:-$(dirname "$APK")}/.push-sysapp"; mkdir -p "$W"
 DEVFP=""

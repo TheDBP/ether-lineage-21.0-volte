@@ -39,7 +39,7 @@ mkdir -p "$OUT"
 
 # 1. Get a reassembled ELF (b00 holds the program headers; each bNN is a segment at its p_offset).
 ELF="$OUT/modem.elf"
-if [ -f "$IN" ] && head -c4 "$IN" | grep -q ELF && [ "$(basename "$IN")" != modem.b00 ]; then
+if [ -f "$IN" ] && grep -q ELF <<<"$(head -c4 "$IN")" && [ "$(basename "$IN")" != modem.b00 ]; then
   cp "$IN" "$ELF"
 else
   SEGDIR="$OUT/segments"; mkdir -p "$SEGDIR"

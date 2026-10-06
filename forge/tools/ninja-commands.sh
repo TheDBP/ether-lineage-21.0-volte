@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do case "$1" in
   -*) echo "!! unknown arg $1" >&2; exit 2;; *) TGT="$1"; shift;; esac; done
 [ -n "$TGT" ] || { sed -n '2,20p' "$0"; exit 2; }
 cd "$SRC" || exit 1
-COMB=$(ls out/combined-*.ninja 2>/dev/null | head -1); [ -n "$COMB" ] || { echo "!! no out/combined-<product>.ninja under $SRC (set -C / BUILD_ROOT)" >&2; exit 1; }
+COMB=$(ls out/combined-*.ninja 2>/dev/null | head -1 || true); [ -n "$COMB" ] || { echo "!! no out/combined-<product>.ninja under $SRC (set -C / BUILD_ROOT)" >&2; exit 1; }
 P=${COMB#out/combined-}; P=${P%.ninja}
 [ -s "out/soong/build.$P.ninja" ] || { echo "!! out/soong/build.$P.ninja is empty/missing -- soong_build never finished (or was killed mid-write); run the standard bootstrap once" >&2; exit 1; }
 NINJA=prebuilts/build-tools/linux-x86/bin/ninja; [ -x "$NINJA" ] || NINJA=$(command -v ninja) || { echo "!! no ninja" >&2; exit 1; }

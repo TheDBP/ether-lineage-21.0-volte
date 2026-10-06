@@ -3,6 +3,8 @@
 # own _start) in the cached cross-compile container and push it to /data/local/tmp. Sourced by the
 # tool wrappers; not called directly.
 #
+#   freestanding-arm64.sh is SOURCED, not run: `. freestanding-arm64.sh` then xc_build_push ...
+#
 #   xc_build_push <src.c> <out-binary> <name-on-device>
 #
 # Freestanding so the same binary runs on any Android version and in recovery: nothing to link

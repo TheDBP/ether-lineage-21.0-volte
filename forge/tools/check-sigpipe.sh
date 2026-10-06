@@ -5,6 +5,8 @@
 # race. Recurs across scripts here. Use capture-then-
 # count instead:  n=$(producer | grep -c NEEDLE || true).
 #
+#   check-sigpipe.sh [path ...]        # default: every shell script under tools/
+#
 # Run: tools/check-sigpipe.sh   (also wired as .githooks/pre-commit). Add a trailing `# sigpipe-ok`
 # to a line to suppress a genuine false positive. `| head -1 || true` is accepted as is: the `|| true`
 # absorbs the 141. For a first-line capture prefer `| sed -n 1p`, which reads to EOF.

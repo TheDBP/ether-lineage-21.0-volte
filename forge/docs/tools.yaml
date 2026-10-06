@@ -81,7 +81,7 @@ tools:
   - name: "check-bpf-readiness.sh"
     path: "tools/check-bpf-readiness.sh"
     summary: "find what a kernel without eBPF (or other modern syscalls) will break, before you spend a build-flash-boot cycle finding out"
-    usage: "check-bpf-readiness.sh"
+    usage: "check-bpf-readiness.sh --src <ANDROID_ROOT> | --log <file>"
     docs: []
   - name: "check-dt-needed.py"
     path: "tools/check-dt-needed.py"
@@ -134,7 +134,7 @@ tools:
   - name: "check-sigpipe.sh"
     path: "tools/check-sigpipe.sh"
     summary: "fail if any shell script that runs under `set -o pipefail` pipes into `grep -q` or `head`"
-    usage: "check-sigpipe.sh"
+    usage: "check-sigpipe.sh [path ...]        # default: every shell script under tools/"
     docs: []
   - name: "check-tree-dirt.sh"
     path: "tools/check-tree-dirt.sh"
@@ -176,7 +176,7 @@ tools:
   - name: "diag-f3-parse.py"
     path: "tools/diag-f3/diag-f3-parse.py"
     summary: "Parse a raw DIAG HDLC stream (as written by diag-f3-capture) and print F3 EXT_MSG (0x79) text lines"
-    usage: "diag-f3-parse.py"
+    usage: "diag-f3-parse.py <raw-hdlc-capture>"
     docs: []
   - name: "dlopen-probe.sh"
     path: "tools/dlopen-probe.sh"
@@ -234,7 +234,7 @@ tools:
   - name: "freestanding-arm64.sh"
     path: "tools/freestanding-arm64.sh"
     summary: "cross-compile one of the freestanding arm64 helpers (no libc, raw syscalls, own _start) in the cached cross-compile container and push it to /data/local/tmp"
-    usage: "freestanding-arm64.sh"
+    usage: "freestanding-arm64.sh is SOURCED, not run: `. freestanding-arm64.sh` then xc_build_push ..."
     docs: []
   - name: "gen-legacy-aidl.py"
     path: "tools/gen-legacy-aidl.py"

@@ -4,6 +4,8 @@
 #
 # Two modes, both useful:
 #
+#   check-bpf-readiness.sh --src <ANDROID_ROOT> | --log <file>
+#
 #   --src <ANDROID_ROOT>    static: who calls BPF, and which callers abort on failure
 #   --log <file>            runtime: which processes actually hit ENOSYS
 #

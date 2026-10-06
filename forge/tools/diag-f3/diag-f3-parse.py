@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Parse a raw DIAG HDLC stream (as written by diag-f3-capture) and print F3 EXT_MSG (0x79) text lines.
 
+
+  diag-f3-parse.py <raw-hdlc-capture>
+
 Layout per entry: cmd@0 ts_type@1 nargs@2 drop@3 ts u64@4 line u16@12 ssid u16@14 mask u32@16,
 args u32 x nargs @20, then fmt\0 file\0. The args start at 20, not 16: with 16 every format string
 reads as empty and the whole log looks hashed."""
