@@ -127,16 +127,3 @@ that fails, because every other check passes on a broken build.
 
 Budget for the size, too: EROFS is compressed and ext4 is not, so the payload grows (146.5 MB to
 206 MB for GmsCore on bonito) and `/product` grows with it.
-
-## When a version has no NikGapps release
-
-MindTheGapps is built from source by this option (`local_manifests/<branch>/mindthegapps.xml`) and
-supplies GMS Core, the Play Store and the services framework. NikGapps is a separate, pre-built zip
-that additionally replaces the stock apps with Google's, and it is published per Android version --
-so a brand-new Android release can have MindTheGapps support here while no NikGapps build exists
-yet (Android 17, at the time of writing).
-
-`GAPPS_URL=none` builds MindTheGapps only and says so during the build. You still get Play, so
-Google's apps can be installed from there; what you do not get is them preinstalled. The build
-otherwise refuses rather than reaching for another version's NikGapps, because the wrong version
-installs silently and only shows up on the device.
