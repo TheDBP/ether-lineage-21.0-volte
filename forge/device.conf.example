@@ -9,7 +9,8 @@
 DEVICE=                  # <vendor>/<codename> — the path under device/
 DEVICE_CODENAME=         # lunch target suffix, and the codename in the zip name
 DEVICE_SLUG=             # docker image/container naming: aosp-<slug>
-VENDOR=                  # OEM vendor (informational)
+VENDOR=                  # OEM vendor. Exported into every option's fetch.sh and post-patch.sh,
+                         # so an option can branch on it -- not merely informational.
 SOC=                     # SoC id, used to gate options that only suit some hardware
 
 # ---- base ----

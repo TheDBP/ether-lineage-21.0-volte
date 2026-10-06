@@ -41,7 +41,10 @@ a case whose answer you already know before believing a clean result.
 Park the old branch on the inactive slot and boot it. Same phone, same blob, one variable changed.
 
 ```
-tools/ota-extract.sh lineage-22.2-....zip /path/scratch --flash a --os-only
+# any older build of this device that worked -- an official LineageOS zip, or one of your own
+# kept from before the bump. (The bonito 22.2 branch this was first done on is retired; its
+# history is the archive/lineage-22.2 tag, but the zip is the thing you need, not the source.)
+tools/ota-extract.sh <older-build>.zip /path/scratch --flash a --os-only
 fastboot set_active a && fastboot reboot
 ```
 

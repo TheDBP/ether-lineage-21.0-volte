@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=ad6b6cec21e5674fab5a76dafb21e6e269b3a424
-subject=bootstrap: --help, reject unknown flags, and say when device.conf is blank
-synced=2026-10-06T19:05:39Z
+commit=753897f8170f0a37e34ea104942ba71866c67508
+subject=docs: three claims that moved on
+synced=2026-10-06T19:07:33Z

@@ -1,7 +1,9 @@
 # LineageOS branch landscape — which branch to actually target
 
 Verified 2026-09-09 against the LineageOS org over the network. Re-check with the commands at the
-bottom rather than trusting the tables; branches move.
+bottom rather than trusting the tables; branches move, and this one has: the devices here have since
+moved to `lineage-24.0`, and their 22.2 ports are retired (preserved as `archive/lineage-22.2`
+tags). Treat the tables below as a worked example of how to choose, not as current state.
 
 ## Version mapping
 
