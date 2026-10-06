@@ -135,7 +135,7 @@ apply_option_prepatch() {
     echo "   (option $oname -- COMPAT='${COMPAT:-all}' doesn't match this device; skipping)"; return 0
   fi
   # Patches are BRANCH-SCOPED: patches/<branch>/<project>/*.patch. They are diffs against upstream
-  # source, and upstream source differs per release -- themed-icons alone has three distinct versions
+  # source, and upstream source differs per release -- themed-icons alone has five distinct versions
   # across 19.1, 20.0 and 22.2. Everything else in an option (product.mk, tree/, hooks) is our own
   # text and applies to every branch unchanged, so only this part is scoped.
   local pdir="$odir/patches/$BRANCH"

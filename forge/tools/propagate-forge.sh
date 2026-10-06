@@ -62,6 +62,10 @@ fi
 # change passes through. Checked for ALL targets before syncing any, so a refusal leaves nothing
 # half-propagated.
 _ostale=()
+# The engine's own options list is generated the same way and was the one nobody checked: before it
+# existed, no file in this repo named a single concrete option, so `volte`, `bringup` and the rest
+# were discoverable only by `ls options/`.
+"$(dirname "$0")/gen-option-index.py" --check "$FORGE/options/README.md" >/dev/null 2>&1 || _ostale+=("rom-forge/options")
 for d in "${TARGETS[@]}"; do
   [ -f "$d/README.md" ] || continue
   "$(dirname "$0")/gen-option-index.py" --check "$d/README.md" >/dev/null 2>&1 || _ostale+=("$(basename "${d%/}")")

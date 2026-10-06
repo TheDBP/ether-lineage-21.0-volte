@@ -28,6 +28,8 @@ while [ "$#" -gt 0 ]; do
     --device)   INPLACE="${2:?}";  shift 2 ;;
     --branch)   BRANCH="${2:?}";   shift 2 ;;
     --no-probe) NO_PROBE=true;     shift ;;
+    --vendor)   [ $# -ge 2 ] || { echo "!! --vendor needs a value"; exit 2; }
+                VENDOR_HINT="$2";  shift 2 ;;
     -h|--help)  sed -n '2,12p' "$0"; exit 0 ;;
     *)          DEST="$1";         shift ;;
   esac
@@ -40,11 +42,11 @@ if [ -n "$INPLACE" ]; then
   DEST="$FORGE_SRC/devices/$INPLACE"
   [ -n "$CODENAME" ] || CODENAME="$INPLACE"
 fi
-[ -n "$DEST" ] || { echo "usage: $0 [--codename <name>] [--branch <lineage-XX.X>] [--no-probe] {<path> | --device <name>}"; exit 1; }
+[ -n "$DEST" ] || { echo "usage: $0 [--codename <name>] [--vendor <v>] [--branch <lineage-XX.X>] [--no-probe] {<path> | --device <name>}"; exit 1; }
 
 # ---- discovery -------------------------------------------------------------------------------
 # Lookups, not guesses. A failed step leaves the value blank: a wrong value builds the wrong phone.
-VENDOR_FOUND=""; PRODUCT=""; DEPS_JSON=""; BLOBS_REPO=""; BRANCHES=""
+VENDOR_FOUND=""; VENDOR_HINT="${VENDOR_HINT:-}"; PRODUCT=""; DEPS_JSON=""; BLOBS_REPO=""; BRANCHES=""
 
 if [ "$NO_PROBE" != true ]; then
   if [ -z "$CODENAME" ] && command -v adb >/dev/null 2>&1; then
@@ -55,11 +57,20 @@ fi
 
 if [ -n "$CODENAME" ] && [ "$NO_PROBE" != true ]; then
   echo ">> looking for a LineageOS device tree for '$CODENAME' ..."
-  for v in google lge nextbit xiaomi samsung oneplus motorola sony asus nothing fairphone essential razer zuk; do
+  # The hint comes first: start-here.sh has already found the repo through the GitHub search API,
+  # which knows every vendor, and passing what it found beats re-deriving it here. Without it this
+  # loop silently answered "no such device" for any vendor missing from the list -- LineageOS also
+  # ships htc, zte, lenovo, sharp, realme, fxtec and wileyfox trees -- and the caller then wrote a
+  # device.conf with DEVICE, VENDOR and LUNCH_TARGET blank and no local manifest, while reporting
+  # success.
+  for v in ${VENDOR_HINT:+"$VENDOR_HINT"} google lge nextbit xiaomi samsung oneplus motorola sony \
+           asus nothing fairphone essential razer zuk htc zte lenovo sharp realme fxtec wileyfox \
+           nubia oppo vivo tcl bq; do
     if git ls-remote --exit-code --heads "https://github.com/LineageOS/android_device_${v}_${CODENAME}" >/dev/null 2>&1; then
       VENDOR_FOUND="$v"; break
     fi
   done
+  [ -z "$VENDOR_FOUND" ] && [ -n "$VENDOR_HINT" ] && echo "   !! --vendor $VENDOR_HINT given, but no LineageOS tree for ${VENDOR_HINT}_${CODENAME}"
   if [ -n "$VENDOR_FOUND" ]; then
     REPO="https://github.com/LineageOS/android_device_${VENDOR_FOUND}_${CODENAME}"
     echo "   found: LineageOS/android_device_${VENDOR_FOUND}_${CODENAME}"

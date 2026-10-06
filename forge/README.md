@@ -70,7 +70,7 @@ Three independent switches:
 
 | switch | what it adds | what it needs from you |
 |---|---|---|
-| **GApps** | Google Play Services and the Play Store | a GApps zip (set `GAPPS_URL`) |
+| **GApps** | Google Play Services and the Play Store | nothing — the URL is derived from the branch; `GAPPS_URL` only overrides it |
 | **OEM assets** | the manufacturer's boot animation, sounds and wallpapers | a stock ROM the forge already has a pack for — currently only the Nextbit Robin ([docs/OEM-ASSETS.md](docs/OEM-ASSETS.md)) |
 | **root** | a Magisk-patched boot image, plus a standalone `boot-magisk.img` | nothing |
 

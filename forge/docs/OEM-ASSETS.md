@@ -69,7 +69,9 @@ device tree for a device to be able to use an asset pack.
 | pack-specific properties | `vendor/extra/oem-assets/assets.mk` | `-include`d by the option; the default ringtone and friends |
 | pack-specific **variables** | `vendor/extra/oem-assets/assets-vars.mk` | `-include`d by the DEVICE makefile; this is where `OEM_DEFAULT_WALLPAPER` lives |
 
-Everything is gated on `WITH_OEM=true`, which is set when a preset's option list contains `oem`.
+Everything is gated on `WITH_OEM=true` — which you never set yourself. `_build_rom.sh` derives it
+inside the container from the resolved option set; `bootstrap.sh` does not read it at all, so
+passing it on the command line builds with no OEM assets and says nothing.
 
 Two files, because of *who reads them* and *when*. The option's fragment lands in
 `vendor/extra/product.mk`, which LineageOS inherits **after** the device makefile. Anything a device
@@ -84,7 +86,7 @@ The sounds step keeps only files not already in LineageOS (on the Robin: 12 of 1
 ## 4. Build with them
 
 ```sh
-WITH_OEM=true ./bootstrap.sh
+EXTRA_OPTIONS=oem ./bootstrap.sh
 # or a preset whose options include oem:
 PRESET=full ./bootstrap.sh
 ```

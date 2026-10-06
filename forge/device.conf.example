@@ -12,7 +12,7 @@ VENDOR=                  # OEM vendor (informational)
 SOC=                     # SoC id, used to gate options that only suit some hardware
 
 # ---- base ----
-BRANCH=                  # e.g. lineage-22.2
+BRANCH=                  # e.g. lineage-24.0
 BASE_REF=                # upstream tracking ref, usually m/<BRANCH>
 LUNCH_TARGET=
 MANIFEST_URL=https://github.com/LineageOS/android.git
@@ -41,7 +41,8 @@ COMMON_OPTIONS="nav-icons"
 
 # One build command produces one image. A preset is a saved selection, so the combinations you
 # actually use do not get retyped: `PRESET=clean ./forge/bootstrap.sh`.
-# `libre` is the one release.sh will publish: no Google apps, nothing reclaimed from a manufacturer.
+# release.sh publishes the FIRST preset below whose options contain neither gapps nor oem -- with
+# these rows that is `clean`, not `libre`. Order the rows accordingly, or pass --preset to choose.
 PRESETS="
   clean   tag=clean         options=
   libre   tag=libre         options=fdroid,k9,kdeconnect,connectbot
