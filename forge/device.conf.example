@@ -2,7 +2,8 @@
 #
 # Lives at the device repo root, beside forge/ and overlay/. Copy this file, fill it in, delete the
 # parts you do not need. The forge scripts `source` it, so keep it valid shell: KEY=value, no spaces
-# around `=`. See forge/README.md for the full contract.
+# around `=`. This file IS the per-key reference -- forge/README.md describes the build, not the
+# keys, and the device template's own device.conf is the filled-in example.
 
 # ---- identity ----
 DEVICE=                  # <vendor>/<codename> — the path under device/
@@ -122,7 +123,14 @@ PRESETS="
 #   APEX_EROFS_UNSUPPORTED=true   this kernel has no CONFIG_EROFS_FS, so prebuilt APEXes must be
 #                        repacked with an ext4 payload or apexd fails to mount them (GOTCHAS 33).
 #   KERNEL_EXTRA_CONFIGS names of fragments in forge/kernel-configs/ to merge into the defconfig.
-#   KERNEL_EXTRA_PATCHES names of patches in forge/kernel-patches/ to apply.
+#                        Shipped: container (what a container runtime needs), container-fhandle
+#                        (CONFIG_FHANDLE, split out because some VINTF matrices forbid it),
+#                        bpf-events (tracing BPF program types -- without it every .bpf under
+#                        /system/etc/bpf fails to load with a bare EINVAL).
+#   KERNEL_EXTRA_PATCHES names of patches in forge/kernel-patches/ to apply. Shipped:
+#                        cgroup-noprefix-symlinks (runc cannot find the control files on an Android
+#                        NOPREFIX cgroup hierarchy without it; needs kernfs, so not on 3.10) and
+#                        drm-force-disable-trace (traces whoever disables a DRM plane or CRTC).
 #   KERNEL_EXTRA_PATCHES_OPTIONAL   of those, the ones that may fail to apply without failing the
 #                        build -- for a patch that only some kernels in a family need.
 #   REPO_REFERENCE       path to a shared git object store, passed to `repo init --reference`. The

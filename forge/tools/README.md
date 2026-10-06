@@ -199,7 +199,9 @@ actually fails, so they are worth knowing by name.
 | `bootstrap.sh` | the orchestrator — reads `device.conf`, then `device.conf.local` if present, syncs, applies the overlay, builds |
 | `lib/presets.sh` | resolves a preset name into an option list and a build tag. `EXTRA_OPTIONS` is unioned in here, and the tag suffix for each option it adds (`-oem`, `-nextcloud`) is derived here rather than written by hand |
 | `docker/prefetch.sh` | downloads the build's network inputs into `/dl` in-container, so they overlap `repo sync` instead of running after it. A set-but-failed download is fatal, deliberately |
+| `docker/aosp.sh` | runs one command inside the build container, with the tree, ccache and downloads mounted |
 | `docker/_build_rom.sh` | runs the build inside the container and calls each enabled option's `require.sh` before and `post-build.sh` after |
+| `docker/_build_target.sh` | builds one make target in the container, for iterating on a single module without a full build |
 | `prebuilt/lib-fdroid.sh` | the F-Droid fetch: resolves the suggested build of a package, verifies package name, ABI and the pinned signer certificate, unpacks native libraries the APK packs compressed, writes the Soong module file |
 | `prebuilt/fetch-firefox.sh`, `fetch-fulguris.sh`, `fetch-fdroid.sh`, `fetch-k9.sh`, `fetch-kdeconnect.sh`, `fetch-termoneplus.sh`, `fetch-nextcloud.sh`, `fetch-linphone.sh`, `fetch-connectbot.sh`, `fetch-syncthing-fork.sh`, `fetch-openvpn.sh` | the per-option fetchers on top of it: package, signer pin, module names |
 | `prebuilt/lib-app-checks.sh` | the `require.sh` / `post-build.sh` checks those options share: APKs present and named in the module file; shipped byte-identical, libraries installed beside |
