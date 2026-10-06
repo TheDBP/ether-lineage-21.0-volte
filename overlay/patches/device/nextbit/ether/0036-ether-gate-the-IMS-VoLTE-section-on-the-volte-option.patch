@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Tue, 6 Oct 2026 13:08:28 -0400
+Subject: [PATCH] ether: gate the IMS/VoLTE section on the volte option
+
+The staging and the $(error) beneath it were unconditional, so a clone without
+Ether_Stock_ROM_*.zip could not build this device at all. The error is right
+when VoLTE was asked for; it is wrong as the only way to build.
+
+Wrap the section in WITH_VOLTE. The guarantee it was written for is unchanged --
+silent absence is still impossible, because bootstrap.sh refuses outright when
+volte is requested without the firmware, announces the OFF case, and marks the
+build tag -novolte. What changed is that "no stock ROM" now has an answer other
+than "you cannot build".
+---
+ device.mk | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/device.mk b/device.mk
+index a30bbbb..f72fb43 100644
+--- a/device.mk
++++ b/device.mk
+@@ -340,6 +340,18 @@ endif
+ # through to the skin's. -include, so a build without the pack staged is still fine.
+ -include vendor/extra/oem-assets/assets-vars.mk
+ 
++# ---- VoLTE: everything down to block_binder_thread_on_incoming_calls ----------------------------
++# Gated on the forge's `volte` option, which turns itself on whenever a stock ROM is present and off
++# when it is not. Before the gate this section was unconditional, so a clone without the stock zip
++# could not build at all -- the $(error) below was the only outcome. The error is still right when
++# VoLTE was asked for; it is wrong as the only way to build this device.
++#
++# The switch does NOT weaken the guarantee it was written for. Silent absence is still impossible:
++# bootstrap.sh refuses outright if volte was requested and the firmware is missing, and announces
++# the OFF case on stdout and in the build tag. What changed is that "no stock ROM" now has an
++# answer other than "you cannot build".
++ifeq ($(WITH_VOLTE),true)
++
+ # IMS / VoLTE blobs and the rebuilt ims.apk, staged out of the stock ROM at product-config time.
+ #
+ # This used to be a hand-run step before the build, and that failed silently in the worst way:
+@@ -395,6 +407,8 @@ PRODUCT_PACKAGES += libshim_vtsurface
+ # want to avoid blocking the binder thread".
+ PRODUCT_PROPERTY_OVERRIDES += ro.telephony.block_binder_thread_on_incoming_calls=false
+ 
++endif   # WITH_VOLTE
++
+ # persist.data.iwlan.enable is the QTI switch for the IWLAN data path, which is what an ePDG tunnel
+ # rides on. Stock sets it on this device and this port did not carry it over. Without it the modem
+ # accepts the Wi-Fi calling configuration -- the log shows wifi_call: 2 and wfc_preference stored

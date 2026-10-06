@@ -202,10 +202,13 @@ published.
 
 ## Building
 
-> **You must supply the Robin's stock ROM.** VoLTE here is Nextbit's own Nougat IMS stack rebuilt
-> to bind to a modern `ImsService`. Those blobs are proprietary, so this repo carries the recipe and
-> none of the ingredients. **Every preset includes IMS**, so a tree without the stock ROM does not
-> quietly build a ROM lacking VoLTE — it stops with an error.
+> **VoLTE needs the Robin's stock ROM, which cannot be shipped here.** It is Nextbit's own Nougat
+> IMS stack rebuilt to bind to a modern `ImsService` — proprietary blobs, so this repo carries the
+> recipe and none of the ingredients.
+>
+> Leave it out and **the build still works** — it just ships without VoLTE, says so while it runs,
+> and names the image `-novolte`. Asking for `volte` explicitly without the zip stops the build
+> rather than handing you an image that cannot place a call.
 >
 > Drop a `Ether_Stock_ROM_*.zip` (Nextbit `Robin_Nougat_108` or later) in the **root of this repo**;
 > the name must match that glob. The first build stages the IMS blobs out of it automatically (~2
