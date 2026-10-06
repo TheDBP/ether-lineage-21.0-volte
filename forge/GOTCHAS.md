@@ -342,3 +342,16 @@ holding the tree and `out/`, and the next build you start races it. Wait on `doc
 container (or `docker stop` it) before touching the tree; never read a host `timeout` as the build
 having stopped.
 
+## 35. Disassembling a stripped 32-bit ARM blob without saying which instruction set
+
+A stripped vendor `.so` has no `$a`/`$t` mapping symbols, so `llvm-objdump -d` picks ARM and decodes
+Thumb code into *plausible garbage*: no call sites, branch targets into the middle of unrelated
+symbols, stray `svclt`/`blls`. It does not warn, and the output looks like a disassembly, so you
+conclude the blob never calls the thing you were looking for. Decode both ways
+(`--triple=thumbv7-linux-android`, `--triple=armv7-linux-android`) and keep whichever actually
+resolves calls -- `blob-log-tags.py` does this. Forcing the wrong one can also abort llvm-objdump
+outright (`LLVM ERROR: tBcc: expected 3 operands`), which is an answer about the triple, not a
+broken file. Also remember 32-bit vendor code is usually PIC: a literal is a pc-relative *offset*
+followed by `add rN, pc`, so resolving an address means applying the pc bias (+8 ARM, +4 from the
+word-aligned address in Thumb), not reading the literal directly.
+

@@ -133,9 +133,17 @@ public class LegacyMMTelFeature extends MMTelFeature {
             boolean video = s.isConnected(mServiceId, 1, 4 /* VT */);
             int[] enabled = {-1, -1, -1, -1, -1, -1};
             int[] disabled = {-1, -1, -1, -1, -1, -1};
+            // The array is indexed BY legacy feature id and the value must equal the index;
+            // MmTelFeatureCompatAdapter.convertCapabilities() reads enabledFeatures[i] == i and
+            // treats -1 (FEATURE_TYPE_UNKNOWN) as disabled. 0 VOICE_OVER_LTE, 1 VOICE_OVER_WIFI,
+            // 2 VIDEO_OVER_LTE, 3 VIDEO_OVER_WIFI, 4 UT_OVER_LTE, 5 UT_OVER_WIFI -- so video
+            // belongs at 2, not 1. Only enabledFeatures is read; disabled is sent for symmetry.
             (voice ? enabled : disabled)[0] = 0;   // FEATURE_TYPE_VOICE_OVER_LTE
-            (video ? enabled : disabled)[1] = 1;   // FEATURE_TYPE_VIDEO_OVER_LTE
-            for (int f = 2; f < 6; f++) disabled[f] = f;   // no WFC / UT over IMS from @OEM_APP@ yet
+            (video ? enabled : disabled)[2] = 2;   // FEATURE_TYPE_VIDEO_OVER_LTE
+            disabled[1] = 1;                       // no VoWiFi from the OEM app yet (registered over LTE)
+            disabled[3] = 3;
+            disabled[4] = 4;                       // UT goes over the Ut interface, not a feature
+            disabled[5] = 5;
             Log.i(TAG, "slot " + mSlotId + ": no feature bitmap from @OEM_APP@ after open; probed voice="
                     + voice + " video=" + video);
             mRegistration.registrationFeatureCapabilityChanged(SERVICE_CLASS_MMTEL, enabled,
