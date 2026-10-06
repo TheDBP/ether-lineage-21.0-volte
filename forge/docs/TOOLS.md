@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-89 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+90 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -93,6 +93,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`run-one.sh`](../tools/run-one.sh) | build exactly one device, and refuse if anything else is already building | `run-one.sh` | — |
 | [`sideload-flash.sh`](../tools/sideload-flash.sh) | unattended recovery flash of a ROM zip: | `sideload-flash.sh <rom.zip> [--wipe] [--recovery <img>] [-s SERIAL] [--check '<shell cmds>'] [--timeout S]` | — |
 | [`slot-switch.sh`](../tools/slot-switch.sh) | switch an A/B device between the ROMs parked on its two slots, wiping the shared /data so the older one can boot, and putting the fresh install straight on the launcher | `slot-switch.sh <a\|b> [--keep-data] [--no-provision] [-s SERIAL]` | — |
+| [`stub-smali-method.py`](../tools/stub-smali-method.py) | replace the body of named methods in a smali tree with a constant return, | `stub-smali-method.py <smali-dir> <rules-file> [--dry-run]` | — |
 | [`super-loop-mount.sh`](../tools/super-loop-mount.sh) | mount a dynamic (logical) partition from recovery without device-mapper | `super-loop-mount.sh --list                       partitions, extents, byte offsets` | — |
 | [`symbolize-odex-pcs.py`](../tools/symbolize-odex-pcs.py) | Turn the bare "pc 0000000002430 70c  /system/framework/oat/arm64/services.odex" frames of an ANR/tombstone native dump into Java method names | `symbolize-odex-pcs.py` | — |
 | [`sync-forge.sh`](../tools/sync-forge.sh) | vendor forge/ into a device repo from rom-forge at a pinned ref | `sync-forge.sh` | — |
