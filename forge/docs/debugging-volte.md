@@ -567,3 +567,26 @@ process running as radio/system fails on exactly that service while every other 
 - Instance `4294967295` is "all instances"; GIDs that matter are usually 1000 system, 1001 radio,
   3004 net_raw.
 
+## Testing an OEM IMS helper daemon without building a ROM
+
+The OEM stack delegates steps to small daemons stock's init started (IPsec for the REGISTER security
+agreement, a WMS proxy for SMS over IMS). You can prove or disprove one in minutes, no build:
+
+1. **Extract both ABIs from the stock image** and match the daemon:
+   `debugfs -R 'ls -l /vendor/lib64' system.image` then
+   `debugfs -R 'dump /vendor/lib64/<lib> <out>' system.image`. Same-named libraries exist under
+   `/vendor/lib` and `/vendor/lib64`; the wrong one fails at link with "is 32-bit instead of 64-bit".
+2. **Place it by namespace, not by where stock had it** -- `/vendor/bin` if it links vendor libs
+   (GOTCHAS 37).
+3. **Run it from a root shell**, not init: init cannot exec a label with no `exec_type`, and the root
+   shell's `u:r:su:s0` is permissive on userdebug, so policy is out of the way for the experiment.
+4. **Check the abstract sockets**, which is how these daemons rendezvous with the OEM app:
+   `grep '@/tmp/...' /proc/net/unix` should show both the app's and the daemon's names once the
+   chain is live.
+5. **Expect the app to retry.** The OEM app may re-attempt its init on a timer (LG's SMS-over-IMS
+   client retries every ~3 s), so the daemon does not have to be up before the app -- which means
+   you can iterate without rebooting. Confirm from the log before assuming launch order matters.
+
+What this cannot test is the sepolicy domain the real patch needs, so treat a success here as
+"the chain works", not "it is ready to ship".
+

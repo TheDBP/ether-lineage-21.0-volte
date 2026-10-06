@@ -370,3 +370,27 @@ burying real crashes in the log. When triaging a crash-looping OEM blob, check `
 `persistent` in its manifest before its code -- and check whether anything needs it at all, since a
 blob list generated from a stock dump carries carrier apps the port will never use.
 
+## 37. A pre-Treble OEM binary from /system/bin that links vendor libs
+
+Stock ROMs from before Treble put everything in `/system`, so an OEM daemon living in
+`/system/bin` happily linked `/system/vendor/lib64`. Restage it at the same path on a Treble build
+and the linker refuses:
+
+    CANNOT LINK EXECUTABLE "/system/bin/<daemon>": library "libqmi_client_qmux.so" not found
+
+The library is present -- a `/system/bin` executable runs in the *system* linker namespace, which
+cannot see `/vendor/lib64`. Put anything that links vendor libs in `/vendor/bin` (where the SoC's
+own daemons already live), not where stock had it. Check with `llvm-readelf -d <bin> | grep NEEDED`
+and resolve each against both namespaces before assuming a library is missing.
+
+Two more traps in the same restage:
+- **init cannot exec a plain `vendor_file`.** `avc: denied { execute } ... comm="init"` then
+  `cannot execv(...): Permission denied`. An init service's binary needs an `exec_type` label and a
+  domain; until the policy exists, test by running it from a root shell (`u:r:su:s0` is permissive
+  on userdebug) rather than from init, or pin `seclabel u:r:su:s0` in the rc.
+- **init parses rc files only at boot.** Editing `/system/etc/init/*.rc` and running
+  `start <svc>` reuses the old definition; reboot or you will debug a path you already fixed.
+- **A stock image ships both ABIs.** `/vendor/lib` and `/vendor/lib64` hold same-named libraries;
+  extracting the wrong one gives `is 32-bit instead of 64-bit` at link time. Match the daemon:
+  `file -b` on both before pushing.
+
