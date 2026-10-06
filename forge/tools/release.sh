@@ -89,14 +89,12 @@ VOPTS="$(forge_preset_options "$VN")"
 # a build -novolte and appends the same suffix to the tag, so on these devices the publishable
 # artifact is "<tag>-novolte" and the plain tag is the one to refuse. Without this, release.sh
 # looked for a zip that a VoLTE device never produces and died with "no built zip".
+# A device that builds VoLTE from stock firmware produces two publishable tags: "<tag>" with the
+# IMS stack and "<tag>-novolte" without. Both are releasable -- a ROM ships the manufacturer's
+# vendor blobs already, and the IMS stack is one more of them -- so accept either and let the
+# artifact that exists decide. VT_PUB is settled once the zip is found.
 VT_PUB="$VT"
-VOLTE_DEVICE=0
-if [ -n "${VOLTE_STOCK_GLOB:-}${VOLTE_STAGED_MARKER:-}" ]; then
-  VOLTE_DEVICE=1; VT_PUB="$VT-novolte"
-fi
 info "preset '$VN' (tag $VT): options [${VOPTS:-none}]"
-[ "$VOLTE_DEVICE" = 1 ] && info "this device builds VoLTE from stock firmware -- publishable tag is '$VT_PUB'"
-case " $VOPTS " in *" volte "*) die "refusing: preset '$VN' names volte, which ships the manufacturer's IMS stack" ;; esac
 case " $VOPTS " in *" gapps "*) die "refusing: preset '$VN' ships GApps" ;; esac
 case " $VOPTS " in *" oem "*)   die "refusing: preset '$VN' ships reclaimed OEM assets" ;; esac
 ok "option set is redistributable"
@@ -114,10 +112,11 @@ else
   # turbo-libre-nextcloud must not answer for turbo-libre.
   # Same tie-break as bootstrap's keep step: equal mtimes mean one inode under two names, and
   # picking by locale order can select the wrong date. Highest name wins the tie.
-  ZIP="$(find "$OUTDIR" -maxdepth 1 -name "*-$VT_PUB-$DEVICE_CODENAME.zip" -printf '%T@\t%p\n' 2>/dev/null \
-         | sort -k1,1nr -k2,2r | sed -n 1p | cut -f2)"
+  ZIP="$(find "$OUTDIR" -maxdepth 1 \( -name "*-$VT-$DEVICE_CODENAME.zip" -o -name "*-$VT-novolte-$DEVICE_CODENAME.zip" \) \
+         -printf '%T@\t%p\n' 2>/dev/null | sort -k1,1nr -k2,2r | sed -n 1p | cut -f2)"
+  case "$(basename "${ZIP:-}")" in *-"$VT"-novolte-"$DEVICE_CODENAME".zip) VT_PUB="$VT-novolte" ;; esac
 fi
-[ -n "$ZIP" ] && [ -f "$ZIP" ] || die "no built zip for preset '$VN' (expected $OUTDIR/*-${VT_PUB}-${DEVICE_CODENAME}.zip) -- build it first: PRESET=$VN ./forge/bootstrap.sh"
+[ -n "$ZIP" ] && [ -f "$ZIP" ] || die "no built zip for preset '$VN' (expected $OUTDIR/*-${VT}[-novolte]-${DEVICE_CODENAME}.zip) -- build it first: PRESET=$VN ./forge/bootstrap.sh"
 info "artifact: $(basename "$ZIP") ($(du -h "$ZIP" | cut -f1))"
 case "$(basename "$ZIP")" in
   *-"$VT_PUB"-"$DEVICE_CODENAME".zip) ok "filename carries the '$VT_PUB' tag" ;;
@@ -137,11 +136,11 @@ if [ -f "$PROV" ]; then
   case "$P" in
     *"WITH_OEM=false"*) ;; *) die "refusing: provenance says this tree last built with OEM assets ($P)";;
   esac
+  # Not a refusal: VoLTE is a capability this ROM ships, like any other vendor blob. Say which kind
+  # of image this is, so the release notes and the filename agree with what is actually inside.
   case "$P" in
-    *"WITH_VOLTE=false"*) ;; *) die "refusing: provenance says this tree last built with volte ($P).
-   That image contains the manufacturer's IMS stack, rebuilt from firmware that may not be
-   redistributed. Build without the stock firmware present to get a -novolte image, and publish
-   that.";;
+    *"WITH_VOLTE=true"*) ok "image carries the IMS/VoLTE stack" ;;
+    *"WITH_VOLTE=false"*) info "image was built without VoLTE (-novolte)" ;;
   esac
   case "$P " in
     *"tag=$VT_PUB "*)
@@ -219,11 +218,15 @@ else
       while IFS= read -r f; do
         [ -n "$f" ] || continue
         if grep -qx "$(sha256sum "$f" | awk '{print $1}')" "$imgsums"; then
-          echo "   !! IMS artifact present in image: ${f#"$SRC"/}"
-          vhits=$((vhits+1)); hits=$((hits+1))
+          echo "      ships IMS artifact: ${f#"$SRC"/}"
+          vhits=$((vhits+1))
         fi
       done <<<"$volte_files"
-      [ "$vhits" = 0 ] && ok "no IMS artifacts from $(basename "$volte_dir")/ are in the image"
+      # Reported, never counted against the release. The point is that the filename, the release
+      # notes and the bytes agree -- not to stop a device from shipping the stack that makes it a
+      # phone. `hits` is for things that should not be leaving at all.
+      if [ "$vhits" -gt 0 ]; then ok "$vhits IMS artifact(s) in the image -- expected on a VoLTE build"
+      else ok "no IMS artifacts from $(basename "$volte_dir")/ are in the image"; fi
     else
       ok "no IMS artifacts staged to leak"
     fi

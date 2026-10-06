@@ -515,8 +515,8 @@ only facts about *that phone*: a kernel config, a HAL fix, an SoC quirk. Anythin
 in an option, and the split is the point.
 
 Two other things here that the alternatives do not have, for whatever they are worth: a release path
-that inspects the built image and refuses to publish assets that are not yours
-([docs/RELEASING.md](docs/RELEASING.md)), and [GOTCHAS.md](GOTCHAS.md), which is a list of traps that
+that inspects the built image rather than its label, and refuses to publish Google's apps or
+reclaimed manufacturer art ([docs/RELEASING.md](docs/RELEASING.md)), and [GOTCHAS.md](GOTCHAS.md), which is a list of traps that
 have actually cost time rather than a list of features.
 
 **Also worth a look:** [Akipe/awesome-android-aosp](https://github.com/Akipe/awesome-android-aosp)

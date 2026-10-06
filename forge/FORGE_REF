@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=8ede8ac46ea10a1239973f5a4844b358de433fe6
-subject=release: refuse to publish the manufacturer's IMS stack
-synced=2026-10-06T18:43:21Z
+commit=fbb9c5573bdb8af53e6633ec1f54072fdf10017e
+subject=release: VoLTE is a shipped capability, not contraband
+synced=2026-10-06T18:46:53Z
