@@ -111,6 +111,25 @@ public class ConfigWrapper extends com.android.ims.internal.IImsConfig.Stub {
     public void setFeatureValue(int feature, int network, int value,
             com.android.ims.ImsConfigListener listener) throws RemoteException {
         mLegacy.setFeatureValue(feature, network, value, wrap(listener));
+        // @OEM_APP@ accepts the value but never calls the listener back, and the framework's
+        // changeEnabledCapabilities() waits on a 2 s CountDownLatch per capability. One switch in
+        // SIM settings pushes about ten capability changes, i.e. ~20 s of blocked binder threads --
+        // enough to ANR Settings (seen 2026-10-05) and to collide with call setup. Acknowledge the
+        // value we were asked to set, with the same feature/network or the framework discards it
+        // as "response different than requested" and waits out the latch anyway.
+        //
+        // This does not fake a capability: what decides whether a call may use IMS is the
+        // registration feature bitmap, and @OEM_APP@ keeps its own feature state regardless of this
+        // call. If @OEM_APP@ ever does answer, the latch is already released and the late callback is
+        // a no-op.
+        if (listener != null) {
+            try {
+                listener.onSetFeatureResponse(feature, network, value,
+                        com.android.ims.ImsConfig.OperationStatusConstants.SUCCESS);
+            } catch (RemoteException e) {
+                Log.w(TAG, "synthesized setFeatureValue ack failed", e);
+            }
+        }
     }
 
     @Override

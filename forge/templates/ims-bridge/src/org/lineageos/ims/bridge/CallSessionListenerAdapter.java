@@ -53,16 +53,21 @@ class CallSessionListenerAdapter extends IImsCallSessionListener.Stub {
 
     @Override
     public void callSessionStarted(IImsCallSession s, ImsCallProfile p) throws RemoteException {
+        // The modem carries the voice media; the audio HAL only opens the path once it is
+        // told the session is active. See ModemVoiceSession.
+        ModemVoiceSession.setActive(true);
         mTarget.callSessionStarted(modern(s), Convert.toModern(p));
     }
 
     @Override
     public void callSessionStartFailed(IImsCallSession s, ImsReasonInfo r) throws RemoteException {
+        ModemVoiceSession.setActive(false);
         mTarget.callSessionStartFailed(modern(s), Convert.toModern(r));
     }
 
     @Override
     public void callSessionTerminated(IImsCallSession s, ImsReasonInfo r) throws RemoteException {
+        ModemVoiceSession.setActive(false);
         mTarget.callSessionTerminated(modern(s), Convert.toModern(r));
     }
 

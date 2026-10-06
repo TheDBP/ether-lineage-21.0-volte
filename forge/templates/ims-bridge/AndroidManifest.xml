@@ -15,6 +15,9 @@
       in the device tree, together.
     -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- normal permission; needed for AudioManager.setParameters to open the modem
+         voice path on an IMS call (see ModemVoiceSession). -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
         android:label="IMS Bridge"

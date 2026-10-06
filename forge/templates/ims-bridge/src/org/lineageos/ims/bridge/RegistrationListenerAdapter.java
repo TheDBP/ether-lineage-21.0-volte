@@ -2,6 +2,7 @@ package org.lineageos.ims.bridge;
 
 import android.net.Uri;
 import android.os.RemoteException;
+import static android.telephony.ServiceState.RIL_RADIO_TECHNOLOGY_LTE;
 import android.util.Log;
 
 import @LEGACY_PKG@.ImsReasonInfo;
@@ -40,6 +41,16 @@ class RegistrationListenerAdapter extends IImsRegistrationListener.Stub {
     private int[] mEnabledFeatures;
     private int[] mDisabledFeatures;
     private Uri[] mUris;
+
+    /**
+     * Run when registration transitions to connected. The feature uses it to probe the capability
+     * bitmap: @OEM_APP@ emits registrationFeatureCapabilityChanged only on a UC state CHANGE, and it
+     * registers tens of seconds after the framework opens the session, so a probe done once at
+     * open() time always runs too early and leaves the framework with an empty capability set.
+     */
+    private Runnable mOnConnected;
+
+    void setOnConnected(Runnable r) { mOnConnected = r; }
 
     void add(com.android.ims.internal.IImsRegistrationListener target) {
         if (target == null || mTargets.contains(target)) return;
@@ -104,8 +115,15 @@ class RegistrationListenerAdapter extends IImsRegistrationListener.Stub {
 
     @Override
     public void registrationConnected() throws RemoteException {
-        synchronized (this) { mRegState = 2; mRadioTech = -1; }
-        fanOut("registrationConnected", t -> t.registrationConnected());
+        // Report LTE rather than passing the missing tech through. @OEM_APP@ says "connected" with no
+        // radio tech, which ImsRegistrationCompatAdapter maps to REGISTRATION_TECH_NONE -- and
+        // ImsPhoneCallTracker.isImsCapabilityInCacheAvailable() is
+        // `getImsRegistrationTech() == regTech && mMmTelCapabilities.isCapable(cap)`, with
+        // isVoiceOverCellularImsEnabled() only ever asking about REGISTRATION_TECH_LTE and _NR.
+        // So a tech-less registration makes the dial gate false and every call falls back to CS
+        // while IMS looks registered and VoLTE capability looks enabled. This stack only registers
+        // MMTEL over LTE; a tech @OEM_APP@ does give us is passed through untouched below.
+        registrationConnectedWithRadioTech(RIL_RADIO_TECHNOLOGY_LTE);
     }
 
     @Override
@@ -117,8 +135,12 @@ class RegistrationListenerAdapter extends IImsRegistrationListener.Stub {
     @Override
     public void registrationConnectedWithRadioTech(int imsRadioTech) throws RemoteException {
         synchronized (this) { mRegState = 2; mRadioTech = imsRadioTech; }
+        Log.i(TAG, "registrationConnected radioTech=" + imsRadioTech + " (RIL tech, "
+                + RIL_RADIO_TECHNOLOGY_LTE + "=LTE) -> " + mTargets.size() + " listener(s)");
         fanOut("registrationConnectedWithRadioTech",
                 t -> t.registrationConnectedWithRadioTech(imsRadioTech));
+        Runnable r = mOnConnected;
+        if (r != null) r.run();
     }
 
     @Override
@@ -131,6 +153,7 @@ class RegistrationListenerAdapter extends IImsRegistrationListener.Stub {
     @Override
     public void registrationDisconnected(ImsReasonInfo info) throws RemoteException {
         synchronized (this) { mRegState = 3; mDisconnectReason = info; }
+        Log.i(TAG, "registrationDisconnected: " + info);
         android.telephony.ims.ImsReasonInfo modern = Convert.toModern(info);
         fanOut("registrationDisconnected", t -> t.registrationDisconnected(modern));
     }
@@ -155,6 +178,9 @@ class RegistrationListenerAdapter extends IImsRegistrationListener.Stub {
     @Override
     public void registrationFeatureCapabilityChanged(int serviceClass,
             int[] enabledFeatures, int[] disabledFeatures) throws RemoteException {
+        Log.i(TAG, "featureCapabilityChanged from @OEM_APP@: enabled="
+                + java.util.Arrays.toString(enabledFeatures) + " disabled="
+                + java.util.Arrays.toString(disabledFeatures));
         synchronized (this) { mEnabledFeatures = enabledFeatures; mDisabledFeatures = disabledFeatures; }
         fanOut("registrationFeatureCapabilityChanged", t -> t.registrationFeatureCapabilityChanged(
                 serviceClass, enabledFeatures, disabledFeatures));

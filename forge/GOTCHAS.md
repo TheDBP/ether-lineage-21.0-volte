@@ -355,3 +355,18 @@ broken file. Also remember 32-bit vendor code is usually PIC: a literal is a pc-
 followed by `add rN, pc`, so resolving an address means applying the pc bias (+8 ARM, +4 from the
 word-aligned address in Thumb), not reading the literal directly.
 
+## 36. A legacy blob in a shared UID gets modern compat behaviour
+
+`CompatChanges.isChangeEnabled(change, uid)` is evaluated per **UID**, and for a shared UID it is
+true if the change is enabled for ANY package in it. So a 2016 blob declaring
+`sharedUserId="android.uid.system"` inherits every targetSdk-gated behaviour change from the modern
+platform apps it shares with, and its own `targetSdkVersion` buys it nothing. Seen on the V20: LG's
+`UnifiedSettingsApp` (targetSdk 26) died on the Android 14 `RECEIVER_EXPORTED` requirement
+(`@EnabledSince(UPSIDE_DOWN_CAKE)`), which should not apply to it at all.
+
+Pair that with `android:persistent="true"` and one bug becomes an infinite loop: init restarts the
+app forever, so a single `registerReceiver` throw produced 86 crashes per boot, waking the screen and
+burying real crashes in the log. When triaging a crash-looping OEM blob, check `sharedUserId` and
+`persistent` in its manifest before its code -- and check whether anything needs it at all, since a
+blob list generated from a stock dump carries carrier apps the port will never use.
+

@@ -505,3 +505,65 @@ filtering on. The shape generalises to any OEM IMS media lib.
   `avc denied { add } name=<oem_service>` under a permissive domain *succeeds*, so media works during
   bringup and dies the moment that domain is enforcing. Note `service list` from `adb shell` can
   itself be denied `find` on it -- that is the check lying, not the service missing.
+
+## The call connects and nobody can hear anything
+
+A silent call is not one bug, it is a ladder, and each rung has its own unambiguous signal. Walk it
+in order -- the symptoms of the top and bottom rungs are identical from the earpiece. Observed
+bringing LG's Ims4 up on 24.0; the layering is QTI-generic.
+
+1. **Is the media even negotiated?** If an answered call tears itself down after ~20 s with no user
+   action, that is an RTP-inactivity teardown, not a routing problem: the framework sets
+   `mRtpInactivityTimeMillis` (5 s) and the OEM stack has its own monitor
+   (`#WARNING# Can't receive peer's RTP pkts`). A call that now *stays up* until someone hangs up
+   (`onCallTerminated reasonCode=501 CODE_USER_TERMINATED`) means RTP is arriving and the problem is
+   below this rung. This single observation separates "no media" from "media but no audio" and is
+   the most useful thing to ask the person holding the phone.
+2. **Where does the media actually run?** Do not assume AP-side. Look for an `AudioTrack`/
+   `AudioRecord` in `dumpsys audio` during a call: if there is none and the audio mode is already
+   `MODE_IN_CALL`, that is not the bug -- it means the voice path is **modem-side**, which on QTI is
+   normal. The giveaways are a VSID in the OEM media log (`setAudioCalInfoParam[vsid=0x11c05000...]`)
+   and a `CP_Proxy` backend in the engine. AP-side RTP sockets can exist at the same time (check
+   `/proc/net/udp6` for the IMS uid) and are a red herring: they are the stack's own monitoring.
+3. **Can the AP talk to the modem at all?** The modem session is created over a private QMI service,
+   and that is where a port breaks -- see the IPC-router section above and run `qmi-sec-check.sh`.
+   `createMediaSession` followed by `send_msg_sync error: -16` means no session exists and nothing
+   below this rung can work.
+4. **Is the audio HAL told the session went active?** This is the rung a port silently deletes.
+   The HAL opens the earpiece/mic path in `voice_extn_set_parameters()` -> `update_call_states()`
+   when handed `vsid=<id>;call_state=<state>` (values from the HAL source, not a public API:
+   `VOICEMMODE1_VSID 0x11C05000`, `CALL_INACTIVE 1`, `CALL_ACTIVE 2`). **Nothing in AOSP ever sends
+   those keys** -- on a QTI device the vendor IMS app does it, on an OEM ROM the OEM's telephony
+   framework did, and a port replaces that with AOSP. Symptoms: `MODE_IN_CALL` is set, the HAL
+   supports `volte-call` and `voice_start_call`, the correct VSID even appears in the HAL log -- but
+   only as `update_calls: cur_state=1 new_state=1` at teardown, which is the HAL's own stop-all path,
+   not an activation. Grep for `update_call_states` ever running with state 2; if it never does, send
+   the keys yourself from whatever component knows IMS call state (for a bridge: the call-session
+   listener's started/terminated callbacks -- `templates/ims-bridge` has `ModemVoiceSession`).
+   The HAL parses both keys with `str_parms_get_int`, so send **decimal**, and confirm the VSID
+   matches the one the modem actually picked rather than hardcoding blind.
+5. **Only then suspect the codec or calibration.** AMR-WB/EVS support, ACDB, mixer paths. Everything
+   above has to be true first, and on this port none of it turned out to be the problem.
+
+## An OEM's own sec_config can omit the QMI service its own stack needs
+
+On a QTI SoC the kernel's MSM IPC router gates each QMI service by GID. `irsc_util` feeds it
+`sec_config` at boot; a service with **no rule at all** is reachable only by root, so a vendor
+process running as radio/system fails on exactly that service while every other QMI path works.
+
+- The kernel says so plainly, and it is the only unambiguous signal:
+  `IPC_RTR: msm_ipc_router_send_to: permission failure for <thread>` in `dmesg`, alongside
+  `QCCI qmi_cci_flush_tx_q: Error sending TXN: svc_id: <N>` and `xport_send: Sendto failed` in
+  logcat. The QMI layer above reports a generic transport error (`-16`) and the layer above *that*
+  usually discards even it, so without `dmesg` this looks like a silent modem.
+- `qmi-sec-check.sh` cross-references the failing service ids against the rules and prints the line
+  to add. On the V20 LG's own file granted 1-511, 704 and 4097 and omitted **703** (`lge_ims`) --
+  the service LG's own IMS media stack needs for the modem voice session.
+- **The rule must exist before the service registers.** The router binds a rule to a service at
+  registration, so running `irsc_util` by hand after boot changes nothing and makes a correct fix
+  look wrong. Put it in the file init already feeds (often a device-tree file:
+  `device/<oem>/<soc>/configs/permissions/sec_config`, installed by the device mk and run from
+  `init.qcom.rc`) and reboot.
+- Instance `4294967295` is "all instances"; GIDs that matter are usually 1000 system, 1001 radio,
+  3004 net_raw.
+

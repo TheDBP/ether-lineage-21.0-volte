@@ -36,8 +36,12 @@ done
 ADB=(adb); [ -n "$SER" ] && ADB=(adb -s "$SER")
 log(){ echo "$(date +%T) $*"; }
 state(){ "${ADB[@]}" devices 2>/dev/null | awk 'NR==2{print $2}'; }
-# wait_state <state> <seconds>
-wait_state(){ local n=0; until [ "$(state)" = "$1" ]; do sleep 5; n=$((n+5)); [ $n -gt "$2" ] && return 1; done; }
+# wait_state <state> <seconds> -- measures real elapsed time, not iterations. Counting `sleep`s
+# assumes each one actually sleeps and that `adb devices` is instant; when neither holds the loop
+# gives up early while still reporting the full timeout, which reads as a device that never
+# appeared. $SECONDS cannot drift like that. Exports WAITED so callers can report the truth.
+wait_state(){ local t0=$SECONDS; until [ "$(state)" = "$1" ]; do sleep 5
+    WAITED=$((SECONDS-t0)); [ "$WAITED" -ge "$2" ] && return 1; done; WAITED=$((SECONDS-t0)); }
 
 log "zip $ZIP"
 st=$(state)
@@ -53,14 +57,14 @@ fi
 
 if [ "$st" != sideload ]; then
   "${ADB[@]}" reboot sideload
-  wait_state sideload 300 || { log "no sideload after 300s: $(state)"; exit 1; }
+  wait_state sideload 300 || { log "no sideload after ${WAITED}s (state=[$(state)]); on some bootloaders a reboot to recovery stops at a factory-reset prompt that shows no USB and needs physical keys"; exit 1; }
 fi
 log "in sideload"
 "${ADB[@]}" sideload "$ZIP" 2>&1 | tr '\r' '\n' | tail -1
 rc=${PIPESTATUS[0]}; log "sideload done rc=$rc"
 
 if [ $WIPE = 1 ]; then
-  wait_state recovery 180 || { log "no recovery adb after 180s: $(state)"; exit 1; }
+  wait_state recovery 180 || { log "no recovery adb after ${WAITED}s (state=[$(state)])"; exit 1; }
   log "requesting wipe_data via /cache/recovery/command"
   "${ADB[@]}" shell 'mount /cache 2>/dev/null; mkdir -p /cache/recovery; echo --wipe_data > /cache/recovery/command; sync'
   "${ADB[@]}" reboot recovery

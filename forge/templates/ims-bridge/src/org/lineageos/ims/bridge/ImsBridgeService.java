@@ -18,6 +18,12 @@ public class ImsBridgeService extends ImsService {
     static final String TAG = "ImsBridge";
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        ModemVoiceSession.init(this);
+    }
+
+    @Override
     public MMTelFeature onCreateMMTelImsFeature(int slotId) {
         Log.i(TAG, "onCreateMMTelImsFeature slot=" + slotId);
         return new LegacyMMTelFeature(slotId);

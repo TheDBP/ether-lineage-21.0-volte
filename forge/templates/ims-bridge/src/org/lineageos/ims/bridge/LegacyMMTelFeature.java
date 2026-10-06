@@ -110,6 +110,11 @@ public class LegacyMMTelFeature extends MMTelFeature {
             Log.i(TAG, "slot " + mSlotId + ": legacy session open, serviceId=" + mServiceId);
             // State is published by awaitLegacyService(); the framework only reaches this method
             // because the feature already reported READY.
+            // Probe now in case @OEM_APP@ is already registered, and again if/when it becomes
+            // registered: it registers tens of seconds after the framework opens the session, and
+            // it only emits a feature bitmap on a UC state change, so the open()-time probe alone
+            // always runs while registration is still disconnected and gives up.
+            mRegistration.setOnConnected(this::probeFeatureBitmapIfMissing);
             probeFeatureBitmapIfMissing();
             return mServiceId;
         } catch (RemoteException e) {
@@ -126,11 +131,27 @@ public class LegacyMMTelFeature extends MMTelFeature {
      * over LTE, 4 = video. (Legacy 6-slot convention: slot i holds feature i or -1.)
      */
     private void probeFeatureBitmapIfMissing() {
-        if (!mRegistration.isConnected() || mRegistration.hasFeatureBitmap()) return;
+        if (!mRegistration.isConnected() || mRegistration.hasFeatureBitmap()) {
+            Log.i(TAG, "slot " + mSlotId + ": bitmap probe skipped (connected="
+                    + mRegistration.isConnected() + " haveBitmap="
+                    + mRegistration.hasFeatureBitmap() + ")");
+            return;
+        }
         try {
             IImsService s = legacy();
-            boolean voice = s.isConnected(mServiceId, 1 /* SERVICE_TYPE_NORMAL */, 2 /* VOICE */);
-            boolean video = s.isConnected(mServiceId, 1, 4 /* VT */);
+            // isConnected(NORMAL, 0) is UCStateTracker.isRegistered(); isConnected(NORMAL, VOICE)
+            // additionally demands isVoiceCallSupported() && isVoiceCallRegistered(), OEM
+            // UC-layer flags fed by provisioning the stack will not let us write
+            // (setProvisionedValue is refused). Those flags stay false while MMTEL is registered and
+            // voice calls demonstrably work, so registration is the ground truth and the VOICE
+            // probe is only an additional yes-vote, never a veto.
+            boolean registered = s.isConnected(mServiceId, 1 /* SERVICE_TYPE_NORMAL */, 0);
+            boolean voice = registered
+                    || s.isConnected(mServiceId, 1, 2 /* CALL_TYPE_VOICE */);
+            // Do not advertise video. the OEM app's VT needs the MMPF media path, whose modem-side
+            // address query fails here (see IMS.md), so offering it would just produce calls that
+            // cannot carry media. isConnected(NORMAL, 4) answers true regardless.
+            boolean video = false;
             int[] enabled = {-1, -1, -1, -1, -1, -1};
             int[] disabled = {-1, -1, -1, -1, -1, -1};
             // The array is indexed BY legacy feature id and the value must equal the index;
@@ -140,12 +161,12 @@ public class LegacyMMTelFeature extends MMTelFeature {
             // belongs at 2, not 1. Only enabledFeatures is read; disabled is sent for symmetry.
             (voice ? enabled : disabled)[0] = 0;   // FEATURE_TYPE_VOICE_OVER_LTE
             (video ? enabled : disabled)[2] = 2;   // FEATURE_TYPE_VIDEO_OVER_LTE
-            disabled[1] = 1;                       // no VoWiFi from the OEM app yet (registered over LTE)
+            disabled[1] = 1;                       // no VoWiFi from @OEM_APP@ yet (registered over LTE)
             disabled[3] = 3;
             disabled[4] = 4;                       // UT goes over the Ut interface, not a feature
             disabled[5] = 5;
-            Log.i(TAG, "slot " + mSlotId + ": no feature bitmap from @OEM_APP@ after open; probed voice="
-                    + voice + " video=" + video);
+            Log.i(TAG, "slot " + mSlotId + ": synthesizing feature bitmap; registered="
+                    + registered + " voice=" + voice + " video=" + video);
             mRegistration.registrationFeatureCapabilityChanged(SERVICE_CLASS_MMTEL, enabled,
                     disabled);
         } catch (RemoteException e) {
