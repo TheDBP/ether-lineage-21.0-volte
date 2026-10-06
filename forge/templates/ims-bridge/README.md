@@ -10,6 +10,14 @@ reworked with `merge-legacy-classes.py`) to the modern telephony stack. Instanti
   `IImsService`; waits for the "ims" ServiceManager entry, probes the feature bitmap after `open()`),
   `RegistrationListenerAdapter` (ONE legacy listener, multicast + cached replay), call-session / UT /
   ECBM / config / multi-endpoint wrappers, `Convert` (legacy <-> modern parcelables).
+- `ModemVoiceSession.java` -- **the audio.** On a stack whose media runs on the modem, nothing in AOSP
+  tells the audio HAL the voice session went active, so a call connects and is silent. This sends
+  `vsid=<VSID>;call_state=<1|2>` via AudioManager.setParameters on session start/end. The VSID is
+  per-platform (`VOICEMMODE1_VSID` 0x11C05000 on msm8996) -- check yours. See the silent-call ladder.
+- `CallSessionWrapper` carries an `incoming` flag, set only on the `getPendingCallSession` path, and
+  `CallSessionListenerAdapter` uses it to deliver a pre-answer remote hangup (which OEM stacks report
+  as `startFailed`) as `callSessionTerminated`. Without it an unanswered call rings until reboot --
+  `onCallStartFailed` only unwinds `mPendingMO`, which is null for MT.
 - `src-legacy/` -- the 7.x parcelables, installed under the private legacy package. Wire order must match
   the OEM framework's `writeToParcel` (read the stock smali); `ImsCallProfile.WIRE_HAS_RESTRICT_CAUSE`
   is the one known OEM extension (LG).

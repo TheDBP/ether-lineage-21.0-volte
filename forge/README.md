@@ -37,7 +37,7 @@ These are real device repos built with this engine. Copy one rather than startin
 | [ether-lineage-20.0-volte](https://github.com/TheDBP/ether-lineage-20.0-volte) | Nextbit Robin | 20.0, VoLTE working | Daily driver. Upstream stopped at 18.1, so everything above that is a 75-patch series in the repo. |
 | [ether-lineage-21.0-volte](https://github.com/TheDBP/ether-lineage-21.0-volte) | Nextbit Robin | 21.0, staged | Starts from the 20.0 series. 21 is the end of the line: 22 needs a 4.19 kernel and this one is 3.10. |
 | [bonito-lineage](https://github.com/TheDBP/bonito-lineage) | Pixel 3a XL | 22.2 released, 24.0 skeleton | Working; thin layer over supported upstream. 24.0 is gated on an eBPF backport to its 4.9 kernel. |
-| [vs995-lineage](https://github.com/TheDBP/vs995-lineage) | LG V20 (Verizon) | 22.2 released | Builds, flashes and boots. Ends at 15: 4.4 kernel. |
+| [vs995-lineage](https://github.com/TheDBP/vs995-lineage) | LG V20 (Verizon) | 22.2 released, 24.0 with VoLTE working | 24.0 boots enforcing on the 4.4 kernel and carries VoLTE (LG's 2016 IMS stack bridged onto A17): MO and MT calls with two-way audio. Building it needs the stock LG firmware you supply. |
 
 ---
 
@@ -454,7 +454,7 @@ GOTCHAS.md            known traps, indexed by symptom
 | [docs/porting-a-branch-bump.md](docs/porting-a-branch-bump.md) | Moving a device to a newer Android. Checks to run **before** the first build. |
 | [docs/debugging-a-vendor-blob.md](docs/debugging-a-vendor-blob.md) | A prebuilt HAL that worked on the old branch and crashes on the new one |
 | [docs/debugging-a-dead-panel.md](docs/debugging-a-dead-panel.md) | The screen goes black and stays black while the framework still reports the display on. |
-| [docs/debugging-volte.md](docs/debugging-volte.md) | IMS is present and running but the modem never registers, so calls fall back to circuit-switched. Reading registration off the wire instead of the framework's summary, and the two-legged availability gate that silently disables VoLTE. |
+| [docs/debugging-volte.md](docs/debugging-volte.md) | Porting an OEM IMS stack onto a newer Android, and debugging one that registers but carries no call. Needs the device's stock firmware -- the doc opens with what to extract and how. Covers the compat-ImsService bridge, the four-rung silent-call ladder, the QMI GID rule that costs audio, and locking the stack down from permissive. |
 | [docs/debugging-mobile-data.md](docs/debugging-mobile-data.md) | LTE registers, SMS and IMS work, but every data call fails with an error that explains nothing — on your ROM, the official one and a swapped modem alike. Ask the modem directly (QMI), read its own log (DIAG F3), and find the bootloader-to-modem flag in SMEM. |
 | [docs/lineage-branches.md](docs/lineage-branches.md) | Choosing which branch to target — and avoiding a higher branch number that is actually older code. |
 | [docs/debugging-a-boot-loop.md](docs/debugging-a-boot-loop.md) | It builds but will not boot. Start with `/data/tombstones`, not pstore — and why USB adb may be impossible on your kernel. |

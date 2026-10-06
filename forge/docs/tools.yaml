@@ -30,7 +30,7 @@ tools:
   - name: "apply-overlay.sh"
     path: "tools/apply-overlay.sh"
     summary: "apply the composed customization stack onto a synced LineageOS tree:"
-    usage: "apply-overlay.sh"
+    usage: "./forge/tools/apply-overlay.sh [--manifests-only] [AOSP_ROOT]   (AOSP_ROOT defaults to /aosp)"
     docs: []
   - name: "aps2-relocs.py"
     path: "tools/aps2-relocs.py"
@@ -41,7 +41,7 @@ tools:
   - name: "bench-launch.sh"
     path: "tools/bench-launch.sh"
     summary: "cold app-launch times over adb, for A/B-ing a runtime tuning on one phone"
-    usage: "bench-launch.sh"
+    usage: "./tools/bench-launch.sh [-n N] [-s SERIAL] [pkg...]"
     docs: []
   - name: "blob-attach.sh"
     path: "tools/blob-attach.sh"
@@ -92,13 +92,13 @@ tools:
   - name: "check-hal-readiness.sh"
     path: "tools/check-hal-readiness.sh"
     summary: "find HAL problems BEFORE the build-flash-boot cycle"
-    usage: "check-hal-readiness.sh"
+    usage: "./tools/check-hal-readiness.sh <SRC> <DEVICE_PATH> [CODENAME]"
     docs:
       - "docs/debugging-a-boot-loop.md"
   - name: "check-image-labels.sh"
     path: "tools/check-image-labels.sh"
     summary: "find paths in the image that no file_contexts entry labels"
-    usage: "check-image-labels.sh"
+    usage: "./tools/check-image-labels.sh <SRC> <CODENAME> [DEVICE_PATH] [REFERENCE_OUT]"
     docs: []
   - name: "check-lmkd-source.sh"
     path: "tools/check-lmkd-source.sh"
@@ -118,7 +118,7 @@ tools:
   - name: "check-platform-support.sh"
     path: "tools/check-platform-support.sh"
     summary: "find the upstream makefile gates that SILENTLY EXCLUDE this device's SoC"
-    usage: "check-platform-support.sh"
+    usage: "./tools/check-platform-support.sh <SRC> <DEVICE_PATH> [TARGET_BOARD_PLATFORM]"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "check-root-mountpoints.sh"
@@ -194,12 +194,12 @@ tools:
   - name: "extract-gapps-apps.sh"
     path: "tools/extract-gapps-apps.sh"
     summary: "pull the Google versions of the stock apps out of a GApps zip and stage them as /product prebuilts, so a WITH_GAPPS build swaps the Lineage/AOSP apps for Google's"
-    usage: "extract-gapps-apps.sh"
+    usage: "./extract-gapps-apps.sh <GApps.zip> [AOSP_ROOT]"
     docs: []
   - name: "extract-nextbit-oem-assets.sh"
     path: "tools/extract-nextbit-oem-assets.sh"
     summary: "reclaim the Nextbit Robin OEM assets (system sounds, wallpapers, boot animation) from a Nextbit Robin stock ROM and bake them into the tree being built"
-    usage: "extract-nextbit-oem-assets.sh"
+    usage: "./extract-nextbit-oem-assets.sh <Ether_Stock_ROM.zip> [AOSP_ROOT]"
     docs:
       - "docs/OEM-ASSETS.md"
   - name: "fb-capture.sh"
@@ -210,19 +210,19 @@ tools:
   - name: "find-orphaned-sepolicy-types.sh"
     path: "tools/find-orphaned-sepolicy-types.sh"
     summary: "list SELinux types a device tree still references but that no longer exist, after an upstream branch bump deleted the policy that defined them"
-    usage: "find-orphaned-sepolicy-types.sh"
+    usage: "./tools/find-orphaned-sepolicy-types.sh <OLD_SRC> <NEW_SRC> <DEVICE_PATH>"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "find-removed-platform-symbols.sh"
     path: "tools/find-removed-platform-symbols.sh"
     summary: "C/C++ constants a device tree uses that the new branch deleted"
-    usage: "find-removed-platform-symbols.sh"
+    usage: "./tools/find-removed-platform-symbols.sh <OLD_SRC> <NEW_SRC> <DEVICE_PATH>"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "find-soong-namespace-drift.sh"
     path: "tools/find-soong-namespace-drift.sh"
     summary: "Soong namespace and manifest changes between branches that will break a device tree the new branch no longer maintains"
-    usage: "find-soong-namespace-drift.sh"
+    usage: "./tools/find-soong-namespace-drift.sh <OLD_SRC> <NEW_SRC> <DEVICE_PATH> [DEVICE_TREE]"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "fn-calls.sh"
@@ -274,13 +274,13 @@ tools:
   - name: "kernel-rebuild.sh"
     path: "tools/kernel-rebuild.sh"
     summary: "rebuild just the boot image (or any make target) after a kernel change, with the environment of the last full build"
-    usage: "kernel-rebuild.sh"
+    usage: "./forge/tools/kernel-rebuild.sh [--am <patch>...] [target ...]      default target: bootimage"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "kmod-build.sh"
     path: "tools/kmod-build.sh"
     summary: "build an out-of-tree kernel module against the device's last kernel build in the forge container"
-    usage: "kmod-build.sh"
+    usage: "./forge/tools/kmod-build.sh <module-dir>            # dir holds a kbuild Makefile (obj-m := x.o)"
     docs:
       - "docs/debugging-mobile-data.md"
   - name: "kmod-rebase-crcs.py"
@@ -297,18 +297,19 @@ tools:
   - name: "make-keys.sh"
     path: "tools/make-keys.sh"
     summary: "generate the signing keys for release builds, once, into a directory outside every repo"
-    usage: "make-keys.sh"
+    usage: "./forge/tools/make-keys.sh <keys-dir> '<subject>'"
     docs:
       - "docs/RELEASING.md"
   - name: "mcfg-items.py"
     path: "tools/mcfg-items.py"
     summary: "list the EFS items a Qualcomm MCFG provisions, with their values"
     usage: "mcfg-items.py mcfg_sw.mbn              # every EFS item: path, size, value"
-    docs: []
+    docs:
+      - "docs/debugging-volte.md"
   - name: "measure-touch-rate.sh"
     path: "tools/measure-touch-rate.sh"
     summary: "Measure how fast the touchscreen actually reports, while a finger is down"
-    usage: "measure-touch-rate.sh"
+    usage: "tools/measure-touch-rate.sh -s SERIAL_A -t 30"
     docs: []
   - name: "merge-legacy-classes.py"
     path: "tools/merge-legacy-classes.py"
@@ -337,7 +338,7 @@ tools:
   - name: "new-device-repo.sh"
     path: "tools/new-device-repo.sh"
     summary: "scaffold a device repo from scratch"
-    usage: "new-device-repo.sh"
+    usage: "./rom-forge/tools/new-device-repo.sh ~/pixel3a-android"
     docs: []
   - name: "new-ims-bridge.sh"
     path: "tools/new-ims-bridge.sh"
@@ -363,6 +364,7 @@ tools:
     usage: "ota-extract.sh <ota.zip> <outdir> [--flash a|b] [--os-only] [-s SERIAL]"
     docs:
       - "docs/debugging-a-vendor-blob.md"
+      - "docs/debugging-volte.md"
   - name: "pixel-ramoops-pull.sh"
     path: "tools/pixel-ramoops-pull.sh"
     summary: "decrypt the panic log a Pixel's bootloader saved, from recovery"
@@ -388,7 +390,7 @@ tools:
   - name: "propagate-forge.sh"
     path: "tools/propagate-forge.sh"
     summary: "push an engine change out to every device repo, now"
-    usage: "propagate-forge.sh"
+    usage: "./tools/propagate-forge.sh                 # sync every device repo beside this one"
     docs: []
   - name: "pstore-pull.sh"
     path: "tools/pstore-pull.sh"
@@ -400,7 +402,7 @@ tools:
   - name: "publish-kernel-source.sh"
     path: "tools/publish-kernel-source.sh"
     summary: "publish the kernel source that actually built this ROM, as a normal kernel repo, so a GPL request (or an XDA moderator) can be answered with one link"
-    usage: "publish-kernel-source.sh"
+    usage: "./forge/tools/publish-kernel-source.sh [--push] [--tag NAME] [--url GIT_URL] [AOSP_ROOT]"
     docs: []
   - name: "push-system-app.sh"
     path: "tools/push-system-app.sh"
@@ -435,13 +437,13 @@ tools:
   - name: "refresh-patches.sh"
     path: "tools/refresh-patches.sh"
     summary: "re-export overlay/patches/ from the local commits sitting on top of upstream in each patched project"
-    usage: "refresh-patches.sh"
+    usage: "./forge/tools/refresh-patches.sh [--dry-run] [--force] [--adopt] [AOSP_ROOT]"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "release.sh"
     path: "tools/release.sh"
     summary: "publish the redistributable preset of a build, and refuse to publish anything else"
-    usage: "release.sh"
+    usage: "./forge/tools/release.sh --dry-run          # show exactly what would be published"
     docs:
       - "docs/OEM-ASSETS.md"
       - "docs/RELEASING.md"
@@ -458,7 +460,7 @@ tools:
   - name: "run-one.sh"
     path: "tools/run-one.sh"
     summary: "build exactly one device, and refuse if anything else is already building"
-    usage: "run-one.sh"
+    usage: "./forge/tools/run-one.sh <repo-dir> [PRESET] [EXTRA_OPTIONS]"
     docs: []
   - name: "sideload-flash.sh"
     path: "tools/sideload-flash.sh"
@@ -479,29 +481,31 @@ tools:
     path: "tools/super-loop-mount.sh"
     summary: "mount a dynamic (logical) partition from recovery without device-mapper"
     usage: "super-loop-mount.sh --list                       partitions, extents, byte offsets"
-    docs: []
+    docs:
+      - "docs/debugging-volte.md"
   - name: "symbolize-odex-pcs.py"
     path: "tools/symbolize-odex-pcs.py"
     summary: "Turn the bare \"pc 0000000002430 70c  /system/framework/oat/arm64/services.odex\" frames of an ANR/tombstone native dump into Java method names"
-    usage: "symbolize-odex-pcs.py"
+    usage: "tools/symbolize-odex-pcs.py services-oatdump.txt 243070c 1c4d758 ..."
     docs: []
   - name: "sync-forge.sh"
     path: "tools/sync-forge.sh"
     summary: "vendor forge/ into a device repo from rom-forge at a pinned ref"
-    usage: "sync-forge.sh"
+    usage: "./forge/tools/sync-forge.sh              # sync to origin/main, pin to that commit"
     docs: []
   - name: "triage-build-log.sh"
     path: "tools/triage-build-log.sh"
     summary: "collapse a `mka -k` build log into distinct failure CLASSES"
-    usage: "triage-build-log.sh"
+    usage: "./tools/triage-build-log.sh <build.log> [--targets]"
     docs:
       - "docs/porting-a-branch-bump.md"
   - name: "unpack-block-ota.sh"
     path: "tools/unpack-block-ota.sh"
     summary: "turn a block-based OTA zip into a mountable image you can read"
-    usage: "unpack-block-ota.sh"
+    usage: "./tools/unpack-block-ota.sh <ota.zip> <outdir> [partition]"
     docs:
       - "docs/OEM-ASSETS.md"
+      - "docs/debugging-volte.md"
   - name: "usb-watch.sh"
     path: "tools/usb-watch.sh"
     summary: "one line per USB/adb/fastboot state change, timestamped"

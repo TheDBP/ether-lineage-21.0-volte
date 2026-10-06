@@ -27,7 +27,9 @@ way once 24.0 matures: a new port that is not yet building should target 24.0, n
 backports of the required features exist for [4.4 and 4.9]". LineageOS's own common kernels: MSM8996
 (4.4) and SDM845 (4.9) end at Android 15; SM8150 (4.14) gets 16. A device on 4.4/4.9 has no 23.x or
 24.0 port until someone adapts those backports onto its kernel — a kernel networking/bpf job, not
-device-tree work. The release config per branch is `vendor/lineage/vars/aosp_target_release`
+device-tree work. That is the ceiling on *upstream* support, not a hard stop: the V20 (MSM8996, 4.4)
+runs 24.0 enforcing, with the bpf loaders patched to carry on with what the kernel can give them
+rather than hanging. Expect to do that work yourself; nobody upstream has. The release config per branch is `vendor/lineage/vars/aosp_target_release`
 (`bp1a` 22.2, `bp4a` 23.2, `cp2a` 24.0); the lunch combo is `lineage_<codename>-<config>-<variant>`.
 
 ## The trap: a newer branch number can be an OLDER tree

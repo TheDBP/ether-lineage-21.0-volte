@@ -1,7 +1,86 @@
-# Debugging VoLTE on a ported device
+# Debugging and porting VoLTE on a ported device
 
-For the case where the IMS stack is present and running but the modem never registers, so calls
-fall back to circuit-switched and dialling fails with `INVALID_MODEM_STATE` (RIL error 46).
+Two jobs live here. **Porting** an OEM IMS stack onto a newer Android than it shipped on — start at
+*Before you start* below and work down. **Debugging** a stack that is already present and running
+but whose modem never registers, so calls fall back to circuit-switched and dialling fails with
+`INVALID_MODEM_STATE` (RIL error 46) — the diagnostic sections are gathered first, before the port
+sequence, because that is the commoner errand.
+
+Both paths are written from two devices that now carry VoLTE end to end: the Nextbit Robin (QTI IMS,
+LineageOS 20 / Android 13) and the LG V20 (LG `Ims4`, LineageOS 24.0 / Android 17 — MO and MT calls
+with two-way audio, running SELinux enforcing). Where they disagree, both behaviours are given.
+
+## Before you start: you need the device's stock firmware
+
+**An OEM IMS stack cannot be ported from source. There is no source.** The whole method is to take
+the manufacturer's own IMS app, framework jars and native libraries out of the firmware the phone
+shipped with, rework them to run on a newer platform, and bridge them into the modern telephony
+stack. If you cannot get that firmware for your exact model, stop here — nothing below will work.
+
+It must be a **factory image, full OTA or full firmware package** (`.kdz` for LG, `.zip` factory
+image for Pixels, carrier full-OTA elsewhere). **Not an incremental OTA** — those carry patches, not
+whole files. And it must be the same *variant*: carrier models of the same handset ship different
+IMS builds, and the smali offsets a port patches will not match across them.
+
+### What you will need out of it
+
+Collect these once, keep them, and do not delete them — several are needed again at every later
+stage. Exact paths vary by OEM; these are where they sit on the two reference devices.
+
+| artifact | typical path | needed for |
+|---|---|---|
+| the OEM IMS app + its odex | `/system/priv-app/<App>/` | the whole rework |
+| OEM framework jars the app needs (`.oat`) | `/system/framework/arm64/` | app classes live outside the apk |
+| the platform `boot-framework.oat` | `/system/framework/arm64/` | a CLEAN deodex for the real parcelables |
+| OEM native IMS libs + their whole `DT_NEEDED` closure | `/system/lib` (32-bit) | `abi-gap.sh`, `dlopen-probe.sh` |
+| OEM helper daemons, BOTH ABIs | `/system/bin`, `/vendor/bin` | IPsec, SMS transport |
+| the OEM `sec_config` | `/system/etc/sec_config` | the QMI GID rule that costs audio |
+| the modem partition image | `modem` partition | `modem-strings.sh`, `mcfg-items.py` |
+| the boot ramdisk `init.*.rc` | boot image | OEM service definitions to copy |
+
+### Getting from a firmware package to files
+
+The repo has three extractors; which one depends on what the OEM ships:
+
+| the package is | use |
+|---|---|
+| A/B `payload.bin` OTA | `tools/ota-extract.sh` |
+| old-style block OTA (`system.new.dat[.br]` + `transfer.list`) | `tools/unpack-block-ota.sh` |
+| logical partitions inside a `super` image | `tools/super-loop-mount.sh` |
+| LG `.kdz`/`.dz` | **nothing here** — use third-party [kdztools](https://github.com/ehem/kdztools) (`unkdz`, then `undz`) to get raw partition images |
+
+Once you have a raw ext4 `system.image`, read it without mounting and without root:
+
+```sh
+debugfs -R 'ls -l /priv-app'                      system.image   # find things
+debugfs -R 'dump /priv-app/App/App.apk  out.apk'  system.image   # pull one out
+```
+
+Watch the ABI: a stock image ships both, and the 64-bit namesake of a 32-bit OEM lib link-fails much
+later in a way that does not point back here (GOTCHAS 37).
+
+### Host tools this needs
+
+Not in the build container — install or point at them on the host: `debugfs` (e2fsprogs), `baksmali`
+and `smali` (set `$BAKSMALI`; AOSP has them at `prebuilts/extract-tools/common/smali/`), `aidl`,
+`javac`, `r8.jar`, `aapt2`, `audit2allow` (setools), `brotli`, `7z`, `llvm-objdump`, `patchelf`.
+
+### Where to put what you extract
+
+**Never in a device repo.** OEM firmware and everything derived from it is proprietary: it is staged
+into the build tree or kept in a scratch directory, and committed nowhere. The convention the tools
+assume is a `.scratch/` directory beside the repos. Device repos stage the finished artifacts into
+the synced tree at build time instead — see the Robin's `extract-ims-blobs.sh`, which `device.mk`
+runs itself on first build and hard-errors if the stock zip is absent, so a ROM whose VoLTE is
+quietly missing is not a thing that can happen.
+
+### What success looks like
+
+You are done when, on the device: `dumpsys telephony.registry` reports `mVoiceNetworkType=LTE`;
+placing and answering a call both give two-way audio; and the boot has no `avc: denied` in the radio
+domain with SELinux enforcing. Registration alone is not the finish line — audio is a separate
+ladder of four distinct failures (see "The call connects and nobody can hear anything"), and a stack
+that registers while silent is the normal halfway state, not a near-miss.
 
 ## Read the registration state off the wire before blaming your code
 
@@ -71,33 +150,6 @@ Do not chase these until registration succeeds — they clear on their own when 
 
 Note also that `sys.ims.*` is typed `qcom_ims_prop` and is unreadable from a shell, so an empty
 `getprop` is not evidence that it is unset.
-
-## A pre-answer hangup is not a "start failure", and 17 will not unwind it for you
-
-A 7.0-era OEM stack reports the remote hanging up on a call that was never answered as
-`callSessionStartFailed` — in its model the session never started. Forward that verbatim and an
-unanswered incoming call rings until the handset is rebooted.
-
-`ImsPhoneCallTracker.onCallStartFailed` unwinds `mPendingMO` and nothing else (plus a `findConnection`
-branch gated on `DomainSelectionResolver.isDomainSelectionSupported()`, off on devices this old).
-`mPendingMO` is null for an incoming call, so the handler runs to completion having disconnected
-nothing. Telecom's `CallAnomalyWatchdog` notices after two minutes and logs "caught and disconnected
-a stuck/zombie call" — and the call survives that too, as it survives `KEYCODE_ENDCALL`, because
-there is no live session underneath for a hangup to act on. Meanwhile Telecom refuses to dial
-("Cannot place a call as there is an unanswered incoming call"), so the symptom people report is
-broken outgoing calls.
-
-- The one-line signature: `ImsPhoneCallTracker: onCallStartFailed reasonCode=510`
-  (`CODE_USER_TERMINATED_BY_REMOTE`) on a call that is *ringing* rather than dialling. A correct
-  teardown reads `onCallTerminated`. The OEM layer usually logs the truth immediately above it.
-- The fix is in the bridge, not the framework: deliver MT sessions as `callSessionTerminated` and
-  leave MO on `callSessionStartFailed`, which is what drives the CSFB retry path. `templates/
-  ims-bridge` carries it — `CallSessionWrapper` takes an `incoming` flag, set only on the
-  `getPendingCallSession` path, since that is the only way an MT session arrives.
-
-Generalises past this callback: when an OEM stack's vocabulary predates the modern stack's, check
-what the modern handler *does* with each callback, not just that a callback of that name exists.
-A faithful forward of a term whose meaning has narrowed is a silent no-op.
 
 ## Wi-Fi calling: find out what the modem is being told, not what the framework thinks
 
@@ -241,7 +293,7 @@ number -- `RIL 292 -> NAS 0x0072 update_ims_status` is what any non-OEM IMS stac
 it does not need the OEM's RIL at all.
 
 Check the stock app's Binder surface the same way as on the Robin (`oat-to-smali.sh`, then
-`ether-20.0/gen-legacy-aidl.py`): the TRANSACTION_* order in the stock framework's `I*$Stub` is the wire
+`gen-legacy-aidl.py`): the TRANSACTION_* order in the stock framework's `I*$Stub` is the wire
 protocol, and one inserted method (7.0 -> 7.1 added `IImsService.addRegistrationListener`) shifts
 every later id.
 
@@ -490,6 +542,33 @@ framework patch. `new-ims-bridge.sh` writes it from `templates/ims-bridge`; what
   with `480 CC_NOT_REACHABLE` ~18 s later (that CANCEL is the signature of "SIP works, nothing is
   listening above it").
 
+## A pre-answer hangup is not a "start failure", and 17 will not unwind it for you
+
+A 7.0-era OEM stack reports the remote hanging up on a call that was never answered as
+`callSessionStartFailed` — in its model the session never started. Forward that verbatim and an
+unanswered incoming call rings until the handset is rebooted.
+
+`ImsPhoneCallTracker.onCallStartFailed` unwinds `mPendingMO` and nothing else (plus a `findConnection`
+branch gated on `DomainSelectionResolver.isDomainSelectionSupported()`, off on devices this old).
+`mPendingMO` is null for an incoming call, so the handler runs to completion having disconnected
+nothing. Telecom's `CallAnomalyWatchdog` notices after two minutes and logs "caught and disconnected
+a stuck/zombie call" — and the call survives that too, as it survives `KEYCODE_ENDCALL`, because
+there is no live session underneath for a hangup to act on. Meanwhile Telecom refuses to dial
+("Cannot place a call as there is an unanswered incoming call"), so the symptom people report is
+broken outgoing calls.
+
+- The one-line signature: `ImsPhoneCallTracker: onCallStartFailed reasonCode=510`
+  (`CODE_USER_TERMINATED_BY_REMOTE`) on a call that is *ringing* rather than dialling. A correct
+  teardown reads `onCallTerminated`. The OEM layer usually logs the truth immediately above it.
+- The fix is in the bridge, not the framework: deliver MT sessions as `callSessionTerminated` and
+  leave MO on `callSessionStartFailed`, which is what drives the CSFB retry path. `templates/
+  ims-bridge` carries it — `CallSessionWrapper` takes an `incoming` flag, set only on the
+  `getPendingCallSession` path, since that is the only way an MT session arrives.
+
+Generalises past this callback: when an OEM stack's vocabulary predates the modern stack's, check
+what the modern handler *does* with each callback, not just that a callback of that name exists.
+A faithful forward of a term whose meaning has narrowed is a silent no-op.
+
 ## The OEM media stack asks the MODEM for the RTP address (and what to do when that fails)
 
 Signalling working is not audio working. Past REGISTER and INVITE the next class of failure is the
@@ -523,7 +602,10 @@ filtering on. The shape generalises to any OEM IMS media lib.
   is what `MakeSDPFromProfile` puts in `c=`/`o=`. So first confirm an AP-side IMS PDN address exists:
   `dumpsys telephony.registry` for the `ims` APN's `InterfaceName` / `LinkAddresses` (on the V20 it
   is CONNECTED on its own `rmnet_data*` with a global address and the P-CSCF list). If it does, the
-  modem query failing is probably not what breaks audio -- look at the RTP socket bind instead.
+  modem query failing is probably not what breaks audio -- go to the silent-call ladder below. Do
+  NOT go looking at AP-side RTP sockets: on a modem-media stack those are the stack's own monitoring
+  and are a red herring (ladder, rung 2). On the V20 the two real causes were a missing QMI GID rule
+  and an `allowxperm` that whitelisted away the ioctl the modem-address query needs -- GOTCHAS 38.
 - **Gates are properties worth finding.** LG's `UpdateModemIPv6` has eight logged gates; one is
   `IsUseSingleIP()` = `persist.lg.data.iwlan.ipsec.ap`, whose only caller is that function. Setting
   it skips the doomed query and reaches the fallback at once -- on the V20 the failed query retried
@@ -553,7 +635,7 @@ bringing LG's Ims4 up on 24.0; the layering is QTI-generic.
    and a `CP_Proxy` backend in the engine. AP-side RTP sockets can exist at the same time (check
    `/proc/net/udp6` for the IMS uid) and are a red herring: they are the stack's own monitoring.
 3. **Can the AP talk to the modem at all?** The modem session is created over a private QMI service,
-   and that is where a port breaks -- see the IPC-router section above and run `qmi-sec-check.sh`.
+   and that is where a port breaks -- see "An OEM's own sec_config" below and run `qmi-sec-check.sh`.
    `createMediaSession` followed by `send_msg_sync error: -16` means no session exists and nothing
    below this rung can work.
 4. **Is the audio HAL told the session went active?** This is the rung a port silently deletes.

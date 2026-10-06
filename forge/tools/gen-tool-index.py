@@ -69,7 +69,9 @@ def scan():
         usage = base
         for ln in lines[1:40]:
             text = decomment(ln)
-            if re.match(r'^ {2,}' + re.escape(base) + r'\b', text):
+            # Headers spell the invocation several ways: bare, ./tools/x, ./forge/tools/x.
+            # Accept any leading path, or 28 tools silently show their own name as their usage.
+            if re.match(r'^ {2,}(?:\./)?(?:[\w.-]+/)*' + re.escape(base) + r'\b', text):
                 usage = text.strip()
                 break
 

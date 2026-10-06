@@ -40,7 +40,7 @@ container.
 | `boot-window-logcat.sh` | when a boot ends in a reboot | the logcat, dmesg and properties of each window adbd is reachable, one set per appearance — the route that does not depend on the ramoops region surviving the reboot |
 | `repack-erofs-apex.sh` | when a prebuilt APEX will not mount | that apex rebuilt with an ext4 payload and re-signed, for a kernel with no CONFIG_EROFS_FS -- apexd's "No such device" with everything inside the apex silently absent |
 | `make-apex-key.sh` | before the first EROFS repack | the four-file signing key that repack needs, made once on the host because KEYS_DIR is read-only in the container |
-| `unpack-block-ota.sh` | when flashing | partition images out of a `payload.bin` OTA, for fastboot-only flashing |
+| `unpack-block-ota.sh` | when you want to read a working build for this device | a mountable image out of an old-style block OTA (`system.new.dat[.br]` + `transfer.list`), which A-only devices still ship. For an A/B `payload.bin` OTA use `ota-extract.sh` instead |
 | `check-sigpipe.sh` | before committing | pipelines that will die silently under `set -o pipefail` |
 | `dev-shell.sh` | any time | an interactive shell in the build container |
 | `publish-kernel-source.sh` | before publishing a build | the kernel you actually shipped, as a normal kernel repo: upstream history with this device's patch series replayed on top. GPL asks for the *corresponding* source, and a link to upstream alone does not answer it once you patch the kernel. Regenerated from base+patches every run, so the published tree cannot drift from what you build |

@@ -25,6 +25,16 @@
 #      overlay packages/services/Telephony config_ims_mmtel_package = org.lineageos.ims.bridge;
 #      PRODUCT_PROPERTY_OVERRIDES += ro.telephony.block_binder_thread_on_incoming_calls=false.
 #   3. Diff each src/<legacy>/*.java parcelable's write order against the stock smali writeToParcel.
+#   4. PATCH THE FRAMEWORK FIRST. Binding ANY compat ImsService on 17 restart-loops com.android.phone:
+#      ImsServiceControllerCompat never calls setDefaultExecutor(), so the adapter NPEs on
+#      CompletableFuture.screenExecutor. An AOSP bug, not yours. See debugging-volte.md "Bridge the
+#      reworked app" -- without it the first boot after wiring the bridge in is a boot loop.
+#   5. sepolicy: a service type + service_contexts entry per binder the OEM stack publishes, and a
+#      property type for its prop prefixes (a coredomain may only set a system_property_type).
+#      Expect to need it even to get a permissive boot's audit to be meaningful.
+#   6. The OEM's own sec_config usually omits the QMI service its IMS stack needs, and the symptom is
+#      a call that connects with no audio -- run qmi-sec-check.sh. Rules bind at service REGISTRATION,
+#      so this must be in the image at boot; running irsc_util afterwards does nothing.
 # Re-running on an existing out-dir refuses unless --force (it would overwrite local edits).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd); T=$HERE/templates/ims-bridge
