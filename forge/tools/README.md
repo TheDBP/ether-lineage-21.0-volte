@@ -111,7 +111,7 @@ Bringing a kernel up to a newer branch (the *kernel gate* of a port — see
 | `kmod-rebase-crcs.py` | when insmod says "disagrees about version of symbol" | the module's `__versions` CRCs rewritten from the target kernel's Image, so a module from your tree loads on an official nightly built with another toolchain |
 | `pmsg-decode.py` | when a boot never reached adb | the previous boot's logcat out of a pstore pmsg record, tombstones included |
 | `gen-option-index.py` | after adding an option, or changing a DESC/NOTE | the options table in any README carrying `<!-- options:start -->` markers, rendered from `forge/options/` on disk; `--check` fails if one is stale. `device` in the marker filters to that repo's branch and merges its `options-notes.conf` |
-| `gen-tool-index.py` | after adding a tool or a doc | `docs/TOOLS.md` and `docs/tools.yaml` regenerated; `--check` fails if either is stale or a tool is missing from this table |
+| `gen-tool-index.py` | after adding a tool or a doc | `docs/TOOLS.md` and `docs/tools.yaml` regenerated; `--check` fails if either is stale, if a tool is missing from this table, or if any script in the repo has a shebang and no exec bit (sourced libraries exempt themselves by saying so in their header) |
 
 ## Assessing a port
 
@@ -201,7 +201,7 @@ actually fails, so they are worth knowing by name.
 | `docker/prefetch.sh` | downloads the build's network inputs into `/dl` in-container, so they overlap `repo sync` instead of running after it. A set-but-failed download is fatal, deliberately |
 | `docker/_build_rom.sh` | runs the build inside the container and calls each enabled option's `require.sh` before and `post-build.sh` after |
 | `prebuilt/lib-fdroid.sh` | the F-Droid fetch: resolves the suggested build of a package, verifies package name, ABI and the pinned signer certificate, unpacks native libraries the APK packs compressed, writes the Soong module file |
-| `prebuilt/fetch-firefox.sh`, `fetch-fulguris.sh`, `fetch-fdroid.sh`, `fetch-k9.sh`, `fetch-kdeconnect.sh`, `fetch-termoneplus.sh`, `fetch-nextcloud.sh`, `fetch-linphone.sh`, `fetch-connectbot.sh`, `fetch-syncthing-fork.sh` | the per-option fetchers on top of it: package, signer pin, module names |
+| `prebuilt/fetch-firefox.sh`, `fetch-fulguris.sh`, `fetch-fdroid.sh`, `fetch-k9.sh`, `fetch-kdeconnect.sh`, `fetch-termoneplus.sh`, `fetch-nextcloud.sh`, `fetch-linphone.sh`, `fetch-connectbot.sh`, `fetch-syncthing-fork.sh`, `fetch-openvpn.sh` | the per-option fetchers on top of it: package, signer pin, module names |
 | `prebuilt/lib-app-checks.sh` | the `require.sh` / `post-build.sh` checks those options share: APKs present and named in the module file; shipped byte-identical, libraries installed beside |
 | `prebuilt/fetch-magisk.sh` | downloads Magisk for the `root` option's boot-image patch |
 

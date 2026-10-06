@@ -350,8 +350,11 @@ device, so **adding one touches no device tree at all**. See [options/README.md]
 
 Three things worth knowing:
 
-- **Every option not named by the build is off.** Nothing is inherited from the environment or from
-  a previous run, so a build is exactly the set you asked for.
+- **Every option not named by the build is off**, with one deliberate exception. Nothing is
+  inherited from the environment or from a previous run, so a build is otherwise exactly the set you
+  asked for. The exception is `volte`, which turns itself on when the device's stock firmware is
+  present — a phone that cannot place a call is not a sensible default. It announces itself on
+  stdout either way, and a build without it is tagged `-novolte`.
 - **The option set is part of the build fingerprint**, so changing it triggers the `installclean`
   that makes the change actually take. Otherwise you would get a repackage of the last build's
   staging with no sign anything was wrong.

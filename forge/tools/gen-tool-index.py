@@ -125,6 +125,34 @@ def render_yaml(rows):
     return '\n'.join(out) + '\n'
 
 
+def unrunnable():
+    """Scripts that present themselves as commands but cannot be run.
+
+    A shebang says "execute me"; without the mode bit, following any doc that names the script gives
+    Permission denied. Three tools shipped that way before this check existed, so it is a recurring
+    mistake rather than a one-off. Repo-wide, not just tools/: prebuilt/ and docker/ carry runnable
+    scripts too, and the index only ever scanned tools/, which is how a fetcher nobody could list
+    stayed invisible.
+
+    A library that is meant to be sourced is exempt, and says so in its own header -- lib/presets.sh
+    "Sourced; defines functions, runs nothing", prebuilt/lib-app-checks.sh "Source it; then:". That
+    beats guessing from the path: tools/freestanding-arm64.sh is sourced too and lives in tools/.
+    """
+    bad = []
+    for path in sorted(glob.glob('**/*.sh', recursive=True) + glob.glob('**/*.py', recursive=True)):
+        if path.startswith(('templates/', '.git/')):
+            continue        # templates carry @PLACEHOLDER@s and are instantiated, never run in place
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            head = [next(fh, '') for _ in range(12)]
+        if not head[0].startswith('#!'):
+            continue        # no shebang: not claiming to be a command
+        if any(re.search(r'\bsourced?\b', ln, re.I) for ln in head[1:]):
+            continue        # declares itself a sourced library
+        if not os.access(path, os.X_OK):
+            bad.append(path)
+    return bad
+
+
 def main():
     os.chdir(FORGE)
     check = '--check' in sys.argv[1:]
@@ -165,8 +193,14 @@ def main():
                 print("!! %s is not listed in tools/README.md" % m)
             print("   add a row to its Quick reference table, or the tool is undiscoverable")
             return 1
-        print(">> tool index is current (%d tools), and every tool is listed in tools/README.md"
-              % len(rows))
+        notx = unrunnable()
+        if notx:
+            for n in notx:
+                print("!! %s has a shebang but is not executable" % n)
+            print("   chmod +x it, or say in its header that it is sourced")
+            return 1
+        print(">> tool index is current (%d tools), every tool is listed in tools/README.md,"
+              " and every script with a shebang is executable" % len(rows))
         return 0
 
     os.makedirs('docs', exist_ok=True)

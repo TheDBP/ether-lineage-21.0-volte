@@ -37,6 +37,19 @@ the failure `options/README.md`'s sub-switch rule exists to prevent, and the rea
 not. So the absence is said out loud and recorded in the filename — and the absence, not the
 presence, is what the tag marks, because on these devices VoLTE is the expected state.
 
+## These builds cannot be published
+
+The IMS stack is the manufacturer's, rebuilt from firmware nobody may redistribute, so an image
+carrying it is for the phone in your hand and nowhere else. `release.sh` refuses it three ways: a
+preset naming `volte`, provenance saying `WITH_VOLTE=true`, and — because provenance is skipped
+entirely on a cleaned tree — a content audit that hashes whatever staging produced and looks for it
+in the staged system image.
+
+So on a device with these keys set, **the publishable artifact is the `-novolte` build**, and
+`release.sh` looks for that tag rather than the bare preset tag. Before this was wired up it looked
+for a zip such a device never produces and died with "no built zip for preset", which reads as a
+missing build rather than as the policy it is.
+
 ## What a device supplies
 
 Three keys in `device.conf` (see `device.conf.example`):

@@ -67,10 +67,11 @@ with no recovery partition) — the zip carries it, so nothing is published besi
 
 ## What it checks
 
-1. **Preset options** — the preset's option set must contain neither `gapps` nor `oem`.
+1. **Preset options** — the preset's option set must contain neither `gapps` nor `oem`, nor `volte`.
 2. **Filename** — the artifact must carry that preset's tag, so a stray zip from another run
    cannot be picked up.
-3. **Provenance** — `out/.turbo_config`, which the build writes for itself, must agree.
+3. **Provenance** — `out/.turbo_config`, which the build writes for itself, must agree. It records
+   every option switch, so `WITH_GAPPS`, `WITH_OEM` and `WITH_VOLTE` must all be false there.
 4. **Contents** — the staged system tree is scanned for anything that should not be leaving:
    - files byte-identical to something the OEM extractor staged (hash-matched, so it stays correct
      when the asset list changes)
