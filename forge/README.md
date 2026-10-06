@@ -36,8 +36,8 @@ These are real device repos built with this engine. Copy one rather than startin
 |---|---|---|---|
 | [ether-lineage-20.0-volte](https://github.com/TheDBP/ether-lineage-20.0-volte) | Nextbit Robin | 20.0, VoLTE working | Daily driver. Upstream stopped at 18.1, so everything above that is a 75-patch series in the repo. |
 | [ether-lineage-21.0-volte](https://github.com/TheDBP/ether-lineage-21.0-volte) | Nextbit Robin | 21.0, staged | Starts from the 20.0 series. 21 is the end of the line: 22 needs a 4.19 kernel and this one is 3.10. |
-| [bonito-lineage](https://github.com/TheDBP/bonito-lineage) | Pixel 3a XL | 22.2 released, 24.0 skeleton | Working; thin layer over supported upstream. 24.0 is gated on an eBPF backport to its 4.9 kernel. |
-| [vs995-lineage](https://github.com/TheDBP/vs995-lineage) | LG V20 (Verizon) | 22.2 released, 24.0 with VoLTE working | 24.0 boots enforcing on the 4.4 kernel and carries VoLTE (LG's 2016 IMS stack bridged onto A17): MO and MT calls with two-way audio. Building it needs the stock LG firmware you supply. |
+| [bonito-lineage](https://github.com/TheDBP/bonito-lineage) | Pixel 3a XL | 24.0 | Android 17 on an Android 15 kernel and Android 12 blobs. Boots in ~30 s with the hardware working: camera both sensors, VoLTE and VoWiFi, fingerprint, NFC, GPU memory reporting. Upstream stopped at a stale 23.0, so this went straight to 24. |
+| [vs995-lineage](https://github.com/TheDBP/vs995-lineage) | LG V20 (Verizon) | 24.0, with VoLTE | 24.0 boots enforcing on the 4.4 kernel and carries VoLTE (LG's 2016 IMS stack bridged onto A17): MO and MT calls with two-way audio. Building it needs the stock LG firmware you supply. |
 
 ---
 

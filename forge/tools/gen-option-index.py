@@ -42,7 +42,10 @@ def _conf(path):
     for line in open(path, encoding='utf-8'):
         m = re.match(r'^([A-Z][A-Z0-9_]*)=(.*)$', line.strip())
         if m:
-            out[m.group(1)] = m.group(2).strip().strip('"').strip("'")
+            # Backticks are escaped in the file: option.conf is SOURCED by apply-overlay, where an
+            # unescaped one is command substitution -- `forge/options/volte/README.md` ran as a
+            # command and printed "No such file or directory" on every build that staged the option.
+            out[m.group(1)] = m.group(2).strip().strip('"').strip("'").replace('\\`', '`')
     return out
 
 
