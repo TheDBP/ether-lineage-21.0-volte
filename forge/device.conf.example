@@ -85,9 +85,9 @@ PRESETS="
 
 # ---- optional download overrides ----
 #GAPPS_URL=               # a specific GApps zip; overrides the version-derived default
-# App options (fdroid, k9, kdeconnect, connectbot, fulguris, firefox, termoneplus, nextcloud,
-# nextcloud-core) fetch the
-# build F-Droid currently suggests, verified by signing certificate. Pin one to a versionCode only
+# App options (connectbot, fdroid, firefox, fulguris, k9, kdeconnect, linphone, nextcloud,
+# nextcloud-core, openvpn, syncthing-fork, termoneplus) fetch the build F-Droid currently
+# suggests, verified by signing certificate. Pin one to a versionCode only
 # to reproduce a release or hold back a bad update; anything not listed stays on latest.
 #FDROID_PINS="org.mozilla.fennec_fdroid=1550020 com.fsck.k9=39043"
 
@@ -111,6 +111,41 @@ PRESETS="
 # disappear otherwise. Each is git-initialised so it can also be a PATCHED_PROJECT.
 #   Format: "<src-under-device-repo>:<dest-under-AOSP> ..."
 #VENDORED_PROJECTS="vendored/device_<vendor>_<codename>:device/<vendor>/<codename>"
+
+# ---- optional: knobs that are read but have no row above ----
+# Every one of these is live in the engine; they lived only in the comments of whichever script
+# reads them, which is why a second device cost 100 GB before anyone found REPO_REFERENCE.
+#
+#   STOCK_OPTIONS        options the synthetic `stock` preset still gets. `stock` is otherwise the
+#                        empty set -- the reference build for "is this bug ours or upstream's?" --
+#                        so put here only what the phone needs to work at all, not preferences.
+#   APEX_EROFS_UNSUPPORTED=true   this kernel has no CONFIG_EROFS_FS, so prebuilt APEXes must be
+#                        repacked with an ext4 payload or apexd fails to mount them (GOTCHAS 33).
+#   KERNEL_EXTRA_CONFIGS names of fragments in forge/kernel-configs/ to merge into the defconfig.
+#   KERNEL_EXTRA_PATCHES names of patches in forge/kernel-patches/ to apply.
+#   KERNEL_EXTRA_PATCHES_OPTIONAL   of those, the ones that may fail to apply without failing the
+#                        build -- for a patch that only some kernels in a family need.
+#   REPO_REFERENCE       path to a shared git object store, passed to `repo init --reference`. The
+#                        difference between a second device costing ~100 GB and costing almost
+#                        nothing. Set it in device.conf.local if the path is personal.
+#   REPO_DISSOCIATE=1    after syncing, detach this tree from that reference so it stands alone.
+#   SOONG_MEM_LIMIT      cap soong_build's Go heap (becomes GOMEMLIMIT), e.g. 24GiB. For a device
+#                        whose analysis phase OOMs; needed on every run, so it belongs here.
+#   RELEASE_REPO         owner/name to publish to; defaults to this repo's origin.
+#   RELEASE_HEADLINE     first line of the release body, instead of the generated one.
+#   KERNEL_SOURCE_URL    where the matching kernel source is published, for the GPL note in the
+#                        release body. Set it once forge/tools/publish-kernel-source.sh has pushed.
+#STOCK_OPTIONS="setup-mobile-data"
+#APEX_EROFS_UNSUPPORTED=true
+#KERNEL_EXTRA_CONFIGS="container"
+#KERNEL_EXTRA_PATCHES="cgroup-noprefix-symlinks"
+#KERNEL_EXTRA_PATCHES_OPTIONAL="cgroup-noprefix-symlinks"
+#REPO_REFERENCE=/path/to/aosp-shared/mirror-lineage-24.0
+#REPO_DISSOCIATE=1
+#SOONG_MEM_LIMIT=24GiB
+#RELEASE_REPO=you/your-device-repo
+#RELEASE_HEADLINE=
+#KERNEL_SOURCE_URL=
 
 # ---- signing ----
 # Not here: KEYS_DIR belongs in device.conf.local (gitignored), pointing at a directory outside

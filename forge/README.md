@@ -110,6 +110,16 @@ dozen things we always add" would not be stock, and a stock image quietly carryi
 be a lie in its own filename. Asking for it with `EXTRA_OPTIONS` set prints a note saying it was
 ignored.
 
+Two things do reach it, and both are the device saying "this is not an extra, it is the phone
+working at all". `STOCK_OPTIONS` in `device.conf` names options stock still gets — without
+`setup-mobile-data` on the Robin, SetupWizard leaves mobile data off, and an image that cannot
+reach the network does not answer the question stock exists to answer. And on a device that builds
+VoLTE from stock firmware, `volte` turns itself on here as everywhere else. So "is this bug ours or
+upstream's?" is answered against upstream *plus those*. If you suspect one of them, empty
+`STOCK_OPTIONS` for the run, or move the stock firmware aside so `volte` reports itself off. An
+empty `OPTIONS=` will not do it: with no `PRESET` either, bootstrap falls back to the first preset
+rather than to nothing.
+
 Its value is answering one question quickly: **is this ours or upstream's?** A bug that reproduces
 on a stock build is LineageOS's; one that disappears is something we added, and the option list is
 then the search space. That is a single flash instead of an argument.
@@ -144,12 +154,12 @@ rather than one per cycle.
 ### 5. Find the result
 
 ```
-build_output/artifacts/<zip name>.zip   (+ -recovery.img, -boot.img, .sha256)
+build_output/artifacts/<zip name>.zip   (+ -recovery.img, -boot.img, -boot-magisk.img, .sha256)
 ```
 
 That copy survives the next build; the one in `build_output/src/out/target/product/<codename>/` is
-deleted by the next preset's installclean. If you enabled root you also get `boot-magisk.img` in
-`out/`.
+deleted by the next preset's installclean. If you enabled root, `boot-magisk.img` is kept there
+too, not only in `out/`.
 
 ### 6. Flash it
 
@@ -179,8 +189,12 @@ captured as patches. To keep a change permanently:
 ./forge/tools/refresh-patches.sh
 ```
 
-This walks the projects you have committed to and rewrites `overlay/patches/` to match. From then
-on, every build replays your change automatically — including on a fresh clone on another machine.
+This rewrites `overlay/patches/` from the commits sitting on top of upstream. From then on, every
+build replays your change automatically — including on a fresh clone on another machine.
+
+It refreshes the projects that already carry patches. A project you have committed to for the first
+time is reported and *skipped*, and the run exits non-zero so a preflight notices: pass `--adopt` to
+export those too, or they are lost on the next clean bootstrap.
 
 Run it on a clean tree, with no half-applied patches and nothing uncommitted. See GOTCHAS 14 for
 what happens otherwise.
@@ -195,8 +209,10 @@ PRESET=full OPTIONS=nav-icons ./forge/bootstrap.sh   # a preset's tag, your opti
 ```
 
 **One run builds one image.** Building two means running it twice, which costs almost nothing: the
-57 GB of compiled intermediates in `out/` are reused between runs, and the only thing a second run
-repeats is a one-to-four-second overlay pass.
+57 GB of compiled intermediates in `out/` are reused between runs. A second run still re-inits the
+manifests, resets the patched projects and re-syncs before the overlay pass, and changing the option
+set triggers an `installclean` — so it is minutes plus whatever actually recompiles, not seconds,
+but nowhere near the hours the first one took.
 
 Optional extras — an on-device Linux environment (the `linux` option), F-Droid, Firefox, Google
 apps — are options; see *Options and presets* below.
@@ -374,7 +390,7 @@ COMMON_OPTIONS="... linux"
 ```
 
 Builds a container-capable kernel. The Magisk module that goes with it, `linux-chroot-<version>.zip`
-(Ubuntu Base in a chroot, plus `lx-docker`; scripts only, ~7 KB), is written next to the ROM on
+(Ubuntu Base in a chroot, plus `lx-docker`; scripts only, ~7 KB), is written to `build_output/` on
 every build whether or not the option is on — installing it on the phone is opt-in, and nothing
 mounts at boot.
 
@@ -459,7 +475,9 @@ modules/              on-device Magisk modules (linux-chroot)
 templates/            source templates instantiated into device trees by tools/ (ims-bridge: the compat
                       ImsService over an OEM legacy IMS app, see tools/new-ims-bridge.sh)
 prebuilt/             fetchers for Magisk, F-Droid, Firefox, Fulguris, K-9, KDE Connect, TermOne Plus,
-                      Nextcloud, Linphone, ConnectBot
+                      Nextcloud, Linphone, ConnectBot, OpenVPN, Syncthing-Fork
+patches/<branch>/     engine patches applied on every device on that branch
+docs/                 the worked methods (see Documentation below)
 GOTCHAS.md            known traps, indexed by symptom
 ```
 

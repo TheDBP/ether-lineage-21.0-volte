@@ -145,7 +145,7 @@ if [ -n "${VOLTE_STOCK_GLOB:-}" ] || [ -n "${VOLTE_STAGED_MARKER:-}" ]; then
   case " $BUILD_OPTIONS " in
     *" volte "*)
       if [ -z "$_volte_have" ]; then
-        echo "!! volte was asked for, but there is no ${VOLTE_STOCK_GLOB:-stock firmware} in $DEVICE_REPO" >&2
+        echo "!! volte was asked for, but there is no ${VOLTE_STOCK_GLOB:-stock firmware} in $DEVICE_REPO or $BUILD_ROOT" >&2
         echo "!! and nothing staged in the tree." >&2
         echo "!! VoLTE is the manufacturer's IMS stack rebuilt from the phone's own firmware; it" >&2
         echo "!! cannot be built from source and cannot ship in this repo. See the VoLTE/IMS doc." >&2
@@ -158,7 +158,7 @@ if [ -n "${VOLTE_STOCK_GLOB:-}" ] || [ -n "${VOLTE_STAGED_MARKER:-}" ]; then
         BUILD_OPTIONS="$BUILD_OPTIONS volte"
         echo ">> volte: on -- $_volte_have"
       else
-        echo ">> volte: OFF -- no ${VOLTE_STOCK_GLOB:-stock firmware} found in $DEVICE_REPO"
+        echo ">> volte: OFF -- no ${VOLTE_STOCK_GLOB:-stock firmware} found in $DEVICE_REPO or $BUILD_ROOT"
         echo "   This image will NOT be able to place calls over LTE. Carriers have been shutting"
         echo "   down the 2G/3G voice these devices fall back to, so on many networks that means no"
         echo "   calls at all. Supply the stock firmware to get VoLTE; see the VoLTE/IMS doc."

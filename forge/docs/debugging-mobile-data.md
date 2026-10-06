@@ -45,7 +45,9 @@ about as `0xffffffff`, and a modem that tests `!= 0` reads that as "flag set".
 Dump the items with [`smem-poke`](../tools/smem-poke) built against the running kernel with
 [`kmod-build.sh`](../tools/kmod-build.sh):
 
-    kmod-build.sh tools/smem-poke
+    ./forge/tools/kmod-build.sh forge/tools/smem-poke     # run from the device repo; the path
+                                                         # must be inside it, because the container
+                                                         # reaches it as /repo/<relpath>
     insmod smem-poke.ko ids=134,135,136 ; dmesg | tail
 
 Anything that is all-ones on your phone and zero on a stock-bootloader phone of the same model

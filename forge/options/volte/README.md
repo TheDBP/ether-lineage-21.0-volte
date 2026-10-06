@@ -55,7 +55,8 @@ case.
 
 Three keys in `device.conf` (see `device.conf.example`):
 
-- `VOLTE_STOCK_GLOB` — what the user drops in the repo root. Whatever the stage script can read.
+- `VOLTE_STOCK_GLOB` — what the user drops in the repo root, or in `build_output/`; both are
+  searched. Whatever the stage script can read.
 - `VOLTE_STAGE_SCRIPT` — run after the device patches, as `<script> <stock-file> <aosp-root>`.
   Optional: a device may stage from its own `device.mk` instead, as the Robin does.
 - `VOLTE_STAGED_MARKER` — the file that exists only once staging worked. This is the whole safety

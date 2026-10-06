@@ -86,9 +86,8 @@ The sounds step keeps only files not already in LineageOS (on the Robin: 12 of 1
 ## 4. Build with them
 
 ```sh
-EXTRA_OPTIONS=oem ./bootstrap.sh
-# or a preset whose options include oem:
-PRESET=full ./bootstrap.sh
+EXTRA_OPTIONS=oem ./bootstrap.sh          # adds oem to whichever preset you build
+EXTRA_OPTIONS=oem PRESET=full ./bootstrap.sh
 ```
 
 You should see:

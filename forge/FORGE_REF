@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=4f41c3f2df080e3ee048792eca1ae3e5d8348650
-subject=docs: correct four false claims, and list the options somewhere
-synced=2026-10-06T18:52:54Z
+commit=1c748d72191f9c0412011939fc149d616446de30
+subject=docs: regenerate the tool index
+synced=2026-10-06T19:02:40Z

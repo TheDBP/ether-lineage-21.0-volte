@@ -60,7 +60,10 @@ def scan():
             chunk.append(text)
         summary = ' '.join(chunk)
         summary = re.sub(r'^' + re.escape(base) + r'\s*[' + DASHES + r']+\s*', '', summary)
-        sentence = re.match(r'(.+?[.:])(\s|$)', summary)
+        # Cut at a full stop only. Cutting at a colon too left descriptions ending in the colon
+        # that was about to introduce the useful half -- "apply the composed customization stack
+        # onto a synced LineageOS tree:" and nothing after it.
+        sentence = re.match(r'(.+?\.)(\s|$)', summary)
         if sentence and len(sentence.group(1)) > 25:
             summary = sentence.group(1)
         summary = summary.rstrip(' .') or '(no description)'

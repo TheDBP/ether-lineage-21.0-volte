@@ -722,3 +722,50 @@ denial set from a permissive boot gets you most of the way, with two traps.
 Verify with `logcat | grep "avc.*denied.*radio" | grep permissive=0` on an enforcing boot, and
 re-check after any change to the stack -- an empty list there is the only evidence that matters.
 
+
+## Wiring the finished port into the build
+
+The port is not done when calls work on the phone in front of you — it is done when a clean clone
+can reproduce it. That means the artifacts must be produced by the build rather than staged by hand,
+and the build must still work for someone who has no stock firmware at all.
+
+The `volte` option is the mechanism; `options/volte/README.md` is its reference. The device supplies
+three keys in `device.conf`:
+
+```sh
+VOLTE_STOCK_GLOB="MyPhone_Stock_*.zip"   # what the user drops in the repo root (or build_output/)
+VOLTE_STAGE_SCRIPT=stage-volte.sh        # <script> <stock-file> <aosp-root>, run after device patches
+VOLTE_STAGED_MARKER=device/<v>/<d>/ims/Ims-reworked.apk   # exists only once staging succeeded
+```
+
+Omit `VOLTE_STAGE_SCRIPT` if the device tree stages itself from its own `device.mk`, as the Robin
+does; the option still checks the marker.
+
+Then gate the device's IMS packages so a build without the firmware is a build without IMS, not a
+build that fails:
+
+```make
+ifeq ($(WITH_VOLTE),true)
+include $(LOCAL_PATH)/ims/ims.mk
+endif
+```
+
+A hard `include` rather than `-include`: "the artifacts are missing" means the staging did not run,
+and the option's `require.sh` has already stopped the build by then. The switch is about whether IMS
+was asked for at all.
+
+What this buys, and why it is worth doing rather than leaving the artifacts staged by hand:
+
+- firmware present → the option turns itself on and the stack is rebuilt on the first build;
+- firmware absent → the build succeeds, ships no VoLTE, says so, and tags the image `-novolte`;
+- `volte` asked for explicitly with no firmware → the build stops, rather than handing someone an
+  image tagged for VoLTE that cannot place a call.
+
+Both images are publishable. A ROM already ships the manufacturer's vendor blobs, and the IMS stack
+is one more of them; `release.sh` reports which IMS artifacts are in the image rather than refusing
+them. See [RELEASING.md](RELEASING.md).
+
+The failure this replaces is worth naming, because both devices here hit it: hand-staged artifacts
+sit outside everything that resets the tree, so a checkout where the script had been run once kept
+producing ROMs with IMS, while a fresh clone produced ROMs without it and said nothing — same
+command, same repo, different image.

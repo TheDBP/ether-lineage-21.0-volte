@@ -18,8 +18,10 @@ produces one image; the preset just names which options that image gets.
 
 ```
 forge/options/<name>/
-    option.conf          name, description, COMPAT, and optionally KERNEL_CONFIGS / KERNEL_PATCHES
+    option.conf          NAME, DESC, and optionally NOTE, COMPAT, REQUIRES,
+                         KERNEL_CONFIGS / KERNEL_PATCHES / KERNEL_PATCHES_OPTIONAL
     patches/<branch>/    git am onto synced projects -- BRANCH-SCOPED, see below
+    local_manifests/<branch>/   extra repo projects this option needs synced
     fetch.sh             pull a prebuilt (APK, blob) at sync time
     assets.list          file copies and removals
     tree/                files staged verbatim into the AOSP tree
@@ -30,6 +32,19 @@ forge/options/<name>/
     post-build.sh        run after a successful build; non-zero fails it
     reference/           optional: source material, not shipped
 ```
+
+`option.conf` is **sourced by the shell**, so a backtick or a `$` in `DESC`/`NOTE` is substitution,
+not punctuation. Escape them (`\``); `gen-option-index.py` unescapes when it renders the table.
+
+- `DESC` — one line, what the option does. It is what the generated options tables print.
+- `NOTE` — an optional caveat appended to `DESC` everywhere it is rendered: that `bringup` accepts
+  adb from any host, that `fulguris` ships as the only browser. Device-specific caveats do not go
+  here — those belong in `options-notes.conf` in the device repo.
+- `REQUIRES` — another option to pull in. One pass, no recursion (see the end of this file).
+- `COMPAT` — `all` (the default when absent), or a comma-separated OR of `device=<vendor>/<codename>`,
+  `soc=<id>` and `branch=<lineage-XX.X>`. Any one match admits the option; no match and it is
+  skipped with a message rather than failing the build. Use it when the option can never apply —
+  not when it simply has no patch for a branch yet, which the forge already handles.
 
 Every part is optional. There is one mechanism, not two: what used to be a "feature" (patches
 applied at sync) and what used to be an "option" (a makefile fragment gated at build time) are parts
@@ -145,7 +160,8 @@ An app option never carries the APK; `fetch.sh` downloads it at sync time into
 `vendor/lineage/prebuilts/<option>/`, gitignored there. Fetch the build F-Droid *currently* suggests,
 verified by signer certificate (`prebuilt/lib-fdroid.sh`, `fdroid_fetch_latest`), not a pinned
 versionCode + file hash: the image should carry the app as it is on the day it is built. Pin only
-with `FDROID_PINS` on the command line, to reproduce a release or hold back a bad update.
+with `FDROID_PINS` — on the command line for a one-off, or in `device.conf` to hold a pin for this
+device. Both work: device.conf is sourced and the value is forwarded into the container.
 
 A subset of a bundle is its own option sharing the fetcher and the patch: `nextcloud-core` is
 `prebuilt/fetch-nextcloud.sh` with `NEXTCLOUD_MODULES` set and a verbatim copy of `nextcloud`'s
@@ -180,8 +196,8 @@ Two intentional differences remain:
 - `nav-icons` is COMMON everywhere for a different reason on the Robin (its own nav bar) than
   elsewhere (borrowed) — see the comment above `COMMON_OPTIONS` in ether's `device.conf`.
 - `setupwizard-lineage` (Lineage's SetupWizard over Google's on GApps builds) is COMMON on ether
-  only; it has 18.1–20.0 patches and none for 22.2/23.2, so bonito and vs995 `full` builds run
-  Google's wizard. To be revisited, not an oversight.
+  only; its COMPAT is 18.1/19.1/20.0, so on bonito and vs995 — both on 24.0 — the forge skips it
+  with a message and their `full` builds run Google's wizard. To be revisited, not an oversight.
 
 ## REQUIRES: one option pulling in another
 

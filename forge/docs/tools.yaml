@@ -17,7 +17,7 @@ tools:
       - "docs/debugging-volte.md"
   - name: "app-fw-api-gap.py"
     path: "tools/app-fw-api-gap.py"
-    summary: "preflight a ported app against a target framework:"
+    summary: "preflight a ported app against a target framework: list the framework methods and classes the app's dex references that the target does NOT have"
     usage: "app-fw-api-gap.py --app <app-smali-dir> --fw <framework.jar|dir|smali-dir>[,<more>...] [--pkg android,javax,...]"
     docs:
       - "docs/debugging-volte.md"
@@ -29,7 +29,7 @@ tools:
       - "docs/debugging-volte.md"
   - name: "apply-overlay.sh"
     path: "tools/apply-overlay.sh"
-    summary: "apply the composed customization stack onto a synced LineageOS tree:"
+    summary: "apply the composed customization stack onto a synced LineageOS tree: 1"
     usage: "./forge/tools/apply-overlay.sh [--manifests-only] [AOSP_ROOT]   (AOSP_ROOT defaults to /aosp)"
     docs: []
   - name: "aps2-relocs.py"
@@ -180,7 +180,7 @@ tools:
     docs: []
   - name: "dlopen-probe.sh"
     path: "tools/dlopen-probe.sh"
-    summary: "find out, empirically, whether a prebuilt .so actually LOADS on the running device:"
+    summary: "find out, empirically, whether a prebuilt .so actually LOADS on the running device: dlopen it and its whole DT_NEEDED closure, running the init-array too"
     usage: "dlopen-probe.sh <blob.so> [--supply DIR] [--stub LIB ...] [--preload LIB ...]"
     docs:
       - "docs/debugging-volte.md"
@@ -204,7 +204,7 @@ tools:
       - "docs/OEM-ASSETS.md"
   - name: "fb-capture.sh"
     path: "tools/fb-capture.sh"
-    summary: "screenshot a device that has no screencap:"
+    summary: "screenshot a device that has no screencap: recovery, or a boot that never reaches SurfaceFlinger"
     usage: "fb-capture.sh [-o out.png] [-s SERIAL] [--fb N]"
     docs: []
   - name: "find-orphaned-sepolicy-types.sh"
@@ -227,7 +227,7 @@ tools:
       - "docs/porting-a-branch-bump.md"
   - name: "fn-calls.sh"
     path: "tools/fn-calls.sh"
-    summary: "what one function in a stripped-of-source vendor library calls, and the constants it passes:"
+    summary: "what one function in a stripped-of-source vendor library calls, and the constants it passes: the fastest way from a qcril/RIL handler symbol to the QMI message id it sends"
     usage: "fn-calls.sh <lib.so> <symbol|0xaddr> [--len BYTES] [--all] [--dis out.dis]"
     docs:
       - "docs/debugging-volte.md"
@@ -330,13 +330,13 @@ tools:
       - "docs/debugging-volte.md"
   - name: "modem-strings.sh"
     path: "tools/modem-strings.sh"
-    summary: "pull the readable strings out of a modem firmware (the `modem.b*` segments) and sort them into the three lists that answer porting questions:"
+    summary: "pull the readable strings out of a modem firmware (the `modem.b*` segments) and sort them into the three lists that answer porting questions: which QMI request handlers the modem implements, which EFS/NV items it reads, and which source files the log lines come from"
     usage: "modem-strings.sh <modem.image|dir with modem.b*|/firmware/image via adb:> <outdir>"
     docs:
       - "docs/debugging-volte.md"
   - name: "modem-xrefs.py"
     path: "tools/modem-xrefs.py"
-    summary: "cross-reference a Qualcomm Hexagon modem:"
+    summary: "cross-reference a Qualcomm Hexagon modem: map a VA to data, find pointers and Hexagon immext code references to an address, and resolve QShrink's compressed log strings"
     usage: "modem-xrefs.py <modem.elf> str   \"<substring>\"      strings matching, their pointers and immext refs"
     docs:
       - "docs/debugging-volte.md"
@@ -411,7 +411,7 @@ tools:
     docs: []
   - name: "push-system-app.sh"
     path: "tools/push-system-app.sh"
-    summary: "iterate a reworked /system app on an already-flashed device WITHOUT a full ROM reflash:"
+    summary: "iterate a reworked /system app on an already-flashed device WITHOUT a full ROM reflash: match the device's platform signer, sign, push, and swap it into /system across a reboot"
     usage: "push-system-app.sh <reworked.apk> <device-install-dir> [-s SERIAL]"
     docs:
       - "docs/debugging-volte.md"
@@ -429,7 +429,7 @@ tools:
       - "docs/debugging-volte.md"
   - name: "qmi-sni.sh"
     path: "tools/qmi-sni.sh"
-    summary: "bring up a modem data call from the AP as a direct QMI WDS client, bypassing the RIL, and print the modem's own answer:"
+    summary: "bring up a modem data call from the AP as a direct QMI WDS client, bypassing the RIL, and print the modem's own answer: QMI result/error and the call-end reason TLVs"
     usage: "qmi-sni.sh <node> <apn> <3gpp-profile> [v4|v6|v4v6] [epc|umts|none] [calltype] [keep] [sub] [muxN]"
     docs:
       - "docs/debugging-mobile-data.md"
@@ -452,6 +452,7 @@ tools:
     docs:
       - "docs/OEM-ASSETS.md"
       - "docs/RELEASING.md"
+      - "docs/debugging-volte.md"
   - name: "rename-import.py"
     path: "tools/rename-import.py"
     summary: "point ONE blob's import of a symbol at a differently-named replacement, by"
@@ -469,7 +470,7 @@ tools:
     docs: []
   - name: "sideload-flash.sh"
     path: "tools/sideload-flash.sh"
-    summary: "unattended recovery flash of a ROM zip:"
+    summary: "unattended recovery flash of a ROM zip: sideload, optional data wipe, boot watch with a result line you can read the next morning"
     usage: "sideload-flash.sh <rom.zip> [--wipe] [--recovery <img>] [-s SERIAL] [--check '<shell cmds>'] [--timeout S]"
     docs: []
   - name: "slot-switch.sh"
