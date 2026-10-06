@@ -329,7 +329,16 @@ if [ "$WANT_GAPPS" = true ]; then
     done
   fi
   if [ -z "${GAPPS_ZIP:-}" ]; then
-    if [ -n "${GAPPS_URL:-}" ]; then
+    if [ "${GAPPS_URL:-}" = none ]; then
+      # MindTheGapps only: it is built from source via this option's local_manifests and supplies
+      # GMS Core, the Play Store and Google's services framework. NikGapps is the extra layer that
+      # replaces the stock apps with Google's, and it is published per Android version -- when a
+      # version has no NikGapps release yet (Android 17 at the time of writing), this says so out
+      # loud instead of failing the build or, worse, installing another version's.
+      GAPPS_DL_URL=""
+      echo "   GApps: MindTheGapps only (GAPPS_URL=none) -- no NikGapps layer, so Google's"
+      echo "          replacements for the stock apps are not included; install them from Play."
+    elif [ -n "${GAPPS_URL:-}" ]; then
       GAPPS_DL_URL="$GAPPS_URL"                       # explicit per-device override wins
     else
       _av="${ANDROID_VERSION:-$(android_version_for_branch "$BRANCH" || true)}"
@@ -341,7 +350,9 @@ if [ "$WANT_GAPPS" = true ]; then
       fi
       if ! GAPPS_DL_URL="$(nikgapps_url_for_version "$_av")"; then
         echo "!! no NikGapps release mapped for Android $_av." >&2
-        echo "!! Add it to nikgapps_url_for_version() in forge/bootstrap.sh, or set GAPPS_URL." >&2
+        echo "!! Add it to nikgapps_url_for_version() in forge/bootstrap.sh, set GAPPS_URL, or" >&2
+        echo "!! set GAPPS_URL=none to build MindTheGapps only (GMS Core and the Play Store, no" >&2
+        echo "!! NikGapps layer) when that version has no NikGapps release at all." >&2
         echo "!! Refusing to guess -- the wrong version's GApps installs silently and only" >&2
         echo "!! shows up on the device." >&2
         exit 1

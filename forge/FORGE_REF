@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=16d2a188d0fc5193b401f342f17005c6f3217dbe
-subject=GOTCHAS 37 + debugging-volte: restaging an OEM helper daemon on a Treble build
-synced=2026-10-06T14:01:37Z
+commit=1b825c18343d1621457b25a7859505008003ceb2
+subject=gapps: GAPPS_URL=none builds MindTheGapps only
+synced=2026-10-06T14:05:04Z
