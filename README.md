@@ -202,10 +202,25 @@ published.
 
 ## Building
 
-One command, one image. Start with `clean` — it needs no inputs beyond the source.
+> **You must supply the Robin's stock ROM.** VoLTE here is Nextbit's own Nougat IMS stack rebuilt
+> to bind to a modern `ImsService`. Those blobs are proprietary, so this repo carries the recipe and
+> none of the ingredients. **Every preset includes IMS**, so a tree without the stock ROM does not
+> quietly build a ROM lacking VoLTE — it stops with an error.
+>
+> Drop a `Ether_Stock_ROM_*.zip` (Nextbit `Robin_Nougat_108` or later) in the **root of this repo**;
+> the name must match that glob. The first build stages the IMS blobs out of it automatically (~2
+> min) and later builds skip straight past. To re-stage, delete `build_output/src/vendor/ims-blobs`.
+>
+> `STOCK_ROM=` and `STOCK_ROM_URL` do **not** apply to this: those feed the `oem` option only. The
+> IMS staging looks in the repo root and nowhere else.
+>
+> Why it is staged by the build rather than listed as a prerequisite, and what the staging does:
+> [VOLTE-BRINGUP.md](VOLTE-BRINGUP.md) §7.
+
+One command, one image.
 
 ```sh
-PRESET=clean ./forge/bootstrap.sh    # plain LineageOS + the tuning, nothing proprietary
+PRESET=clean ./forge/bootstrap.sh    # plain LineageOS + the tuning (IMS included, as everywhere)
 PRESET=libre ./forge/bootstrap.sh    # + F-Droid, Fulguris, K-9, the Nextcloud bundle, still no Google
 PRESET=full  ./forge/bootstrap.sh    # + GApps, root, Fulguris, F-Droid, K-9, the Nextcloud bundle
 PRESET=robin ./forge/bootstrap.sh    # the Nextbit look and root, no Google
