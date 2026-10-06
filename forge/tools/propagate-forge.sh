@@ -55,6 +55,24 @@ if [ ${#TARGETS[@]} -eq 0 ]; then
 fi
 [ ${#TARGETS[@]} -eq 0 ] && { echo "no device repos found beside $FORGE"; exit 0; }
 
+# The options tables in device READMEs are generated from forge/options/ as well, and they are the
+# half that actually drifted: six repos each hand-maintained a copy, all six had fallen behind, and
+# one told people the whole look-and-behaviour set was unavailable on lineage-24.0 months after it
+# landed. Checked here for the same reason as the tool index -- this is the one gate every engine
+# change passes through. Checked for ALL targets before syncing any, so a refusal leaves nothing
+# half-propagated.
+_ostale=()
+for d in "${TARGETS[@]}"; do
+  [ -f "$d/README.md" ] || continue
+  "$(dirname "$0")/gen-option-index.py" --check "$d/README.md" >/dev/null 2>&1 || _ostale+=("$(basename "${d%/}")")
+done
+if [ ${#_ostale[@]} -gt 0 ]; then
+  echo "!! the options table is out of date in: ${_ostale[*]}" >&2
+  echo "!! regenerate and commit it in each, then propagate:" >&2
+  for d in "${_ostale[@]}"; do echo "     (cd ../$d && ./forge/tools/gen-option-index.py README.md)" >&2; done
+  exit 1
+fi
+
 # True if some bootstrap.sh process has <repo> as its working directory. The process cmdline is
 # the relative ./forge/bootstrap.sh, so the path has to come from /proc/<pid>/cwd, not from -f.
 building_in() {

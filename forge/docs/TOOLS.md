@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-90 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+91 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -53,6 +53,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`fn-calls.sh`](../tools/fn-calls.sh) | what one function in a stripped-of-source vendor library calls, and the constants it passes: | `fn-calls.sh <lib.so> <symbol\|0xaddr> [--len BYTES] [--all] [--dis out.dis]` | [debugging-volte](debugging-volte.md) |
 | [`freestanding-arm64.sh`](../tools/freestanding-arm64.sh) | cross-compile one of the freestanding arm64 helpers (no libc, raw syscalls, own _start) in the cached cross-compile container and push it to /data/local/tmp | `freestanding-arm64.sh` | — |
 | [`gen-legacy-aidl.py`](../tools/gen-legacy-aidl.py) | (no description) | `gen-legacy-aidl.py <deodex-workdir> <out-aidl-dir> [iface ...]` | [debugging-volte](debugging-volte.md) |
+| [`gen-option-index.py`](../tools/gen-option-index.py) | render the options table into any README that asks for one, from | `gen-option-index.py [--check] <README.md> [...]      --check: exit 1 if any file is stale` | — |
 | [`gen-tool-index.py`](../tools/gen-tool-index.py) | regenerate the tool index from the tools themselves | `gen-tool-index.py            # rewrite docs/TOOLS.md and docs/tools.yaml` | — |
 | [`gen-verify-stubs.py`](../tools/gen-verify-stubs.py) | emit minimal smali "verify stubs" for framework/vendor classes a ported app references but the target ROM lacks | `gen-verify-stubs.py --app <app-smali-dir> --out <extra-smali-dir> CLASS [CLASS ...]` | [debugging-volte](debugging-volte.md) |
 | [`hybrid-bootimg.sh`](../tools/hybrid-bootimg.sh) | a boot image with one build's kernel+dtb and another's ramdisk | `hybrid-bootimg.sh <kernel-from.img> <ramdisk-from.img> <out.img>` | [porting-a-branch-bump](porting-a-branch-bump.md) |

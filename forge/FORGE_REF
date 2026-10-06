@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=8b6015bb4369a60cd419faad157a950d450068ca
-subject=options: add volte, the one option that turns itself on
-synced=2026-10-06T17:13:37Z
+commit=67e61fdba781e79cce78604b1bc9ca33194c849e
+subject=tools: generate the options table instead of retyping it six times
+synced=2026-10-06T17:43:08Z
