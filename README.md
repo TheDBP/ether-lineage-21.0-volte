@@ -272,42 +272,33 @@ checkout. Those images carry reclaimed manufacturer assets and are for your own 
 Every option this device uses, and what each one does. They live in `forge/options/`, so they
 work on any device rather than being wired into this tree.
 
+<!-- options:start device -->
+
 | option | what it does |
 |---|---|
-| `advanced-restart` | Advanced restart in the power menu |
-| `dark-default` | Default to dark theme |
-| `fdroid` | F-Droid app store + Privileged Extension (silent installs/updates) |
-| `firefox` | Firefox (Fennec F-Droid) as the browser, replacing Jelly — still available, but 320 MB staged, so no preset carries it now |
-| `fulguris` | Fulguris as the browser, replacing Jelly — a WebView browser, 9 MB where Fennec stages 320 MB. **In no preset**: it overrides Jelly, so a preset carrying it ships the only browser in the image — and its first run asks you to accept a privacy policy and terms with nothing else able to open them. Dropping it restores Jelly. `EXTRA_OPTIONS=fulguris` to add it |
-| `connectbot` | ConnectBot: an SSH client with saved hosts, keys and port forwarding |
-| `linphone` | Linphone: a SIP client, for voice over data where a device or network has no VoLTE |
-| `gapps` | Google apps: Play Store and GMS from MindTheGapps, plus Google's versions of the stock apps |
-| `google-feed-off` | Google feed (-1 screen) off by default |
-| `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client |
-| `nextcloud` | Nextcloud bundle: Files, Talk, NextPush, Deck, NC Passwords, Notes, DAVx5, Tasks — the current F-Droid build of each, fetched at build time |
-| `kdeconnect` | KDE Connect: phone <-> desktop notifications, clipboard, files, remote input |
-| `home-defaults` | Home screen defaults: no icon labels, no auto-add |
-| `linux` | On-device Linux environment (chroot + Docker): container kernel config; the cgroup symlink patch is off here (3.10 predates kernfs) |
-| `livedisplay-off` | LiveDisplay off by default |
-| `minimal-home` | Minimal home screen: hotseat only, no second page |
-| `nav-icons` | Nextbit Robin style nav-bar icons, drawn as scalable tintable vectors |
-| `nfc-off` | NFC off by default |
-| `oem` | The manufacturer's own boot animation, wallpapers and sounds, reclaimed from its stock ROM |
-| `root` | Magisk baked into the boot image, so the zip flashes pre-rooted. Pulls in `termoneplus`, since root with no shell on the device is not much use |
-| `openvpn` | OpenVPN for Android as a bundled VPN client |
-| `syncthing-fork` | Syncthing-Fork: continuous file sync between your own devices, no server or account |
-| `nextcloud-core` | The four Nextcloud apps that make the phone a client: Files, Talk, NextPush, DAVx5. Mutually exclusive with `nextcloud`, which already carries them |
-| `setup-mobile-data` | Leave mobile data alone during setup, which older Lineage turns off and never back on |
-| `pong-notification` | Pong as the default notification sound, where LineageOS uses Argon |
-| `bringup` | Diagnostic: adbd from boot with no authorisation prompt, plus persistent logcat, so a build that never reaches the lock screen can still be traced. **Do not distribute an image built with it** |
-| `drm-trace` | Diagnostic: trace whoever disables a DRM plane or CRTC. Its kernel patch needs atomic KMS, which this 3.10 kernel does not have, so on this device it warns and is skipped |
-| `setupwizard-lineage` | Use Lineage SetupWizard over Google's (WITH_GAPPS) |
-| `setupwizard-nag-skip` | Skip recovery/metrics/backup setup pages |
-| `teal-skin` | Teal accent — fixed #009D94 Monet preset seed |
-| `teal-wallpaper` | Teal-shag default wallpaper (baked into framework-res) |
-| `termoneplus` | TermOne Plus terminal emulator |
-| `themed-icons` | Themed (monochrome) app icons on by default |
+| `bringup` | adbd from boot with no authorisation prompt, plus persistent logcat, so a build that never reaches the lock screen can still be traced. **Never hand out an image built with this** — it accepts adb from any host. |
+| `connectbot` | ConnectBot: an SSH client with saved hosts, keys and port forwarding. |
+| `dark-default` | Default to dark theme. |
+| `drm-trace` | Diagnostic: kernel trace of whoever disables a DRM plane or CRTC, for a panel that dies while the framework still thinks it is on. Its kernel patch needs atomic KMS, which this 3.10 kernel does not have, so here it warns and is skipped. |
+| `fdroid` | F-Droid app store + Privileged Extension (silent installs/updates). |
+| `firefox` | Firefox (Fennec F-Droid) as the browser, replacing Jelly. Mutually exclusive with `fulguris`. **In no preset**: it overrides Jelly, and stages 320 MB against Fulguris's 9. |
+| `fulguris` | Fulguris as the browser, replacing Jelly. A WebView browser, 9 MB where Fennec stages 320 MB. Mutually exclusive with `firefox`. **In no preset**: it overrides Jelly, so a preset carrying it ships the only browser in the image, and its first run asks you to accept terms with nothing else able to open them. |
+| `gapps` | Google apps: Play Store and GMS from MindTheGapps, plus Google's versions of the stock apps. |
+| `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client. |
+| `kdeconnect` | KDE Connect (phone <-> desktop: notifications, clipboard, files, remote input). |
+| `linphone` | Linphone: a SIP client, for voice over data where the device has no VoLTE. |
+| `linux` | On-device Linux environment (chroot + Docker): container kernel config and cgroup fixes. The cgroup symlink patch is off here: this 3.10 kernel predates kernfs. |
+| `nav-icons` | Nextbit Robin style nav-bar icons, drawn as scalable tintable vectors. |
+| `nextcloud` | Nextcloud bundle: Files, Talk, NextPush, Deck, NC Passwords, Notes, DAVx5, Tasks — the current F-Droid build of each. ~600 MB against `nextcloud-core`'s ~270. Check the partition before adding either. |
+| `nextcloud-core` | Nextcloud, the four that make the phone a client: Files, Talk, NextPush, DAVx5 — the current F-Droid build of each. Mutually exclusive with `nextcloud`, which already carries these four. |
+| `oem` | The manufacturer's own boot animation, wallpapers and sounds, reclaimed from its stock ROM. Needs that phone's own stock ROM and a pack that understands its layout — see `forge/docs/OEM-ASSETS.md`. |
+| `root` | Magisk baked into the boot image, so the zip flashes pre-rooted. Pulls in `termoneplus`. The image flashes pre-rooted, so treat it like one. |
+| `syncthing-fork` | Syncthing-Fork: continuous file sync between your own devices, no server or account. |
+| `teal-wallpaper` | Teal-shag default wallpaper (baked into framework-res). |
+| `termoneplus` | TermOne Plus terminal emulator (F-Droid build). |
+| `volte` | The manufacturer's own IMS stack, rebuilt from its stock firmware, so the phone can place calls over LTE. Turns itself on when the phone's stock firmware is present and off when it is not, marking the build tag `-novolte` — see `forge/options/volte/README.md`. |
 
+<!-- options:end -->
 ## Device patches
 
 75 patches across 20 upstream projects, applied at build time from `overlay/patches/`. Nothing
