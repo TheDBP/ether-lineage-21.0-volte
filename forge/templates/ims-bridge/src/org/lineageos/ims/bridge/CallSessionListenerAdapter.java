@@ -62,7 +62,21 @@ class CallSessionListenerAdapter extends IImsCallSessionListener.Stub {
     @Override
     public void callSessionStartFailed(IImsCallSession s, ImsReasonInfo r) throws RemoteException {
         ModemVoiceSession.setActive(false);
-        mTarget.callSessionStartFailed(modern(s), Convert.toModern(r));
+        final android.telephony.ims.ImsReasonInfo reason = Convert.toModern(r);
+        // The OEM stack reports a remote hangup on a call that was never answered as startFailed --
+        // in its model the session never started. On 17 that is only half true: ImsPhoneCallTracker
+        // .onCallStartFailed unwinds mPendingMO and nothing else, and mPendingMO is null for an
+        // incoming call, so the ringing connection is never disconnected and the handset rings
+        // until it is rebooted. Telecom's own CallAnomalyWatchdog spots the zombie after 2 minutes
+        // and cannot clear it either. Deliver MT as the termination it actually is; MO must stay
+        // startFailed, because that is what drives the CSFB retry path.
+        if (mOwner != null && mOwner.isIncoming()) {
+            Log.i(TAG, "startFailed on an incoming session -> terminated, code "
+                    + (reason == null ? -1 : reason.getCode()));
+            mTarget.callSessionTerminated(modern(s), reason);
+            return;
+        }
+        mTarget.callSessionStartFailed(modern(s), reason);
     }
 
     @Override

@@ -292,7 +292,9 @@ public class LegacyMMTelFeature extends MMTelFeature {
         try {
             @LEGACY_PKG@.internal.IImsCallSession s =
                     legacy().getPendingCallSession(sessionId, callId);
-            return s == null ? null : new CallSessionWrapper(s);
+            // Marked incoming: this is the only path an MT session arrives by, and the listener
+            // adapter has to tell MT from MO to deliver a pre-answer hangup correctly.
+            return s == null ? null : new CallSessionWrapper(s, true);
         } catch (RemoteException e) {
             throw rethrow("getPendingCallSession", e);
         }

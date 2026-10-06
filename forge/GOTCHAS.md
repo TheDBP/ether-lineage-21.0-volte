@@ -394,3 +394,51 @@ Two more traps in the same restage:
   extracting the wrong one gives `is 32-bit instead of 64-bit` at link time. Match the daemon:
   `file -b` on both before pushing.
 
+## 38. One `allowxperm` turns that whole domain/class into a whitelist
+
+`allow <domain> <target>:<class> ioctl;` permits every ioctl. Add a single
+`allowxperm <domain> <target>:<class> ioctl { 0xNNNN };` and the kernel switches that
+domain/class pair to whitelist mode: the one command you named is allowed and **every other ioctl
+is now denied**. Tightening one call therefore silently removes all the others.
+
+Seen on the V20 moving the IMS stack off `permissive radio`. The permissive audit showed
+`ioctlcmd=c304` on the QMI socket, so the rule named `0xc304` -- and the first enforcing boot denied
+`0xc302`, which the same QMI path also uses. The symptom was not an obvious failure: calls still
+connected, registration still worked, and audio was silent, because the denied ioctl broke the query
+that sets up the modem's voice session. Fixed by allowing the whole `0xc300-0xc30f` IPC-router
+family.
+
+Two lessons that generalise:
+- When you must add an xperm rule, allow the **family** the driver uses, not the one command you
+  happened to observe. A permissive-boot audit can only log the ioctls that were actually issued in
+  that run, so the list is a lower bound, never the set.
+- A permissive audit cannot reveal this class of bug at all: whitelist mode does not exist until
+  your rule does. Budget one enforcing boot to find what the audit structurally could not.
+
+
+## 39. A CarrierConfig key is not what decides whether IMS features are offered
+
+`persist.dbg.volte_avail_ovr`, `persist.dbg.vt_avail_ovr` and `persist.dbg.wfc_avail_ovr` are read
+FIRST by `ImsManager.is{Volte,Vt,Wfc}EnabledByPlatform()`, and a value of `1` makes each return true
+outright -- `config_device_*_available` and the matching `carrier_*_available_bool` are never
+consulted. Settings asks through `ImsMmTelManager.isSupported()`, so a feature you "turned off" in a
+CarrierConfig RRO goes on being offered while `dumpsys carrier_config` shows your key as `false`.
+Checking the key you set is not checking the thing that decides.
+
+Worse, these are `persist.` properties. With nothing in the tree setting them, their value is
+whatever some earlier boot wrote to `/data/property` -- a bring-up `setprop` survives every
+subsequent flash, so the handset in front of you behaves differently from a fresh install of the
+same build, in a way no file in the repo explains. Seen on the V20: Wi-Fi calling and video calling
+kept appearing for a whole build cycle after the RRO was correct.
+
+- Do set all three explicitly in the device's prop makefile, including the ones you want off. Any
+  value but `1` means "no override"; `0` reads as deliberate where absent reads as unconsidered.
+- Do confirm from the decision, not the input: `ImsMmTelRepository: [N] isSupported(capability=C,
+  transportType=T) = false` in logcat. `capability` 1=VOICE 2=VIDEO, `transportType` 1=WWAN 2=WLAN,
+  so VT is (2,1) and Wi-Fi calling is (1,2).
+- Don't expect the tree value to win on a device that already has a stale one: `/data/property` is
+  loaded after `build.prop`. `setprop` it once on that handset, or wipe data.
+
+The same shape recurs wherever a debug override precedes the real configuration: find the first
+return in the platform's own accessor before you spend a build cycle on the input you assumed it
+reads.

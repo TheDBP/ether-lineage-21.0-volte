@@ -23,13 +23,25 @@ public class CallSessionWrapper extends ImsCallSessionImplBase {
     private static final String TAG = ImsBridgeService.TAG;
 
     private final IImsCallSession mLegacy;
+    private final boolean mIncoming;
 
     CallSessionWrapper(IImsCallSession legacy) {
+        this(legacy, false);
+    }
+
+    /** @param incoming true for a session adopted from an incoming call (MT), false for a dial. */
+    CallSessionWrapper(IImsCallSession legacy, boolean incoming) {
         mLegacy = legacy;
+        mIncoming = incoming;
     }
 
     IImsCallSession legacy() {
         return mLegacy;
+    }
+
+    /** MT or MO. The listener adapter needs this to route startFailed; see the note there. */
+    boolean isIncoming() {
+        return mIncoming;
     }
 
     private static RuntimeException rethrow(String what, RemoteException e) {
