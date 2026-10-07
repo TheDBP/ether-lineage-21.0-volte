@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=e21fe837983c6f5bc6f1d2f28ccb0034324beb4f
-subject=RELEASING: stock is publishable, and name your presets when there are two
-synced=2026-10-07T13:42:29Z
+commit=6b6e64f29afb79ba4054447b1f26305839f393b7
+subject=setup-mobile-data: describe both halves of the option
+synced=2026-10-07T14:34:08Z

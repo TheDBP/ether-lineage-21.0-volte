@@ -473,3 +473,41 @@ for that service, and "our RIL owns the transport" — each of which explains si
 The general lesson is older than QMI: when a failure reports *nothing* — no error code, no denial,
 no log — suspect a check that returns a null object before any work is attempted, rather than a
 layer that is refusing you. Refusals are noisy; gates are quiet.
+
+## 41. A home-screen widget that only appears after you poke at the phone
+
+LineageOS ships a DeskClock widget in Launcher3's `res/xml/default_workspace_*.xml` on 22.2 and
+newer. On a freshly wiped phone it is common for it not to render until something unrelated is done
+to the device -- opening Settings, granting the launcher notification access, launching an app. The
+notification-access step people reach for is a coincidence; nothing in Launcher3 ties the
+notification listener to widget binding. There are two real mechanisms, and they are distinguished
+by one number.
+
+`AutoInstallsLayout.verifyAndInsert` writes every default-layout widget as *pending*, not bound:
+
+    Favorites.RESTORED = FLAG_ID_NOT_VALID | FLAG_PROVIDER_NOT_READY | FLAG_DIRECT_CONFIG   // 1|2|32 = 35
+
+`WidgetInflater` resolves that on each model load: it calls `findProvider`, and only if the provider
+comes back non-null does it clear `FLAG_PROVIDER_NOT_READY`, allocate an id and bind. If the
+provider is null it leaves the row at 35 and returns a placeholder -- it does **not** delete the row,
+because the delete branch is guarded on `FLAG_PROVIDER_NOT_READY` already being clear. So a widget
+whose provider was not enumerable at the first model load stays a placeholder until some unrelated
+event reloads the model. Preinstalled apps never send `PACKAGE_ADDED`, so nothing schedules a retry.
+
+Separately, `AppWidgetServiceImpl.setMaskedByStoppedPackageLocked` masks a hosted widget whose
+provider package is in the stopped state, and only `Intent.ACTION_PACKAGE_UNSTOPPED` clears it. After
+a factory reset a preinstalled app that has never been launched *is* stopped, so its widget binds
+correctly and still draws blank. Note that provider *enumeration* does not filter on this -- it
+filters on `provider.zombie` and the category only -- so masking and the pending case are
+independent failures with the same symptom.
+
+Read the number before theorising:
+
+    adb shell content query --uri content://com.android.launcher3.settings/favorites \
+        --projection appWidgetId,appWidgetProvider,restored
+
+`restored=35` is the pending case: the provider was not found at load, and a model reload is the fix.
+`restored=0` with a blank widget is the masking case; confirm with `dumpsys package <provider pkg> |
+grep -i stopped` and fix it by launching the app once. Neither is fixed by a build property, and
+neither is caused by anything in this repo -- the widget comes from upstream's default layout, which
+`minimal-home` keeps on 22.2 and newer and removes on 20.0 and older.
