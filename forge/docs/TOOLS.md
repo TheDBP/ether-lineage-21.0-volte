@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-91 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+92 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -12,6 +12,7 @@ carries the same data for anything that would rather not parse Markdown.
 |---|---|---|---|
 | [`abi-gap.sh`](../tools/abi-gap.sh) | list the symbols a prebuilt blob imports that the running platform no longer provides | `abi-gap.sh <blob> [-s SERIAL] [--keep DIR]` | [debugging-a-vendor-blob](debugging-a-vendor-blob.md), [debugging-volte](debugging-volte.md) |
 | [`aidl-tx-diff.py`](../tools/aidl-tx-diff.py) | compare the binder transaction tables of a stock framework's AIDL $Stub classes | `aidl-tx-diff.py <stub-smali-dir> <aidl-dir \| smali-dir> [-v]` | [debugging-volte](debugging-volte.md) |
+| [`android-cc.sh`](../tools/android-cc.sh) | compile a small C probe into an aarch64 Android binary using the device tree's own toolchain, and optionally push it | `android-cc.sh <src.c> [out] [--push] [-s SERIAL]` | — |
 | [`app-fw-api-gap.py`](../tools/app-fw-api-gap.py) | preflight a ported app against a target framework: list the framework methods and classes the app's dex references that the target does NOT have | `app-fw-api-gap.py --app <app-smali-dir> --fw <framework.jar\|dir\|smali-dir>[,<more>...] [--pkg android,javax,...]` | [debugging-volte](debugging-volte.md) |
 | [`apply-method-redirects.py`](../tools/apply-method-redirects.py) | rewrite framework-API-drift call sites in a smali tree from a rules file | `apply-method-redirects.py <redirects.txt> <smali-dir>` | [debugging-volte](debugging-volte.md) |
 | [`apply-overlay.sh`](../tools/apply-overlay.sh) | apply the composed customization stack onto a synced LineageOS tree: 1 | `./forge/tools/apply-overlay.sh [--manifests-only] [AOSP_ROOT]   (AOSP_ROOT defaults to /aosp)` | — |

@@ -442,3 +442,34 @@ kept appearing for a whole build cycle after the RRO was correct.
 The same shape recurs wherever a debug override precedes the real configuration: find the first
 return in the platform's own accessor before you spend a build cycle on the input you assumed it
 reads.
+
+## 40. A QMI service object is version-gated, and failing it looks like a permission problem
+
+Every generated QTI IDL ships `<svc>_get_service_object_internal_v01(major, minor, tool)` and
+returns **NULL unless all three match the library exactly**. An OEM binary built against an older
+vendor tree therefore gets a NULL service object on a newer ROM.
+
+What makes this expensive is that every downstream symptom is an *absence*:
+
+- the QMI client comes back `-1` with **`qmi_err_code=0`** — no error, because no QMI transaction
+  was ever attempted;
+- no `IPC_RTR ... permission failure` in dmesg;
+- no `avc: denied`;
+- no output from the QMI libraries at all.
+
+That reads exactly like a permission or transport problem, and it is neither. On the V20 it cost
+four wrong theories — missing `qmuxd`, a hardcoded `rmnet0` port name, the `sec_config` GID rule
+for that service, and "our RIL owns the transport" — each of which explains silence just as well.
+
+- Do run `tools/android-cc.sh tools/native-probes/qmi-idl-probe.c --push` and scan. It prints the
+  `(major, minor, tool)` the ROM's `libqmiservices.so` will accept, with the OEM binary out of the
+  picture. On the V20: the stock helper asks WMS `(1,24,6)`; the 24.0 ROM accepts only `(1,35,6)`.
+- Do fix it by putting the **stock** `libqmiservices.so` ahead of the ROM's on that one daemon's
+  library path. That is correct rather than a workaround: the modem is the stock one, so the stock
+  IDL is its matching encoder. The newer IDL arrived with the newer userspace, not with the radio.
+- Don't scan a narrow minor range and conclude the service is absent — NAS on that same device
+  answers at minor 249, WMS at 35.
+
+The general lesson is older than QMI: when a failure reports *nothing* — no error code, no denial,
+no log — suspect a check that returns a null object before any work is attempted, rather than a
+layer that is refusing you. Refusals are noisy; gates are quiet.

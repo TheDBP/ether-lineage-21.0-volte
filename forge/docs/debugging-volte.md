@@ -769,3 +769,49 @@ The failure this replaces is worth naming, because both devices here hit it: han
 sit outside everything that resets the tree, so a checkout where the script had been run once kept
 producing ROMs with IMS, while a fresh clone produced ROMs without it and said nothing — same
 command, same repo, different image.
+
+## SMS over IMS: what the OEM stack can do, and what the compat bridge cannot
+
+Voice and SMS look like the same problem and are not. Voice flows through the IMS binder the bridge
+implements; on a 7.x OEM stack SMS usually does not cross that interface at all.
+
+**The OEM side is a separate daemon.** On this shape of stack the app's SMS-over-IMS client
+(`SoIClient`) talks over an ABSTRACT unix socket to a small vendor daemon, which owns a QMI WMS
+client against the modem. Nothing of that passes through the `IImsService` binder. Check for the
+sockets before theorising — `grep -a '@/tmp' /proc/net/unix` — and expect three: the app's own two
+endpoints and the daemon's.
+
+**Drive the daemon yourself rather than waiting for the app.** These daemons are a
+`select`/`recvfrom` loop over a fixed-size struct whose first `u32` is a message id, bounds-checked
+and dispatched through a jump table. Disassemble the loop, read the table (the `br` is right after
+the bounds check; entries are 4-byte offsets relative to the table base), and
+`tools/native-probes/unix-dgram-poke.c` will then drive any branch on demand. On the V20 exactly one
+message id reached the QMI init path, and the app sent it only in a narrow window after boot — which
+is why every earlier experiment looked inconsistent rather than failed.
+
+Two traps while reading those logs:
+
+- The same log line can be emitted from more than one site. "Modem is initialized" appeared both at
+  daemon startup and inside the QMI init function, so seeing it never meant the QMI path had run.
+  Check the xrefs before treating a line as a milestone.
+- A warning with the right words can belong to another process. A `QMUXD ... failed` line that
+  looked like the smoking gun came from an unrelated system service; the pid was right there in the
+  log and I had not read it.
+
+**If the QMI client will not initialise, suspect the IDL version gate first** — see GOTCHAS 40. It
+is quiet in a way that permission problems are not.
+
+**And before investing in any of it, check whether the framework can use the result.** On the compat
+`ImsService` path it cannot:
+
+- `MmTelFeatureCompatAdapter.convertCapabilities()` sets only VOICE, VIDEO and UT.
+  `CAPABILITY_TYPE_SMS` appears nowhere in that adapter, so no capability probe can surface it.
+- The adapter implements none of the SMS surface — no `sendSms`, `acknowledgeSms`, `onSmsReady`,
+  `setSmsListener`, `getSmsFormat`. The modern `MmTelFeature` has a dozen references to
+  `ImsSmsImplBase`; the compat path has none, so `ImsSmsDispatcher` has nothing to send to.
+
+So a bridge on the compat path can carry calls and cannot carry SMS, however healthy the OEM stack
+underneath becomes. Closing that gap means a modern `MmTelFeature` with `getSmsImplementation()` —
+reimplementing what the compat adapter does for calls, plus a route for the OEM app to hand MT
+messages up. Worth knowing before you start, not after: SMS over the circuit-switched path keeps
+working throughout, and only matters once a carrier drops CS fallback.

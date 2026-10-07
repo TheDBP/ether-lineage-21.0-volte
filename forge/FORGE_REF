@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=753897f8170f0a37e34ea104942ba71866c67508
-subject=docs: three claims that moved on
-synced=2026-10-06T19:07:33Z
+commit=c38f08e52ae0e11e7fbce006869b2df243ffa14f
+subject=tools: bank the probes that cracked SMS over IMS, and the gotcha behind it
+synced=2026-10-07T00:09:49Z
