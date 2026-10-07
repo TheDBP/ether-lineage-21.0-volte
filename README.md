@@ -296,6 +296,7 @@ work on any device rather than being wired into this tree.
 | `nextcloud-core` | Nextcloud, the four that make the phone a client: Files, Talk, NextPush, DAVx5 — the current F-Droid build of each. Mutually exclusive with `nextcloud`, which already carries these four. |
 | `oem` | The manufacturer's own boot animation, wallpapers and sounds, reclaimed from its stock ROM. Needs that phone's own stock ROM and a pack that understands its layout — see `forge/docs/OEM-ASSETS.md`. |
 | `root` | Magisk baked into the boot image, so the zip flashes pre-rooted. Pulls in `termoneplus`. The image flashes pre-rooted, so treat it like one. |
+| `setup-mobile-data` | Mobile data usable during setup, instead of a sign-in page with no way online but Wi-Fi. |
 | `syncthing-fork` | Syncthing-Fork: continuous file sync between your own devices, no server or account. |
 | `teal-wallpaper` | Teal-shag default wallpaper (baked into framework-res). |
 | `termoneplus` | TermOne Plus terminal emulator (F-Droid build). |
