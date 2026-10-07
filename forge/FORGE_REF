@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=c38f08e52ae0e11e7fbce006869b2df243ffa14f
-subject=tools: bank the probes that cracked SMS over IMS, and the gotcha behind it
-synced=2026-10-07T00:09:49Z
+commit=e21fe837983c6f5bc6f1d2f28ccb0034324beb4f
+subject=RELEASING: stock is publishable, and name your presets when there are two
+synced=2026-10-07T13:42:29Z

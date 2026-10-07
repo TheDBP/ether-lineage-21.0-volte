@@ -5,6 +5,7 @@ A device's presets fall into two kinds, and only one kind should ever be publish
 | preset / switch | has | for |
 |---|---|---|
 | `full` | GApps, root, and the free apps (`device.conf.example`: F-Droid, K-9, KDE Connect, ConnectBot) | your own phone |
+| `stock` | nothing at all -- upstream LineageOS plus only the device patches that make the hardware work | the download page, and the build to reproduce a bug against |
 | `clean` | none of that | the download page |
 | a free-apps-only preset (ether calls it `libre`: F-Droid, K-9, KDE Connect, ConnectBot, no Google, no root) | nothing proprietary | publishable too |
 | `EXTRA_OPTIONS=oem` | adds the manufacturer's reclaimed boot animation / wallpapers / sounds to any of them | your own phone only |
@@ -54,7 +55,17 @@ means every user wipes to take the next update. The first signed build installcl
 One release per day and branch (tag `<branch>-<date>-<codename>`). Publishing a second preset the
 same day adds its zip and recovery to that release, with its own section in the notes — build it,
 then `release.sh --preset clean`; the audit reads the tree, so build and publish one preset at a
-time. The release must be at the same commit; at any other it is a different build and refused.
+time.
+
+Without `--preset`, `release.sh` takes the FIRST preset whose options contain neither `gapps` nor
+`oem`, which is whatever sits highest in `PRESETS`. That is a sensible default for one release and
+the wrong thing to rely on for several, so name them: a device that ships two images publishes the
+barest first, because it is the one that answers "is this the ROM or my phone?".
+
+```sh
+PRESET=stock ./forge/bootstrap.sh && ./forge/tools/release.sh --preset stock
+PRESET=libre ./forge/bootstrap.sh && ./forge/tools/release.sh --preset libre
+``` The release must be at the same commit; at any other it is a different build and refused.
 Nothing here replaces or deletes a release.
 
 ## What it publishes
