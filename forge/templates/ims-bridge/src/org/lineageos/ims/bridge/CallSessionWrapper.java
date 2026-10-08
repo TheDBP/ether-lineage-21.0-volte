@@ -22,6 +22,13 @@ import @LEGACY_PKG@.internal.IImsCallSession;
 public class CallSessionWrapper extends ImsCallSessionImplBase {
     private static final String TAG = ImsBridgeService.TAG;
 
+    /**
+     * No state. The compat ImsCallSessionImplBase exposes no State constants -- the nested
+     * class of that name is on the modern stub, a different type -- and -1 is what the compat
+     * base's own getState() returns.
+     */
+    private static final int STATE_INVALID = -1;
+
     private final IImsCallSession mLegacy;
     private final boolean mIncoming;
 
@@ -101,7 +108,7 @@ public class CallSessionWrapper extends ImsCallSessionImplBase {
 
     @Override
     public int getState() {
-        try { return mLegacy.getState(); } catch (RemoteException e) { failed("getState", e); return State.INVALID; }
+        try { return mLegacy.getState(); } catch (RemoteException e) { failed("getState", e); return STATE_INVALID; }
     }
 
     @Override
