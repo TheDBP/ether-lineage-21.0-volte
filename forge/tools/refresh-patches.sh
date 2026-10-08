@@ -111,15 +111,21 @@ refresh() {
   # applies those to the same project before the device patches, so a plain base..HEAD would copy
   # e.g. teal-skin's frameworks/base commit into overlay/patches/ as if the device owned it, and the
   # next bootstrap would apply it twice. Matched by patch-id, which ignores hashes and line numbers.
-  local optids="" f
+  local optids="" optsubs="" f
   for f in "$FORGE"/options/*/patches/"$BRANCH"/"$proj"/*.patch; do
     [ -e "$f" ] || continue
     optids+="$(git patch-id --stable < "$f" | cut -d' ' -f1)"$'\n'
+      optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //p' "$f" | head -1)"$'\n'
   done
-  local shas="" sha id
+  local shas="" sha id sub
   for sha in $(git -C "$d" rev-list --reverse "$base"..HEAD); do
     id="$(git -C "$d" show --format= "$sha" | git patch-id --stable | cut -d' ' -f1)"
-    if [ -n "$id" ] && printf '%s' "$optids" | grep -qx "$id"; then   # sigpipe-ok: one write
+    sub="$(git -C "$d" log -1 --format=%s "$sha")"
+    # patch-id ignores line numbers but not context: an option patch applied after another
+    # option shifted nearby lines yields a commit whose id no longer matches its own file,
+    # and it then looks device-owned. Subject survives that drift.
+    if { [ -n "$id" ] && printf '%s' "$optids" | grep -qx "$id"; } \
+       || { [ -n "$sub" ] && printf '%s' "$optsubs" | grep -qxF "$sub"; }; then
       echo "   (not exporting \"$(git -C "$d" log -1 --format=%s "$sha" | cut -c1-60)\" -- an option's patch)"
       continue
     fi
@@ -225,11 +231,27 @@ UNBACKED=""
 while read -r gitdir; do
   proj="${gitdir%/.git}"; proj="${proj#./}"
   case "$PROJECTS_FLAT" in *" $proj "*) continue ;; esac
-  case "$OPT_FLAT"      in *" $proj "*) continue ;; esac
   case "$ENGINE_FLAT"   in *" $proj "*) continue ;; esac
   mref=$(git -C "$AOSP/$proj" for-each-ref --format='%(refname:short)' refs/remotes/m/ 2>/dev/null | sed -n 1p)
   [ -n "$mref" ] || continue
-  n=$(git -C "$AOSP/$proj" log --oneline "$mref..HEAD" 2>/dev/null | wc -l)
+  # Count only what an OPTION does not already own. A project an option patches can still carry a
+  # device-owned commit on top -- options apply first -- and skipping the whole project here meant
+  # such a commit could never be adopted, so it silently never shipped. Matched by patch-id, the
+  # same way refresh() decides what to export.
+  _optids=""; _optsubs=""
+  for _f in "$FORGE"/options/*/patches/"$BRANCH"/"$proj"/*.patch; do
+    [ -e "$_f" ] || continue
+    _optids+="$(git patch-id --stable < "$_f" | cut -d' ' -f1)"$'\n'
+    _optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //p' "$_f" | head -1)"$'\n'
+  done
+  n=0
+  for _sha in $(git -C "$AOSP/$proj" rev-list "$mref..HEAD" 2>/dev/null); do
+    _id="$(git -C "$AOSP/$proj" show --format= "$_sha" | git patch-id --stable | cut -d' ' -f1)"
+    [ -n "$_id" ] && printf '%s' "$_optids" | grep -qx "$_id" && continue
+    _sub="$(git -C "$AOSP/$proj" log -1 --format=%s "$_sha")"
+    [ -n "$_sub" ] && printf '%s' "$_optsubs" | grep -qxF "$_sub" && continue
+    n=$((n+1))
+  done
   [ "$n" -gt 0 ] || continue
   UNBACKED="$UNBACKED $proj"
   echo "   !! $proj has $n local commit(s) and no patches"

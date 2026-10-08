@@ -31,7 +31,7 @@ bootstrap.sh -- build one ROM image.
 
   PRESET=<name>  ./forge/bootstrap.sh     a saved option set from device.conf
   OPTIONS="a b"  ./forge/bootstrap.sh     pick options directly (replaces the preset's set)
-  EXTRA_OPTIONS=<name> PRESET=<name> ...  add one option to a preset
+  EXTRA_OPTIONS="a b" PRESET=<name> ..   add options to a preset (space or comma separated)
   ./forge/bootstrap.sh                    the first preset in device.conf
 
   --device <name>    build devices/<name>/ inside a rom-forge clone instead of a device repo

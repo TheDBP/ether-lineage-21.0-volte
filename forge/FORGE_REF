@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=1e39878ee8747df0645512bf024e86cdff8ed67e
-subject=k9, kdeconnect, connectbot: keep them with F-Droid, not Play
-synced=2026-10-08T11:22:13Z
+commit=8d8d5da4abd03fff8ceb59b2a37835a36aaac007
+subject=refresh-patches: stop losing device commits in option-patched projects
+synced=2026-10-08T12:13:29Z

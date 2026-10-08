@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TermOne Plus is preinstalled here from F-Droid. Where the F-Droid build is a reproducible one it
+     carries the upstream developer's own signing key, which is the same certificate the Play Store
+     build uses, so Play sees a package it recognises with a matching signature and updates it.
+     The app then stops being F-Droid's, and it only goes one way: Play can take an app, F-Droid
+     cannot take it back.
+
+     Claimed for every app bundled from F-Droid rather than only the ones known to be in Play
+     today. The entry is inert for a package Play does not carry or cannot match, and the
+     alternative is an audit that silently goes stale as catalogues and signing setups change.
+
+     The owner is the Privileged Extension, not the F-Droid client: the extension holds
+     INSTALL_PACKAGES and so is the installer of record, which is what
+     PackageInstallerSession compares the update owner against. -->
+<config>
+    <update-ownership package="com.termoneplus" installer="org.fdroid.fdroid.privileged" />
+</config>

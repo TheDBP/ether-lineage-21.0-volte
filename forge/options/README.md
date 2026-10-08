@@ -234,33 +234,33 @@ and ships in that build, because there it only has to fetch the APK).
 | `dark-default` | Default to dark theme. | 20.0, 21.0, 22.2, 23.2, 24.0 |
 | `drm-trace` | Diagnostic: kernel trace of whoever disables a DRM plane or CRTC, for a panel that dies while the framework still thinks it is on. | any |
 | `fdroid` | F-Droid app store + Privileged Extension (silent installs/updates). | 22.2, 23.2, 24.0 |
-| `firefox` | Firefox (Fennec F-Droid) as the browser, replacing Jelly. Mutually exclusive with `fulguris`. **In no preset**: it overrides Jelly, and stages 320 MB against Fulguris's 9. | 22.2, 23.2, 24.0 |
-| `fulguris` | Fulguris as the browser, replacing Jelly. A WebView browser, 9 MB where Fennec stages 320 MB. Mutually exclusive with `firefox`. **In no preset**: it overrides Jelly, so a preset carrying it ships the only browser in the image, and its first run asks you to accept terms with nothing else able to open them. | 20.0, 22.2, 23.2, 24.0 |
+| `firefox` | Firefox (Fennec F-Droid) as the browser, replacing Jelly. Pulls in `fdroid`. Mutually exclusive with `fulguris`. **In no preset**: it overrides Jelly, and stages 320 MB against Fulguris's 9. | 22.2, 23.2, 24.0 |
+| `fulguris` | Fulguris as the browser, replacing Jelly. Pulls in `fdroid`. A WebView browser, 9 MB where Fennec stages 320 MB. Mutually exclusive with `firefox`. **In no preset**: it overrides Jelly, so a preset carrying it ships the only browser in the image, and its first run asks you to accept terms with nothing else able to open them. | 20.0, 22.2, 23.2, 24.0 |
 | `gapps` | Google apps: Play Store and GMS from MindTheGapps, plus Google's versions of the stock apps. | 18.1, 19.1, 20.0, 21.0, 22.2, 23.2, 24.0 |
 | `google-feed-off` | Google feed (-1 screen) off by default. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `home-defaults` | Home screen defaults: no icon labels, no auto-add. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client. Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
 | `kdeconnect` | KDE Connect (phone <-> desktop: notifications, clipboard, files, remote input). Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
-| `linphone` | Linphone: a SIP client, for voice over data where the device has no VoLTE. | 20.0, 22.2, 23.2, 24.0 |
+| `linphone` | Linphone: a SIP client, for voice over data where the device has no VoLTE. Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
 | `linux` | On-device Linux environment (chroot + Docker): container kernel config and cgroup fixes. | any |
 | `livedisplay-off` | LiveDisplay off by default. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `minimal-home` | Minimal home screen: hotseat only, no second page. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `nav-icons` | Nextbit Robin style nav-bar icons, drawn as scalable tintable vectors. | 20.0, 21.0, 22.2, 23.2, 24.0 |
-| `nextcloud` | Nextcloud bundle: Files, Talk, NextPush, Deck, NC Passwords, Notes, DAVx5, Tasks — the current F-Droid build of each. ~600 MB against `nextcloud-core`'s ~270. Check the partition before adding either. | 20.0, 22.2, 23.2, 24.0 |
-| `nextcloud-core` | Nextcloud, the four that make the phone a client: Files, Talk, NextPush, DAVx5 — the current F-Droid build of each. Mutually exclusive with `nextcloud`, which already carries these four. | 20.0, 22.2, 23.2, 24.0 |
+| `nextcloud` | Nextcloud bundle: Files, Talk, NextPush, Deck, NC Passwords, Notes, DAVx5, Tasks — the current F-Droid build of each. Pulls in `fdroid`. ~600 MB against `nextcloud-core`'s ~270. Check the partition before adding either. | 20.0, 22.2, 23.2, 24.0 |
+| `nextcloud-core` | Nextcloud, the four that make the phone a client: Files, Talk, NextPush, DAVx5 — the current F-Droid build of each. Pulls in `fdroid`. Mutually exclusive with `nextcloud`, which already carries these four. | 20.0, 22.2, 23.2, 24.0 |
 | `nfc-off` | NFC off by default. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `oem` | The manufacturer's own boot animation, wallpapers and sounds, reclaimed from its stock ROM. Needs that phone's own stock ROM and a pack that understands its layout — see `forge/docs/OEM-ASSETS.md`. | any |
-| `openvpn` | OpenVPN for Android (de.blinkt.openvpn) as a bundled VPN client. | 20.0, 22.2, 24.0 |
+| `openvpn` | OpenVPN for Android (de.blinkt.openvpn) as a bundled VPN client. Pulls in `fdroid`. | 20.0, 22.2, 24.0 |
 | `pong-notification` | Pong as the default notification sound (LineageOS default is Argon). | 20.0, 22.2, 24.0 |
 | `root` | Magisk baked into the boot image, so the zip flashes pre-rooted. Pulls in `termoneplus`. The image flashes pre-rooted, so treat it like one. | any |
 | `setup-mobile-data` | Mobile data usable during setup, instead of a sign-in page with no way online but Wi-Fi. | 20.0 |
 | `setupwizard-lineage` | Use Lineage SetupWizard over Google's (WITH_GAPPS). | 18.1, 19.1, 20.0 |
 | `setupwizard-nag-skip` | Skip recovery/metrics/backup setup pages. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
-| `syncthing-fork` | Syncthing-Fork: continuous file sync between your own devices, no server or account. | 20.0, 22.2, 23.2, 24.0 |
+| `syncthing-fork` | Syncthing-Fork: continuous file sync between your own devices, no server or account. Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
 | `teal-skin` | Teal accent — fixed #009D94 Monet preset seed. | 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `teal-wallpaper` | Teal-shag default wallpaper (baked into framework-res). | any |
 | `terminal-visible` | Show the Terminal app in the launcher. | 18.1, 19.1 |
-| `termoneplus` | TermOne Plus terminal emulator (F-Droid build). | 20.0, 22.2, 23.2, 24.0 |
+| `termoneplus` | TermOne Plus terminal emulator (F-Droid build). Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
 | `themed-icons` | Themed (monochrome) app icons on by default. | 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `volte` | The manufacturer's own IMS stack, rebuilt from its stock firmware, so the phone can place calls over LTE. Turns itself on when the phone's stock firmware is present and off when it is not, marking the build tag `-novolte` — see `forge/options/volte/README.md`. | any |
 
