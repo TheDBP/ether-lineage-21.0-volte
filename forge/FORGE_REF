@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=8d8d5da4abd03fff8ceb59b2a37835a36aaac007
-subject=refresh-patches: stop losing device commits in option-patched projects
-synced=2026-10-08T12:13:29Z
+commit=634475d8e2e89c3e977eb79f4979ebc483ad5618
+subject=setupwizard-lineage: claim lineage-24.0
+synced=2026-10-08T18:13:44Z

@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Thu, 8 Oct 2026 14:10:48 -0400
+Subject: [PATCH] setupwizard-lineage: override Google's SetupWizard on
+ lineage-24.0
+
+MindTheGapps ships SetupWizard and GooglePartnerSetup, and on a GApps
+build Google's wizard wins: pm resolve-activity for
+category.SETUP_WIZARD returns com.google.android.setupwizard with
+isDefault=true. Overriding both modules hands setup back to Lineage's
+wizard, same one-liner as the 18.1/19.1/20.0 patches; the module names
+MindTheGapps uses are unchanged on this branch.
+
+Beyond preference, Google's wizard decides for itself which pages to
+show and is closed, so the network page that lets you turn mobile data
+on or off during setup never appeared. Lineage's NetworkSetupActivity
+skips only when there is neither Wi-Fi nor telephony, or on ethernet,
+so it will show.
+---
+ app/Android.bp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/app/Android.bp b/app/Android.bp
+index 636155a..a606303 100644
+--- a/app/Android.bp
++++ b/app/Android.bp
+@@ -16,7 +16,7 @@ android_app {
+     system_ext_specific: true,
+     platform_apis: true,
+ 
+-    overrides: ["Provision"],
++    overrides: ["Provision", "SetupWizard", "GooglePartnerSetup"],
+ 
+     optimize: {
+         proguard_flags_files: ["proguard.flags"],
