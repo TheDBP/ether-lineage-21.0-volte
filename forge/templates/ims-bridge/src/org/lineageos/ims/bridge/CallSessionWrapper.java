@@ -44,9 +44,15 @@ public class CallSessionWrapper extends ImsCallSessionImplBase {
         return mIncoming;
     }
 
-    private static RuntimeException rethrow(String what, RemoteException e) {
+    /**
+     * A failed call on the legacy session. Logged and absorbed, never rethrown: these run on a
+     * binder thread serving com.android.phone, which does not catch RuntimeException from an
+     * ImsService -- see the note on LegacyMMTelFeature. A RemoteException here means the OEM stack
+     * went away mid-call, and the session is over either way; killing the phone process on top of
+     * that turns a dropped call into an unusable handset.
+     */
+    private static void failed(String what, RemoteException e) {
         Log.e(TAG, "call session: " + what + " failed", e);
-        return new RuntimeException(what, e);
     }
 
     @Override
@@ -55,146 +61,146 @@ public class CallSessionWrapper extends ImsCallSessionImplBase {
             mLegacy.setListener(
                     listener == null ? null : new CallSessionListenerAdapter(listener, this));
         } catch (RemoteException e) {
-            throw rethrow("setListener", e);
+            failed("setListener", e);
         }
     }
 
     @Override
     public void close() {
-        try { mLegacy.close(); } catch (RemoteException e) { throw rethrow("close", e); }
+        try { mLegacy.close(); } catch (RemoteException e) { failed("close", e); }
     }
 
     @Override
     public String getCallId() {
-        try { return mLegacy.getCallId(); } catch (RemoteException e) { throw rethrow("getCallId", e); }
+        try { return mLegacy.getCallId(); } catch (RemoteException e) { failed("getCallId", e); return null; }
     }
 
     @Override
     public ImsCallProfile getCallProfile() {
         try { return Convert.toModern(mLegacy.getCallProfile()); }
-        catch (RemoteException e) { throw rethrow("getCallProfile", e); }
+        catch (RemoteException e) { failed("getCallProfile", e); return null; }
     }
 
     @Override
     public ImsCallProfile getLocalCallProfile() {
         try { return Convert.toModern(mLegacy.getLocalCallProfile()); }
-        catch (RemoteException e) { throw rethrow("getLocalCallProfile", e); }
+        catch (RemoteException e) { failed("getLocalCallProfile", e); return null; }
     }
 
     @Override
     public ImsCallProfile getRemoteCallProfile() {
         try { return Convert.toModern(mLegacy.getRemoteCallProfile()); }
-        catch (RemoteException e) { throw rethrow("getRemoteCallProfile", e); }
+        catch (RemoteException e) { failed("getRemoteCallProfile", e); return null; }
     }
 
     @Override
     public String getProperty(String name) {
         try { return mLegacy.getProperty(name); }
-        catch (RemoteException e) { throw rethrow("getProperty", e); }
+        catch (RemoteException e) { failed("getProperty", e); return null; }
     }
 
     @Override
     public int getState() {
-        try { return mLegacy.getState(); } catch (RemoteException e) { throw rethrow("getState", e); }
+        try { return mLegacy.getState(); } catch (RemoteException e) { failed("getState", e); return State.INVALID; }
     }
 
     @Override
     public boolean isInCall() {
-        try { return mLegacy.isInCall(); } catch (RemoteException e) { throw rethrow("isInCall", e); }
+        try { return mLegacy.isInCall(); } catch (RemoteException e) { failed("isInCall", e); return false; }
     }
 
     @Override
     public void setMute(boolean muted) {
-        try { mLegacy.setMute(muted); } catch (RemoteException e) { throw rethrow("setMute", e); }
+        try { mLegacy.setMute(muted); } catch (RemoteException e) { failed("setMute", e); }
     }
 
     @Override
     public void start(String callee, ImsCallProfile profile) {
         try { mLegacy.start(callee, Convert.toLegacy(profile)); }
-        catch (RemoteException e) { throw rethrow("start", e); }
+        catch (RemoteException e) { failed("start", e); }
     }
 
     @Override
     public void startConference(String[] participants, ImsCallProfile profile) {
         try { mLegacy.startConference(participants, Convert.toLegacy(profile)); }
-        catch (RemoteException e) { throw rethrow("startConference", e); }
+        catch (RemoteException e) { failed("startConference", e); }
     }
 
     @Override
     public void accept(int callType, ImsStreamMediaProfile profile) {
         try { mLegacy.accept(callType, Convert.toLegacy(profile)); }
-        catch (RemoteException e) { throw rethrow("accept", e); }
+        catch (RemoteException e) { failed("accept", e); }
     }
 
     @Override
     public void reject(int reason) {
-        try { mLegacy.reject(reason); } catch (RemoteException e) { throw rethrow("reject", e); }
+        try { mLegacy.reject(reason); } catch (RemoteException e) { failed("reject", e); }
     }
 
     @Override
     public void terminate(int reason) {
-        try { mLegacy.terminate(reason); } catch (RemoteException e) { throw rethrow("terminate", e); }
+        try { mLegacy.terminate(reason); } catch (RemoteException e) { failed("terminate", e); }
     }
 
     @Override
     public void hold(ImsStreamMediaProfile profile) {
         try { mLegacy.hold(Convert.toLegacy(profile)); }
-        catch (RemoteException e) { throw rethrow("hold", e); }
+        catch (RemoteException e) { failed("hold", e); }
     }
 
     @Override
     public void resume(ImsStreamMediaProfile profile) {
         try { mLegacy.resume(Convert.toLegacy(profile)); }
-        catch (RemoteException e) { throw rethrow("resume", e); }
+        catch (RemoteException e) { failed("resume", e); }
     }
 
     @Override
     public void merge() {
-        try { mLegacy.merge(); } catch (RemoteException e) { throw rethrow("merge", e); }
+        try { mLegacy.merge(); } catch (RemoteException e) { failed("merge", e); }
     }
 
     @Override
     public void update(int callType, ImsStreamMediaProfile profile) {
         try { mLegacy.update(callType, Convert.toLegacy(profile)); }
-        catch (RemoteException e) { throw rethrow("update", e); }
+        catch (RemoteException e) { failed("update", e); }
     }
 
     @Override
     public void extendToConference(String[] participants) {
         try { mLegacy.extendToConference(participants); }
-        catch (RemoteException e) { throw rethrow("extendToConference", e); }
+        catch (RemoteException e) { failed("extendToConference", e); }
     }
 
     @Override
     public void inviteParticipants(String[] participants) {
         try { mLegacy.inviteParticipants(participants); }
-        catch (RemoteException e) { throw rethrow("inviteParticipants", e); }
+        catch (RemoteException e) { failed("inviteParticipants", e); }
     }
 
     @Override
     public void removeParticipants(String[] participants) {
         try { mLegacy.removeParticipants(participants); }
-        catch (RemoteException e) { throw rethrow("removeParticipants", e); }
+        catch (RemoteException e) { failed("removeParticipants", e); }
     }
 
     @Override
     public void sendDtmf(char c, Message result) {
-        try { mLegacy.sendDtmf(c, result); } catch (RemoteException e) { throw rethrow("sendDtmf", e); }
+        try { mLegacy.sendDtmf(c, result); } catch (RemoteException e) { failed("sendDtmf", e); }
     }
 
     @Override
     public void startDtmf(char c) {
-        try { mLegacy.startDtmf(c); } catch (RemoteException e) { throw rethrow("startDtmf", e); }
+        try { mLegacy.startDtmf(c); } catch (RemoteException e) { failed("startDtmf", e); }
     }
 
     @Override
     public void stopDtmf() {
-        try { mLegacy.stopDtmf(); } catch (RemoteException e) { throw rethrow("stopDtmf", e); }
+        try { mLegacy.stopDtmf(); } catch (RemoteException e) { failed("stopDtmf", e); }
     }
 
     @Override
     public void sendUssd(String ussdMessage) {
-        try { mLegacy.sendUssd(ussdMessage); } catch (RemoteException e) { throw rethrow("sendUssd", e); }
+        try { mLegacy.sendUssd(ussdMessage); } catch (RemoteException e) { failed("sendUssd", e); }
     }
 
     @Override
@@ -209,6 +215,6 @@ public class CallSessionWrapper extends ImsCallSessionImplBase {
     @Override
     public boolean isMultiparty() {
         try { return mLegacy.isMultiparty(); }
-        catch (RemoteException e) { throw rethrow("isMultiparty", e); }
+        catch (RemoteException e) { failed("isMultiparty", e); return false; }
     }
 }

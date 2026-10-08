@@ -511,3 +511,40 @@ Read the number before theorising:
 grep -i stopped` and fix it by launching the app once. Neither is fixed by a build property, and
 neither is caused by anything in this repo -- the widget comes from upstream's default layout, which
 `minimal-home` keeps on 22.2 and newer and removes on 20.0 and older.
+
+## 42. An ImsService that throws takes com.android.phone with it
+
+A compat ImsService runs its calls on a binder thread serving com.android.phone. Binder marshals
+the builtin unchecked exceptions -- IllegalStateException, IllegalArgumentException,
+NullPointerException, SecurityException, UnsupportedOperationException -- across the transaction
+and rethrows them in the *caller*, and `ImsServiceControllerCompat` catches none of them. So a
+throw from your implementation is not an error your service reports; it is a fatal crash in the
+framework's phone process.
+
+What that looks like from the outside is nothing like an IMS bug:
+
+    ImsBridge: slot 0: ims service not registered
+    java.lang.IllegalStateException: legacy ims service unavailable
+      at MmTelFeatureCompatAdapter.getOldConfigInterface
+      at ImsServiceControllerCompat.createMMTelCompat
+    am_crash: com.android.phone
+
+and then it repeats, because the phone process restarts, ImsResolver rebinds the service, and the
+same call throws again. Measured at one crash every ten seconds. The user-visible symptoms are a
+"com.android.phone keeps stopping" dialog that will not go away, SIM settings crashing on open
+(Settings asks the dead process for VT state and takes `RuntimeException: Could not find Telephony
+Service` on the chin), and a notification every few seconds. None of them points at IMS.
+
+Note that `RemoteException` is not the hazard -- the framework already expects that and handles it,
+e.g. `MmTelFeatureCompatAdapter.getOldConfigInterface` catches it and returns null. The hazard is
+the unchecked exception you throw yourself to signal a state you could not handle.
+
+The API has its own channel for "this feature is down": the feature state. Return something benign
+from the call, put the feature in `STATE_NOT_AVAILABLE`, and arm a waiter for the backing service
+to return. Do not take the feature down during startup, though -- before the first READY a missing
+backing service is just the bind racing the service registering, and reporting NOT_AVAILABLE there
+has the framework give up on a feature that is seconds from working. `linkToDeath` on the backing
+binder covers the rest, so a feature does not sit READY over a service that has gone.
+
+The same shape applies to any *ImplBase you hand the framework. Treat every public method as a
+boundary that absorbs, logs and degrades, never one that propagates.
