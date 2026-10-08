@@ -548,3 +548,50 @@ binder covers the rest, so a feature does not sit READY over a service that has 
 
 The same shape applies to any *ImplBase you hand the framework. Treat every public method as a
 boundary that absorbs, logs and degrades, never one that propagates.
+
+## 43. Play quietly takes over the F-Droid apps you preinstall
+
+A ROM that bundles apps from F-Droid alongside GApps will watch the Play Store adopt them. This is
+not Play misbehaving: the good builds on F-Droid are *reproducible* ones, carrying the upstream
+developer's own signing key rather than F-Droid's. K-9 Mail, KDE Connect and ConnectBot are all
+like that. Play sees a package name in its catalogue, a signature that matches its own build, and a
+version it can bump, so it updates it. The app then lives in /data as an update to the system app,
+and F-Droid is no longer the thing maintaining it.
+
+Note the asymmetry that makes this worth planning for rather than reacting to: Play can take an app
+*from* F-Droid, but F-Droid cannot take it back, because its APK and Play's differ in version and
+sometimes in build inputs even when the key matches.
+
+Android 14's update ownership is the fix, and sysconfig can claim it for a preinstalled app without
+any installer having to run:
+
+    <config>
+        <update-ownership package="com.fsck.k9" installer="org.fdroid.fdroid.privileged" />
+    </config>
+
+in /system/etc/sysconfig/. `InstallPackageHelper` reads it via
+`SystemConfig.getSystemAppUpdateOwnerPackageName` for non-APEX *system* packages, so it works for
+anything preinstalled and does nothing for anything else. Enforcement is on by default
+(`PackageManagerService.isUpdateOwnershipEnforcementAvailable`, default true).
+
+Two things to get right:
+
+**Name the Privileged Extension, not the F-Droid client.** `PackageInstallerSession` compares the
+update owner against the *installer package name*, and the installer of record is whoever holds
+`INSTALL_PACKAGES` -- which is `org.fdroid.fdroid.privileged`. `org.fdroid.fdroid` only has
+`REQUEST_INSTALL_PACKAGES`. Naming the client still locks Play out, but costs F-Droid the silent
+updates the extension exists to provide. Check with
+`dumpsys package <pkg> | grep INSTALL_PACKAGES` rather than assuming.
+
+**Shipping the app now implies shipping F-Droid.** Once Play is locked out, something has to deliver
+updates, and the ownership claim is inert unless the named installer is actually present. In this
+repo that is `REQUIRES=fdroid` on each app option.
+
+One escape hatch exists and is worth checking before relying on any of this: an installer holding
+`INSTALL_PACKAGES` can opt packages out with the
+`android.app.PROPERTY_LEGACY_UPDATE_OWNERSHIP_DENYLIST` manifest property. Dump the Play Store APK's
+manifest and look. The build bundled here declares no such property.
+
+XML comments may not contain `--`, which is easy to trip over when the house style uses it in prose;
+apply-overlay.sh parses every XML under an option's tree/, so a malformed file fails the overlay
+rather than the build.

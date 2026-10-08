@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- KDE Connect is preinstalled here from F-Droid, carrying upstream's own signing key, which is the
+     same certificate the Play Store build uses. Play therefore sees a package it recognises with a
+     matching signature and updates it, taking the app away from F-Droid. Naming an update owner
+     stops it doing that silently.
+
+     The owner is the Privileged Extension, not the F-Droid client. The extension is the one holding
+     INSTALL_PACKAGES, so it is the installer of record, and PackageInstallerSession compares the
+     update owner against the installer package name. Naming the client would shut Play out but cost
+     F-Droid its silent updates.
+
+     Applies to system packages only. InstallPackageHelper reads it through
+     SystemConfig.getSystemAppUpdateOwnerPackageName for non-APEX system packages, which is what a
+     preinstalled app is. -->
+<config>
+    <update-ownership package="org.kde.kdeconnect_tp" installer="org.fdroid.fdroid.privileged" />
+</config>

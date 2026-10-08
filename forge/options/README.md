@@ -230,7 +230,7 @@ and ships in that build, because there it only has to fetch the APK).
 |---|---|---|
 | `advanced-restart` | Advanced restart in the power menu. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `bringup` | adbd from boot with no authorisation prompt, plus persistent logcat, so a build that never reaches the lock screen can still be traced. **Never hand out an image built with this** — it accepts adb from any host. | any |
-| `connectbot` | ConnectBot: an SSH client with saved hosts, keys and port forwarding. | 20.0, 22.2, 23.2, 24.0 |
+| `connectbot` | ConnectBot: an SSH client with saved hosts, keys and port forwarding. Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
 | `dark-default` | Default to dark theme. | 20.0, 21.0, 22.2, 23.2, 24.0 |
 | `drm-trace` | Diagnostic: kernel trace of whoever disables a DRM plane or CRTC, for a panel that dies while the framework still thinks it is on. | any |
 | `fdroid` | F-Droid app store + Privileged Extension (silent installs/updates). | 22.2, 23.2, 24.0 |
@@ -239,8 +239,8 @@ and ships in that build, because there it only has to fetch the APK).
 | `gapps` | Google apps: Play Store and GMS from MindTheGapps, plus Google's versions of the stock apps. | 18.1, 19.1, 20.0, 21.0, 22.2, 23.2, 24.0 |
 | `google-feed-off` | Google feed (-1 screen) off by default. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `home-defaults` | Home screen defaults: no icon labels, no auto-add. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
-| `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client. | 20.0, 22.2, 23.2, 24.0 |
-| `kdeconnect` | KDE Connect (phone <-> desktop: notifications, clipboard, files, remote input). | 20.0, 22.2, 23.2, 24.0 |
+| `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client. Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
+| `kdeconnect` | KDE Connect (phone <-> desktop: notifications, clipboard, files, remote input). Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
 | `linphone` | Linphone: a SIP client, for voice over data where the device has no VoLTE. | 20.0, 22.2, 23.2, 24.0 |
 | `linux` | On-device Linux environment (chroot + Docker): container kernel config and cgroup fixes. | any |
 | `livedisplay-off` | LiveDisplay off by default. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
