@@ -280,15 +280,15 @@ work on any device rather than being wired into this tree.
 | option | what it does |
 |---|---|
 | `bringup` | adbd from boot with no authorisation prompt, plus persistent logcat, so a build that never reaches the lock screen can still be traced. **Never hand out an image built with this** — it accepts adb from any host. |
-| `connectbot` | ConnectBot: an SSH client with saved hosts, keys and port forwarding. |
+| `connectbot` | ConnectBot: an SSH client with saved hosts, keys and port forwarding. Pulls in `fdroid`. |
 | `dark-default` | Default to dark theme. |
 | `drm-trace` | Diagnostic: kernel trace of whoever disables a DRM plane or CRTC, for a panel that dies while the framework still thinks it is on. Its kernel patch needs atomic KMS, which this 3.10 kernel does not have, so here it warns and is skipped. |
 | `fdroid` | F-Droid app store + Privileged Extension (silent installs/updates). |
 | `firefox` | Firefox (Fennec F-Droid) as the browser, replacing Jelly. Mutually exclusive with `fulguris`. **In no preset**: it overrides Jelly, and stages 320 MB against Fulguris's 9. |
 | `fulguris` | Fulguris as the browser, replacing Jelly. A WebView browser, 9 MB where Fennec stages 320 MB. Mutually exclusive with `firefox`. **In no preset**: it overrides Jelly, so a preset carrying it ships the only browser in the image, and its first run asks you to accept terms with nothing else able to open them. |
 | `gapps` | Google apps: Play Store and GMS from MindTheGapps, plus Google's versions of the stock apps. |
-| `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client. |
-| `kdeconnect` | KDE Connect (phone <-> desktop: notifications, clipboard, files, remote input). |
+| `k9` | K-9 Mail (the Thunderbird for Android codebase) as the mail client. Pulls in `fdroid`. |
+| `kdeconnect` | KDE Connect (phone <-> desktop: notifications, clipboard, files, remote input). Pulls in `fdroid`. |
 | `linphone` | Linphone: a SIP client, for voice over data where the device has no VoLTE. |
 | `linux` | On-device Linux environment (chroot + Docker): container kernel config and cgroup fixes. The cgroup symlink patch is off here: this 3.10 kernel predates kernfs. |
 | `nav-icons` | Nextbit Robin style nav-bar icons, drawn as scalable tintable vectors. |
