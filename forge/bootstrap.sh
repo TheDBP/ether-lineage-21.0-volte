@@ -6,6 +6,8 @@
 #   OPTIONS="gapps root" ./forge/bootstrap.sh   # an ad-hoc set
 # One run builds one image.
 #   JOBS=8  SYNC_JOBS="4 2 1"  BUILD_ROOT=/path  # overrides
+# JOBS defaults to physical cores minus two (floor 4), capped by MemTotal/2, leaving the
+# machine usable while a build runs. Set it to use the whole box.
 #   SOONG_MEM_LIMIT=20GiB                        # cap soong_build's heap on a small machine
 # JOBS sizes the COMPILE phase. It does nothing for analysis: soong_build is one process whose
 # peak is set by the build graph (~30 GB live on a 24.0 tree, 60 GB at the Go default of a 2x
@@ -206,11 +208,27 @@ fi
 if [ -n "${KEYS_DIR:-}" ]; then echo ">> signing: release keys from $KEYS_DIR"
 else echo ">> signing: AOSP test keys (set KEYS_DIR in device.conf.local for a publishable image)"; fi
 
-# Parallelism: default min(cores, MemAvailable_GB/2) so a plain run uses full parallelism without OOM.
+# Parallelism: default to physical cores minus two, floored at four, then capped by memory.
+#
+# Physical cores, not nproc. nproc counts SMT threads, and a second thread on the same core buys
+# very little for javac/kotlinc/r8 while costing another 2-3 GB of heap -- so counting threads
+# roughly doubles the job count for no throughput. Minus two leaves the machine usable for other
+# work while a build runs, which is the common case; set JOBS to use the whole box.
+#
+# The memory cap stays and can take it below the floor: on a machine short of RAM, fewer jobs is
+# right even if it means two. Running out of memory does not fail cleanly, it thrashes -- a build
+# here sat at 16 targets/min with si=121128 so=343050, where the same tree at fewer jobs does not
+# swap at all.
 if [ -z "${JOBS:-}" ]; then
-  _cores="$(nproc)"; _ramgb="$(awk '/MemAvailable/{print int($2/1048576)}' /proc/meminfo 2>/dev/null || echo 8)"
+  _phys="$(lscpu -p=Core,Socket 2>/dev/null | grep -v '^#' | sort -u | wc -l)"
+  case "$_phys" in ''|0) _phys="$(nproc)" ;; esac
+  _corejobs=$(( _phys - 2 )); [ "$_corejobs" -lt 4 ] && _corejobs=4
+  # MemTotal, not MemAvailable: available is whatever happens to be free at launch, so the default
+  # would swing with unrelated load -- on this host it read 27G idle and 7G with a build already
+  # running, i.e. JOBS 13 or 3 for the same machine. Total is a property of the box.
+  _ramgb="$(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo 2>/dev/null || echo 8)"
   _ramjobs=$(( _ramgb / 2 )); [ "$_ramjobs" -lt 1 ] && _ramjobs=1
-  JOBS=$(( _cores < _ramjobs ? _cores : _ramjobs ))
+  JOBS=$(( _corejobs < _ramjobs ? _corejobs : _ramjobs ))
 fi
 export BUILD_ROOT
 # aosp.sh turns SOONG_MEM_LIMIT into the container's GOMEMLIMIT, but only sees it if it is in

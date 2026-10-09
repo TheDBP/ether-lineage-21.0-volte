@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=0ed49032bb9ac2d6877ae701ded55b3910c99af9
-subject=options: refresh the index (setup-mobile-data now patches lineage-24.0)
-synced=2026-10-09T12:22:37Z
+commit=b0f66ccf28b9565ce6003ad9e837d94688cda713
+subject=check-patch-series: reject a double hyphen in an added XML comment
+synced=2026-10-09T13:48:59Z

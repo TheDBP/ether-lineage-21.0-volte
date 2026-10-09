@@ -64,6 +64,43 @@ PDIR="$DEVICE_REPO/overlay/patches"
 [ -d "$PDIR" ] || { echo "!! no overlay/patches under $DEVICE_REPO" >&2; exit 1; }
 export LC_ALL=C
 
+# An XML comment may not contain a double hyphen. The house style uses -- as an em dash in prose,
+# so a comment explaining a device overlay is an easy way to produce XML that aapt2 refuses with
+# "not well-formed (invalid token)" -- twelve minutes into a build, long after the overlay applied.
+# apply-overlay.sh parses the XML under an option's tree/, but nothing parsed what a device patch
+# adds, so check the added lines here.
+python3 - "$PDIR" <<'XMLPY'
+import os, re, sys, glob
+pdir = sys.argv[1]
+bad = []
+for f in glob.glob(os.path.join(pdir, '**', '*.patch'), recursive=True):
+    target, inside = None, False
+    for line in io.open(f, encoding='utf-8', errors='replace') if False else open(f, encoding='utf-8', errors='replace'):
+        if line.startswith('+++ b/'):
+            target = line[6:].strip(); inside = target.endswith('.xml')
+            continue
+        if not inside or not line.startswith('+'):
+            continue
+        body = line[1:]
+        # track comment state crudely: flag an added line that opens or sits in a comment and has --
+        if '<!--' in body:
+            after = body.split('<!--', 1)[1]
+            if '--' in after.replace('-->', ''):
+                bad.append((os.path.basename(f), target, body.strip()[:70]))
+        elif '-->' in body:
+            if '--' in body.split('-->', 1)[0]:
+                bad.append((os.path.basename(f), target, body.strip()[:70]))
+        elif '--' in body and not body.lstrip().startswith('<'):
+            bad.append((os.path.basename(f), target, body.strip()[:70]))
+if bad:
+    print("!! XML comments may not contain '--'; aapt2 fails these with 'not well-formed':")
+    for p, t, b in bad[:8]:
+        print("     %s  %s" % (p, t))
+        print("         %s" % b)
+    sys.exit(1)
+XMLPY
+_xmlrc=$?
+
 python3 - "$PDIR" "$QUIET" <<'PY'
 import os, sys, glob, re
 
