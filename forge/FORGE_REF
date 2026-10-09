@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=b0f66ccf28b9565ce6003ad9e837d94688cda713
-subject=check-patch-series: reject a double hyphen in an added XML comment
-synced=2026-10-09T13:48:59Z
+commit=4549c2302c89d8857b0e9ae0a134ed07182db48d
+subject=bootstrap: make the physical core count robust
+synced=2026-10-09T15:57:48Z

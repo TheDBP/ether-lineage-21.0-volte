@@ -220,8 +220,17 @@ else echo ">> signing: AOSP test keys (set KEYS_DIR in device.conf.local for a p
 # here sat at 16 targets/min with si=121128 so=343050, where the same tree at fewer jobs does not
 # swap at all.
 if [ -z "${JOBS:-}" ]; then
+  # Physical cores. lscpu first; /proc/cpuinfo core id + physical id pairs if it is absent, which
+  # is the same count without needing util-linux. nproc is the last resort only, and it counts
+  # threads, so say so rather than silently sizing the build off the wrong number.
   _phys="$(lscpu -p=Core,Socket 2>/dev/null | grep -v '^#' | sort -u | wc -l)"
-  case "$_phys" in ''|0) _phys="$(nproc)" ;; esac
+  case "$_phys" in ''|0)
+    _phys="$(awk -F: '/^physical id/{p=$2} /^core id/{print p":"$2}' /proc/cpuinfo 2>/dev/null | sort -u | wc -l)" ;;
+  esac
+  case "$_phys" in ''|0)
+    _phys="$(nproc)"
+    echo "   note: no physical core count available, sizing JOBS off $_phys threads" ;;
+  esac
   _corejobs=$(( _phys - 2 )); [ "$_corejobs" -lt 4 ] && _corejobs=4
   # MemTotal, not MemAvailable: available is whatever happens to be free at launch, so the default
   # would swing with unrelated load -- on this host it read 27G idle and 7G with a build already
