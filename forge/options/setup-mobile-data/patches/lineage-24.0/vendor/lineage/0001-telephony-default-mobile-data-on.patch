@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: TheDBP <TheDBP@users.noreply.github.com>
+Date: Fri, 9 Oct 2026 08:20:56 -0400
+Subject: [PATCH] telephony: default mobile data on
+
+LineageOS ships ro.com.android.mobiledata=false under the comment
+"Disable mobile data by default". DataSettingsManager.isUserDataEnabled()
+falls back to that property once DEVICE_PROVISIONED is 1, so a phone
+completes setup online (via prov_mobiledata) and then drops off the
+network the moment the wizard finishes.
+
+Changed here rather than overridden from the device. gen_build_prop
+fails the build on duplicate sysprop assignments, both copies land in
+/product/etc/build.prop, and vendor/extra/product.mk is inherited at
+line 2 of common.mk -- before this file -- so neither an override nor a
+filter-out works.
+---
+ config/telephony.mk | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/config/telephony.mk b/config/telephony.mk
+index 68818467..801f73ae 100644
+--- a/config/telephony.mk
++++ b/config/telephony.mk
+@@ -25,6 +25,12 @@ PRODUCT_PRODUCT_PROPERTIES += \
+ PRODUCT_PRODUCT_PROPERTIES += \
+     net.tethering.noprovisioning=true
+ 
+-# Disable mobile data by default
++# Mobile data on by default (setup-mobile-data option).
++#
++# Changed at source rather than overridden. gen_build_prop rejects duplicate sysprop assignments
++# outright, and both this and any override land in /product/etc/build.prop -- which is also the
++# partition init loads last and therefore the one that wins, so putting ours in /system would lose.
++# vendor/extra/product.mk is inherited at line 2 of common.mk, before this file, so filter-out from
++# there does not work either.
+ PRODUCT_PRODUCT_PROPERTIES += \
+-    ro.com.android.mobiledata=false
++    ro.com.android.mobiledata=true

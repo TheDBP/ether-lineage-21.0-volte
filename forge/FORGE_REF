@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=df34fbfbe344939e7a7fc12522269992a7f433a3
-subject=setup-mobile-data: keep data on after setup, not just during it
-synced=2026-10-09T00:04:25Z
+commit=0ed49032bb9ac2d6877ae701ded55b3910c99af9
+subject=options: refresh the index (setup-mobile-data now patches lineage-24.0)
+synced=2026-10-09T12:22:37Z

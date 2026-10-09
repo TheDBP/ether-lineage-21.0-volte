@@ -253,7 +253,7 @@ and ships in that build, because there it only has to fetch the APK).
 | `openvpn` | OpenVPN for Android (de.blinkt.openvpn) as a bundled VPN client. Pulls in `fdroid`. | 20.0, 22.2, 24.0 |
 | `pong-notification` | Pong as the default notification sound (LineageOS default is Argon). | 20.0, 22.2, 24.0 |
 | `root` | Magisk baked into the boot image, so the zip flashes pre-rooted. Pulls in `termoneplus`. The image flashes pre-rooted, so treat it like one. | any |
-| `setup-mobile-data` | Mobile data usable during setup, instead of a sign-in page with no way online but Wi-Fi. | 20.0 |
+| `setup-mobile-data` | Mobile data usable during setup, instead of a sign-in page with no way online but Wi-Fi. | 20.0, 24.0 |
 | `setupwizard-lineage` | Use Lineage SetupWizard over Google's (WITH_GAPPS). | 18.1, 19.1, 20.0, 24.0 |
 | `setupwizard-nag-skip` | Skip recovery/metrics/backup setup pages. | 18.1, 19.1, 20.0, 22.2, 23.2, 24.0 |
 | `syncthing-fork` | Syncthing-Fork: continuous file sync between your own devices, no server or account. Pulls in `fdroid`. | 20.0, 22.2, 23.2, 24.0 |
