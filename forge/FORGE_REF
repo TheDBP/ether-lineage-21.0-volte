@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=634475d8e2e89c3e977eb79f4979ebc483ad5618
-subject=setupwizard-lineage: claim lineage-24.0
-synced=2026-10-08T18:13:44Z
+commit=df34fbfbe344939e7a7fc12522269992a7f433a3
+subject=setup-mobile-data: keep data on after setup, not just during it
+synced=2026-10-09T00:04:25Z
