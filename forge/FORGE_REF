@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=a064a709aa2e63739d1d5f0c5798ef382b46abb3
-subject=GOTCHAS 44: the direct-boot window, measured
-synced=2026-10-10T00:51:48Z
+commit=0a185f324d1f9f2fa41878c4878f0878469551cd
+subject=refresh-patches: repair the subject extraction I broke today
+synced=2026-10-10T01:34:33Z

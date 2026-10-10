@@ -126,7 +126,7 @@ refresh() {
   for f in "$FORGE"/options/*/patches/"$BRANCH"/"$proj"/*.patch; do
     [ -e "$f" ] || continue
     optids+="$(git patch-id --stable < "$f" | cut -d' ' -f1)"$'\n'
-    optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //{p;q;}' "$f")"$'\n'
+    optsubs+="$(sed -n '/^Subject: /{ s/^Subject: \[PATCH[^]]*\] //p; q; }' "$f")"$'\n'
   done
   local shas="" sha id sub
   for sha in $(git -C "$d" rev-list --reverse "$base"..HEAD); do
@@ -252,7 +252,7 @@ while read -r gitdir; do
   for _f in "$FORGE"/options/*/patches/"$BRANCH"/"$proj"/*.patch; do
     [ -e "$_f" ] || continue
     _optids+="$(git patch-id --stable < "$_f" | cut -d' ' -f1)"$'\n'
-    _optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //{p;q;}' "$_f")"$'\n'
+    _optsubs+="$(sed -n '/^Subject: /{ s/^Subject: \[PATCH[^]]*\] //p; q; }' "$_f")"$'\n'
   done
   n=0
   for _sha in $(git -C "$AOSP/$proj" rev-list "$mref..HEAD" 2>/dev/null); do
