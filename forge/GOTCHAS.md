@@ -854,3 +854,32 @@ name.
 `readelf -r` lists the entries but shows the symbol-value column rather than the addend, which
 reads as 0 and does not help. Use `tools/aps2-relocs.py` to decode the stream, or avoid the vtable
 entirely and identify the handler from the branch targets in the caller.
+
+## 53. A config database that records which asset provisioned it will revert your edits
+
+Vendor stacks that provision a database from a versioned asset usually store the asset's identity in
+that same database and compare the two on every start. LG's IMS app keeps the filename in
+`lgims_db_info` and checks it in `ConfigXMLLoader::isDBNeedUpdate`; a mismatch re-provisions every
+table from the asset for the currently selected profile.
+
+So writing another variant's values into the database wholesale is self-defeating: the version rows
+go in with everything else, the next start sees a filename that does not match the selected profile,
+and the whole edit is discarded and replaced. It reads as though the change had no effect, when it
+was applied and then reverted before the component ever used it.
+
+Edit one setting and leave the version rows alone and it persists. To change the whole set, change
+the selection input the stack uses to pick its asset, not the contents of the database.
+
+## 54. Enabling a feature flag is not the same as selecting the configuration that uses it
+
+A per-profile boolean can turn a feature on while the rest of the profile remains wrong for it. LG's
+IMS profile has `aos_reg_0_ipsec`, and setting it on the Verizon profile did switch the security
+agreement on: the headers were offered, the challenge arrived, the keys and security associations
+were all installed successfully. The protected request then went out from an ephemeral local port
+instead of the port that had been announced and that the policies covered, matched no policy, and
+was dropped. Nothing logged an error.
+
+The two profiles differed in 542 parameters, and the transport behaviour lived in a feature bitmask
+elsewhere in the set. When a vendor ships one configuration per carrier or per variant, treat the
+configuration as the unit: select the right one. Flipping the flag that names the feature gets the
+feature half-enabled, which is harder to diagnose than it being off.

@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=b9a7f8af916be44f0647496d4a7f6c5749cee297
-subject=GOTCHAS: a provisioned knob can be dead code, and packed relocs zero out vtables
-synced=2026-10-10T23:11:53Z
+commit=aa040586be884d6b409ec2031ed2f87bf6a1693c
+subject=GOTCHAS: provisioned config databases revert edits, and a feature flag is not a profile
+synced=2026-10-10T23:58:32Z
