@@ -652,6 +652,18 @@ if [ "${#EXTRACT_PIDS[@]}" -gt 0 ]; then
 fi
 
 # ---- 5. build ----
+# [4/5] apply-overlay reinstalls local_manifests unconditionally, which undoes what the pin did
+# before sync. That matters here and not only at sync time: the ROM build itself runs
+# `repo manifest -o - -r` to write /product/etc/build-manifest.xml, and with the pin active those
+# projects are already in pinned.xml, so the target dies with
+#   error: in `manifest -o - -r`: duplicate path vendor/gapps
+# at around 50% of the build. A pinned run does not need the local manifests at all, because the
+# snapshot is the complete project set, and dropping them makes the shipped build-manifest.xml
+# record the pinned revisions, which is what it is for.
+if [ -n "${PIN_MANIFEST:-}" ]; then
+  rm -rf "$SRC/.repo/local_manifests"
+fi
+
 echo ">> [5/5] build the ROM(s) — progress in logs/build.log"
 LOG_TAG=build "$AOSP" bash -lc "JOBS=$JOBS PRESET='${PRESET:-}' OPTIONS='${BUILD_OPTIONS:-}' TURBO_BUILD_ID='${TURBO_BUILD_ID:-}' KEEP_GOING='${KEEP_GOING:-}' bash /repo/forge/docker/_build_rom.sh"
 

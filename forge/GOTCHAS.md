@@ -706,8 +706,14 @@ And repo remembers the override in its own config, while `bootstrap.sh` only run
 upstream while reporting nothing unusual. Clear it with `repo init -m default.xml` when no
 `PIN_MANIFEST` is given.
 
-Verifying that a snapshot *writes* is not verifying that it *restores*. Test the replay path, or the
-feature is decoration.
+There is a third place it bites, and it is not at sync time. The ROM build runs
+`repo manifest -o - -r` itself to write `/product/etc/build-manifest.xml`, so a duplicate kills that
+target around 50% into the build, long after sync looked fine. `apply-overlay` reinstalls the local
+manifests on its second pass, which undoes anything the pin did earlier, so the removal has to be
+repeated immediately before the build.
+
+Verifying that a snapshot *writes* is not verifying that it *restores*. Test the replay path end to
+end, including a build, or the feature is decoration.
 
 Note the asymmetry when you have no snapshot to pin, because it determines what you may conclude.
 Checking an older patch series out onto today's upstream tests that series against a tree it has
@@ -753,3 +759,37 @@ assuming a version gate is merely conservative.
 Pick the implementation that matches the blob, and check the FCM level permits it:
 `compatibility_matrix.7.xml` still allows `format="hidl"` fingerprint `2.1-3`, while level 8 lists
 AIDL only. A device on an old blob and a new target level needs a real shim, not a looser check.
+
+## 49. An RRO can override a resource but cannot add one
+
+`PRODUCT_ENFORCE_RRO_TARGETS` converts a device overlay from something compiled into the target APK
+into a runtime overlay, and the two are not equivalent. A static overlay contributes resources; an
+RRO can only *replace* a resource the target already defines. Anything new it declares is not
+reachable by name from the target package.
+
+This is silent in the worst way, because the half that does work makes the result look intentional.
+Reclaiming manufacturer wallpapers into Lineage's `Backgrounds`:
+
+    RRO:               array/partner_wallpapers overridden, 17 entries   (works)
+                       drawable table entryCount=1                       (the images are not there)
+    base APK:          zero of the reclaimed drawables
+    /product/media:    every PNG present, because PRODUCT_COPY_FILES is unaffected
+
+So the picker is handed a list of wallpapers it cannot resolve and renders nothing. No error, no
+blank tiles, no missing-resource warning; the entries simply are not in the grid. And the raw files
+*are* on the device, which sends you looking at the copy rules instead of the overlay. Those files
+feed `ro.config.wallpaper` and the picker never reads them.
+
+The tell is one device working and another not with the same assets: a tree that does not set
+`PRODUCT_ENFORCE_RRO_TARGETS` compiles the overlay in and behaves correctly.
+
+The supported escape is per overlay, matched by path prefix in `package_internal.mk`:
+
+    PRODUCT_ENFORCE_RRO_EXCLUDED_OVERLAYS += vendor/extra/overlay/oem-assets/packages/apps/Backgrounds
+
+Exclude only the package that needs to add resources. An overlay that merely overrides existing
+ones is doing exactly what an RRO does well, so leave it runtime and keep the generic image.
+
+Check the result on the artifact rather than the device: `aapt2 dump resources <apk>` on the built
+APK shows whether the resources are compiled in, and a leftover
+`<Target>__<product>__auto_generated_rro_vendor.apk` means it is still an RRO.
