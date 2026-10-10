@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=81484d04c82fa9295e3fc0b9f887e200a6221c31
-subject=tools/README: list install-hooks.sh in the quick reference
-synced=2026-10-10T00:03:22Z
+commit=a064a709aa2e63739d1d5f0c5798ef382b46abb3
+subject=GOTCHAS 44: the direct-boot window, measured
+synced=2026-10-10T00:51:48Z

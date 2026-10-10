@@ -616,8 +616,13 @@ attempt whose preconditions are nothing like the ones at boot.
 The tell is a bug that "started when I set a PIN". Do not go looking at the keyguard; the PIN only
 revealed an ordering your app always had.
 
-    dumpsys package <pkg> | grep -i directBoot
-    dumpsys activity processes | grep <pkg>
+    dumpsys user | grep State          # RUNNING_LOCKED vs RUNNING_UNLOCKED
+    ps -A | grep <pkg>                 # zero processes while RUNNING_LOCKED
+    aapt2 dump xmltree <apk> --file AndroidManifest.xml | grep -iE "directBootAware|persistent"
+
+Measured on a V20 after a reboot, with the lock screen still up: user 0 `RUNNING_LOCKED`, and the
+`persistent` IMS app at **zero processes**. Note the manifest is the authority here, not
+`dumpsys package`, whose flag list shows `PERSISTENT` but says nothing either way about direct boot.
 
 Making the app direct-boot-aware is only correct if it can genuinely run with no CE storage, so no
 `SharedPreferences`, no database, nothing under `getFilesDir()`. If it cannot, keep the window and
