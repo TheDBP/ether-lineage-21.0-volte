@@ -690,6 +690,25 @@ the exact tree a previous build used:
 
     PIN_MANIFEST=build_output/manifests/manifest-<stamp>.xml ./forge/bootstrap.sh
 
+Two traps in the replay, both of which cost a build to find:
+
+`repo manifest -r` writes every project it can see, **including the ones `local_manifests` add**, so
+the snapshot is already the complete set. Re-initialising with it while the local manifests are
+still installed declares those projects twice and repo rejects the whole file:
+
+    fatal: duplicate path vendor/gapps in /aosp/.repo/manifests/pinned.xml
+
+Remove the local manifests for a pinned sync; `bootstrap.sh` regenerates them from the option set
+every run, so nothing is lost.
+
+And repo remembers the override in its own config, while `bootstrap.sh` only runs `repo init` when
+`.repo` does not exist yet. So a pin set once leaks into every later build, silently syncing an old
+upstream while reporting nothing unusual. Clear it with `repo init -m default.xml` when no
+`PIN_MANIFEST` is given.
+
+Verifying that a snapshot *writes* is not verifying that it *restores*. Test the replay path, or the
+feature is decoration.
+
 Note the asymmetry when you have no snapshot to pin, because it determines what you may conclude.
 Checking an older patch series out onto today's upstream tests that series against a tree it has
 never seen. If the feature works, your series was the cause. If it does not, you have learned

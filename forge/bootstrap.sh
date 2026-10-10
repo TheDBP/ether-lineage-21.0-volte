@@ -507,8 +507,22 @@ if [ -n "${PIN_MANIFEST:-}" ]; then
   [ -f "$PIN_MANIFEST" ] || { echo "!! PIN_MANIFEST=$PIN_MANIFEST does not exist" >&2; exit 1; }
   echo ">> [3/5] pinning upstream to $(basename "$PIN_MANIFEST") ($(grep -c "<project" "$PIN_MANIFEST") projects)"
   cp "$PIN_MANIFEST" "$SRC/.repo/manifests/pinned.xml"
+  # `repo manifest -r` writes EVERY project it can see, including the ones local_manifests add, so
+  # the snapshot is already the complete set. Leaving the local manifests in place declares those
+  # projects a second time and repo rejects the whole manifest:
+  #   fatal: duplicate path vendor/gapps in /aosp/.repo/manifests/pinned.xml
+  # Dropping them is safe because [2/5] regenerates them from the option set on every run.
+  rm -rf "$SRC/.repo/local_manifests"
   LOG_TAG=sync CONTAINER=aosp-${DEVICE_SLUG}-sync "$AOSP" \
     bash -lc "cd /aosp && repo init -m pinned.xml" || { echo "!! repo init -m pinned.xml failed" >&2; exit 1; }
+elif [ -f "$SRC/.repo/manifests/pinned.xml" ]; then
+  # A previous build pinned this checkout, and repo remembers the override in its own config.
+  # [2/5] only runs `repo init` when .repo does not exist yet, so without this every later build
+  # silently keeps syncing the old pin while reporting nothing unusual.
+  echo ">> [3/5] clearing a previous PIN_MANIFEST (back to default.xml)"
+  rm -f "$SRC/.repo/manifests/pinned.xml"
+  LOG_TAG=sync CONTAINER=aosp-${DEVICE_SLUG}-sync "$AOSP" \
+    bash -lc "cd /aosp && repo init -m default.xml" || { echo "!! repo init -m default.xml failed" >&2; exit 1; }
 fi
 
 echo ">> [3/5] repo sync — hours + ~100GB the first time (progress in logs/sync.log)"

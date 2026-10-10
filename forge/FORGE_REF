@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=7c083d62f8e5493f5056e9aa9e8c6e16de7d396e
-subject=oem: the Backgrounds overlay has to be static, or the wallpapers never show
-synced=2026-10-10T02:20:41Z
+commit=73ccd95ab57ed64a0c0db053e5fded076c1b89a5
+subject=bootstrap: make PIN_MANIFEST actually restore, and not leak
+synced=2026-10-10T02:25:57Z
