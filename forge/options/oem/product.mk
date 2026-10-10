@@ -29,10 +29,11 @@ DEVICE_PACKAGE_OVERLAYS += vendor/extra/overlay/oem-assets
 # Backgrounds must be a STATIC overlay, not an RRO. A device that sets
 # PRODUCT_ENFORCE_RRO_TARGETS (msm8996 sets it to *) turns every device overlay into a runtime
 # overlay, and an RRO can only override a resource that already exists: it cannot add one. The
-# partner_wallpapers array is overridden fine, so the picker is told about wallpapers whose
-# drawables were never added, and it silently renders nothing. Measured on a vs995 build: the RRO
-# carried the 17 entry array and a drawable table of entryCount=1, while the base Backgrounds.apk
-# had zero of the reclaimed drawables.
+# partner_wallpapers array is overridden fine, so the picker is told about wallpapers it cannot
+# resolve, and it silently renders nothing. The overlay does ship the images; what it cannot do is
+# make them resolvable by name in the target package, because the idmap only maps names the target
+# already defines. Measured on a vs995 build: the RRO carried the 17 entry array AND all 12
+# drawables, while the base Backgrounds.apk had none of them, so every lookup returned 0.
 #
 # Only this one package is excluded. The framework overlays beside it (audio_assets, the
 # SettingsProvider defaults) override resources that already exist, which is exactly what an RRO

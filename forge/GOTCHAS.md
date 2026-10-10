@@ -767,13 +767,21 @@ into a runtime overlay, and the two are not equivalent. A static overlay contrib
 RRO can only *replace* a resource the target already defines. Anything new it declares is not
 reachable by name from the target package.
 
-This is silent in the worst way, because the half that does work makes the result look intentional.
-Reclaiming manufacturer wallpapers into Lineage's `Backgrounds`:
+The overlay APK really does contain the new resources. What it cannot do is make them resolvable
+**by name in the target package**: the idmap only maps names the target already defines, so a lookup
+like `getIdentifier("robin_edge", "drawable", "org.lineageos.backgrounds")` returns 0 while
+`robin_edge` sits in the overlay unreferenced. Measured on a vs995 build, reclaiming manufacturer
+wallpapers into Lineage's `Backgrounds`:
 
-    RRO:               array/partner_wallpapers overridden, 17 entries   (works)
-                       drawable table entryCount=1                       (the images are not there)
-    base APK:          zero of the reclaimed drawables
+    RRO:               array/partner_wallpapers overridden, 17 entries   (works, the name exists)
+                       drawable/robin_* all 12 present                   (present, unreachable)
+    base APK:          zero of the reclaimed drawables                   (nothing to map onto)
     /product/media:    every PNG present, because PRODUCT_COPY_FILES is unaffected
+
+After excluding the package from enforcement, the same build compiles 36 drawables into the base
+APK, 12 of them the reclaimed ones, and ships no RRO for it.
+
+This is silent in the worst way, because the half that does work makes the result look intentional.
 
 So the picker is handed a list of wallpapers it cannot resolve and renders nothing. No error, no
 blank tiles, no missing-resource warning; the entries simply are not in the grid. And the raw files
@@ -793,3 +801,8 @@ ones is doing exactly what an RRO does well, so leave it runtime and keep the ge
 Check the result on the artifact rather than the device: `aapt2 dump resources <apk>` on the built
 APK shows whether the resources are compiled in, and a leftover
 `<Target>__<product>__auto_generated_rro_vendor.apk` means it is still an RRO.
+
+Use the `aapt2` from **the same tree** as the APK. An older one run against a newer APK does not
+error; it prints a plausible-looking dump with the resource names missing and a nonsense
+`entryCount`, which reads exactly like "the resources are not there" and sent this investigation
+down a wrong path twice. `out/host/linux-x86/bin/aapt2` of the tree that built it.
