@@ -806,3 +806,26 @@ Use the `aapt2` from **the same tree** as the APK. An older one run against a ne
 error; it prints a plausible-looking dump with the resource names missing and a nonsense
 `entryCount`, which reads exactly like "the resources are not there" and sent this investigation
 down a wrong path twice. `out/host/linux-x86/bin/aapt2` of the tree that built it.
+
+## 50. Your own adb command text is in logcat, and your grep counts it
+
+`adbd` logs every shell request verbatim:
+
+    I adbd : adbd service requested 'shell,v2,...,raw:logcat -d -b all | grep -c "Security-Client"'
+
+So the needle you are hunting is written into the haystack by the act of hunting. `grep -c` then
+returns at least 1 and you conclude the thing is present. This bit twice in one session: an ANR
+count that was really the string `am_anr` inside the command, and a `Security-Client` count of 1
+on four captures where the real count was zero, which inverted the conclusion about whether the
+IMS stack was offering a security agreement at all.
+
+It is worse than a simple off-by-one, because the false hit looks exactly like a true one and
+survives being re-run. Any `grep -c` over `logcat` that you then reason from must exclude the
+echo:
+
+    logcat -d -b all | grep "Security-Client" | grep -v adbd | wc -l
+
+Two habits that avoid it entirely: pull the log to the host once and grep the file (the echo is
+still in there, so still filter, but at least the evidence stops moving), and prefer matching the
+log line's own shape, e.g. the tag or level column, over a bare substring. When a count is load
+bearing, print the matching lines rather than the count and read them.

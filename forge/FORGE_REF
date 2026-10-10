@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=7c0aa13439289c8032b1122d5f32a810a370e055
-subject=oem/GOTCHAS 49: correct the RRO evidence, and the tool that falsified it
-synced=2026-10-10T04:13:36Z
+commit=cdf63995541ffafc66eab30b3a2878e036510500
+subject=GOTCHAS 50: adbd echoes your command into logcat and your grep counts it
+synced=2026-10-10T12:46:26Z
