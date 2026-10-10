@@ -307,7 +307,7 @@ work on any device rather than being wired into this tree.
 
 75 patches across 20 upstream projects, applied at build time from `overlay/patches/`. Nothing
 here is a fork: each is a single commit against the upstream tree, replayed on every build, so
-upstream stays upstream and what we changed stays legible. One patch per thing it enables. Each entry
+upstream stays upstream and every change stays legible. One patch per thing it enables. Each entry
 below: what broke → what the patch does → what it costs.
 
 The device series is ordered in families rather than chronologically, so related work reads together: port and tuning, panel density, device features, modem bring-up, display and camera, wifi and USB, audio, IMS and VoLTE, the IMS capability advertisement, then CNE and the property/denial batches. No patch undoes an earlier one, with one deliberate exception noted on `0030`.
@@ -471,7 +471,7 @@ The device series is ordered in families rather than chronologically, so related
   the per-carrier legs, and the CarrierConfig bundle, in one patch because they are one decision
   expressed in four files. The device leg is unqualified and deliberately not under an `mcc`/`mnc`
   directory: `isVolteEnabledByPlatform()` ANDs it with the carrier leg, so qualifying it by carrier
-  refused every network except the two we had directories for. Android also resolves those qualifiers
+  refused every network except the two with directories present. Android also resolves those qualifiers
   from the SIM, not the serving network — Mint reads 310240 while the network reads 310260 — so both
   directories carry only genuinely per-carrier values. volte true; vt false, because `lib-imsvt.so`
   cannot be shimmed back; wfc false, because the modem never attempts an ePDG tunnel and a newer

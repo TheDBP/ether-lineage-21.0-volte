@@ -14,7 +14,7 @@ import os, re, sys
 
 LEGACY_PKG = 'org.codeaurora.ims.legacy'
 
-# Types that stay as they are. Everything under com/android/ims is ours and gets the renamed
+# Types that stay as they are. Everything under com/android/ims belongs to this port and gets the renamed
 # package; anything else must already exist on 13 or the generated AIDL will not compile.
 PRIM = {'V': 'void', 'Z': 'boolean', 'B': 'byte', 'C': 'char', 'S': 'short',
         'I': 'int', 'J': 'long', 'F': 'float', 'D': 'double'}

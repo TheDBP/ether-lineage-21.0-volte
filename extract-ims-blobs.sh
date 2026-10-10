@@ -6,7 +6,7 @@
 # WHY this is not just added to proprietary-files.txt: vendor/nextbit/ether comes from TheMuppets
 # via the manifest, and TheMuppets deliberately omits the IMS set (LineageOS disabled the pre-P IMS
 # stack — bullhead 5cef16f, which removed exactly one line from its blobs list). Patching a synced
-# vendor repo to carry blobs we cannot commit is worse than staging them, so this follows the same
+# vendor repo to carry uncommittable blobs is worse than staging them, so this follows the same
 # shape as the oem option: everything lands under vendor/extra, which apply-overlay clears per build.
 #
 # Reads proprietary-files-ims.txt beside this script. Lines are `src[:dest]`, src relative to

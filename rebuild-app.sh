@@ -130,7 +130,7 @@ echo "   rewrote in $n file(s); specialized calls remaining: $left"
 # ImsService.onCreate calls ImsVideoGlobals.init(), whose static initialiser dlopens the VT natives.
 # That used to be fatal -- libimsmedia_jni.so wants android::Surface::Surface(sp<IGBP> const&, bool),
 # a two-argument constructor Android 13 no longer has, so ImsMedia.<clinit> threw UnsatisfiedLinkError
-# and took the whole IMS service down at onCreate. We deleted the call, and then spent four build
+# and took the whole IMS service down at onCreate. Deleting the call cost four further build
 # cycles patching out the singletons it would have created: openForSub's getInstance(),
 # maybeCreateVideoProvider's CameraController, and maybeUpdateLowBatteryStatus's LowBatteryHandler,
 # the last of which was killing com.android.phone on every call.
@@ -232,7 +232,7 @@ PYIN
   # reports a call -- and it is a FATAL EXCEPTION on com.android.phone's main thread. Telephony dies
   # mid-call-setup and the dialer is left holding a stuck tone.
   #
-  # The method returns Z and callers read false as "nothing to report", which is what we want: no VT,
+  # The method returns Z and callers read false as "nothing to report", which is the desired result: no VT,
   # no low-battery video downgrade. Force the early return.
   #
   # NOTE: this is the FOURTH place dropping init() has surfaced. If a fifth appears, stop patching
@@ -278,7 +278,7 @@ fi
 #
 # On 7.1 these classes were com.android.ims.*, which lived on the BOOT classpath, so
 # readParcelable(null) resolved them: a null loader makes Parcel fall back to its own
-# (framework) loader. We renamed them into the app, and an app class is invisible to the boot
+# (framework) loader. Renaming them into the app, and an app class is invisible to the boot
 # loader, so the first inbound ImsCallProfile dies with
 #     ClassNotFoundException: org.codeaurora.ims.legacy.ImsStreamMediaProfile
 #         at ...ImsCallProfile.readFromParcel

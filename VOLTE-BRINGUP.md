@@ -43,7 +43,7 @@ different ways. Most of the time lost on this port was spent mistaking one for t
             |
             |  android.telephony.ims.compat.*                    (still in AOSP, unused elsewhere)
             v
-  ImsBridge            (device/nextbit/ether/ims-bridge)       <- ours
+  ImsBridge            (device/nextbit/ether/ims-bridge)       <- local
             |
             |  org.codeaurora.ims.legacy.internal.IImsService    (the 7.1 Binder interface,
             v                                                     regenerated from the binary)
@@ -56,7 +56,7 @@ different ways. Most of the time lost on this port was spent mistaking one for t
 
 AOSP still ships a compatibility layer for pre-P IMS implementations
 (`android.telephony.ims.compat`). It is unused by any current device, but it is complete, and it is
-what makes this possible at all: we only had to bridge from *its* interface down to the 7.1 app,
+what makes this possible at all: only the hop from *its* interface down to the 7.1 app needed bridging,
 not reimplement the modern ImsService API.
 
 ---
@@ -163,7 +163,7 @@ fixes the class.
 
 For several days the symptom was: IMS capabilities negotiated, `MmTel Capabilities - [Voice: true]`,
 `UNSOL_VOPS_CHANGED`, `STATUS_ENABLED` — and yet every call fell back to circuit-switched and failed
-with `DIAL error 46 / INVALID_MODEM_STATE`. No `onImsConnected`. The obvious reading was that our
+with `DIAL error 46 / INVALID_MODEM_STATE`. No `onImsConnected`. The obvious reading was that the
 bridge's registration listener was broken.
 
 It was not. Decoding the raw frames the IMS app exchanges with the modem settled it in minutes:
@@ -197,7 +197,7 @@ gsm.operator.numeric       310260   <- T-Mobile, and this picks nothing
 host network reports its own MCC/MNC on the SIM. The overlay never applied, the resource fell back to
 AOSP's `false`, and one boolean suppressed VoLTE, VT and Wi-Fi calling together.
 
-It was also a regression of our own making: patch 0004 had replaced a working global
+It was also a self-inflicted regression: patch 0004 had replaced a working global
 `persist.dbg.volte_avail_ovr=1` with that MNC-scoped overlay. The log line
 `qcril_qmi_imsa_is_ims_registered_for_voip_vt_service` read `1` before the swap and `0` after.
 
@@ -244,7 +244,7 @@ is why Settings ANRed on `isVoNrEnabled`, and why binder threads pile up on `Mai
 monitors. Eventually `TelephonyConnectionService` cannot execute, the phone process is killed for
 ANR, and the next call fails with `Phone is null, OUT_OF_SERVICE` -- with IMS never re-registering.
 Set the property false (device patch 0029). AOSP's else-branch comment names the case exactly: "for
-legacy IMS we want to avoid blocking the binder thread".
+legacy IMS the binder thread must not block".
 **`sys.ims.*` is typed `qcom_ims_prop`** and unreadable from a shell without root. Empty is not the
 same as unset.
 
@@ -295,7 +295,7 @@ type that still exists can have grown (`Surface`).
 `./verify-volte.sh` checks the claims in this document against the tree, the stock blobs and the
 upstream reference, printing PASS or FAIL per claim and exiting non-zero if any fails.
 
-It needs two things that are not in this repo, because neither is ours to ship:
+It needs two things that are not in this repo, because neither is redistributable here:
 
 **The extracted stock IMS blobs**, under `$BUILD_ROOT/tmp/ims-inventory` by default, produced by
 `./extract-ims-blobs.sh`. Override with `--inventory DIR` or `IMS_INVENTORY`.
@@ -399,7 +399,7 @@ no tunnel is attempted.
 `setProvisionedValue` is the wrong API for VoWiFi on this build; item 28 is not in its accepted set. Do
 not chase this by widening the bundle. The open question is which legacy item numbers this `ims.apk`
 does accept, and whether any maps to the RIL's `ENABLE_VOWIFI` or to `client_prov_enabled`.
-`ConfigWrapper` is our code, so probe from there rather than guessing.
+`ConfigWrapper` is local code, so probe from there rather than guessing.
 
 *The modem's iWLAN code is complete. Its configuration is not, and the configuration is not the gate
 either.* Diffed this modem against a Nexus 5X final radio -- same M8994F line, both MPSS.BO.2.6.x --
@@ -441,12 +441,12 @@ the same M8994F line, this device's EFS comes out equivalent or better:
                                       missing natt_keepalive_wifi_offload:TRUE, and LF vs CRLF
     /data/pdn_policy_db.txt           already Supported_RAT_Priority_List:WWAN,IWLAN for the ims
                                       PDN, and IWLAN,WWAN for tmus
-    /efsprofiles/imshandoverconfig    a SUPERSET of T-Mobile's; ours adds the media jitter and
+    /efsprofiles/imshandoverconfig    a SUPERSET of T-Mobile's; this one adds the media jitter and
                                       frame-loss thresholds
     modem/mmode/wifi_config           byte-identical
     wlan_config/wlan_offload_config   2 on both, so the earlier write experiment was always going
                                       to be a no-op
-    ims/qp_ims_wifi_config            512 zero bytes in T-Mobile's MCFG too -- ours being zeroed is
+    ims/qp_ims_wifi_config            512 zero bytes in T-Mobile's MCFG too -- this one being zeroed is
                                       normal, not a defect
     wlan_config/iwlan_s2b_mtu_val     the only genuine absence (T-Mobile: 1280)
 
@@ -511,7 +511,7 @@ entry point for it, so nothing on the AOSP side is missing a call.
 `persist.vendor.cnd.wqe` is deliberately left off. WQE is Wireless Quality Estimation: it actively
 probes an ICD server to measure RTT and bitrate and reports a verdict to the modem. It is not a gate
 for Wi-Fi calling, and with no probe server configured it may report the link as bad and suppress the
-handover we are trying to get.
+handover being sought.
 
 **Video calling will not work.** `lib-imsvt.so` imports `IOMXObserver` and `IGraphicBufferAlloc` —
 platform interfaces deleted outright when OMX moved to HIDL/Codec2 — among 61 unresolved symbols.

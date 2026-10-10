@@ -4,7 +4,7 @@
 #
 #   deodex-app.sh <stock-rom.zip> <workdir> <ims|cne>
 #
-# ether ships both apps we need with the dex removed: a few KB of manifest with the real code in an
+# ether ships both required apps with the dex removed: a few KB of manifest with the real code in an
 # arm64 odex beside it. Importing either apk alone installs a shell with no code.
 #
 #   ims  vendor/app/ims/ims.apk              27 KB apk, 2.3 MB odex  -> VoLTE

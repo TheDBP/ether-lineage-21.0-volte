@@ -97,7 +97,7 @@ ck "C9b ims_socket + qcom_ims_prop types"   "$(grep -q 'type ims_socket' "$B/sep
 ck "C10 Android.mk IMS_SYMLINKS"            "$(grep -q 'IMS_SYMLINKS' "$B/Android.mk" 2>/dev/null && echo 1 || echo 0)"
 
 
-# ---------------------------------------------------------------- step 4: the stack we built
+# ---------------------------------------------------------------- step 4: the stack built here
 P18=$(ls "$R"/overlay/patches/device/nextbit/ether/*IMS-daemons-JNI-symlinks*.patch 2>/dev/null | head -1)
 DT="$SRC/device/nextbit/ether"
 RC="$DT/rootdir/init.target.rc"
@@ -113,12 +113,12 @@ ck "S2c init: DATA_DAEMON_STATUS starts ims_rtp_daemon" "$(grep -A1 'sys.ims.DAT
 ck "S2d init: the two chained daemons are disabled"    "$([ "$(awk '/^service (imsdatadaemon|ims_rtp_daemon) /{f=1} f&&/^ *disabled/{n++; f=0} END{print n+0}' "$RC" 2>/dev/null)" = 2 ] && echo 1 || echo 0)"
 
 # sepolicy: device/qcom/sepolicy-legacy already carries the whole IMS policy. Declaring any of it
-# again is a hard build failure ("Duplicate declaration of type"), so these assert ABSENCE on our
+# again is a hard build failure ("Duplicate declaration of type"), so these assert ABSENCE on the
 # side and PRESENCE on the legacy side.
 QS="$SRC/device/qcom/sepolicy-legacy"
-ck "S3  we ship no ims.te of our own"        "$([ ! -e "$DT/sepolicy/ims.te" ] && echo 1 || echo 0)"
-ck "S3b we do not redeclare ims_socket"      "$([ -d "$DT/sepolicy" ] && ! grep -rqE '^[[:space:]]*type[[:space:]]+ims_socket' "$DT/sepolicy" 2>/dev/null && echo 1 || echo 0)"
-ck "S3c we do not redeclare qcom_ims_prop"   "$([ -d "$DT/sepolicy" ] && ! grep -rqE '^[[:space:]]*type[[:space:]]+qcom_ims_prop' "$DT/sepolicy" 2>/dev/null && echo 1 || echo 0)"
+ck "S3  no local ims.te is shipped"          "$([ ! -e "$DT/sepolicy/ims.te" ] && echo 1 || echo 0)"
+ck "S3b ims_socket is not redeclared"        "$([ -d "$DT/sepolicy" ] && ! grep -rqE '^[[:space:]]*type[[:space:]]+ims_socket' "$DT/sepolicy" 2>/dev/null && echo 1 || echo 0)"
+ck "S3c qcom_ims_prop is not redeclared"     "$([ -d "$DT/sepolicy" ] && ! grep -rqE '^[[:space:]]*type[[:space:]]+qcom_ims_prop' "$DT/sepolicy" 2>/dev/null && echo 1 || echo 0)"
 ck "S3d legacy policy has the ims domain"    "$(grep -qE '^[[:space:]]*type[[:space:]]+ims,' "$QS/common/ims.te" 2>/dev/null && echo 1 || echo 0)"
 ck "S3e legacy policy labels all 4 daemons"  "$([ "$(grep -rhE '/bin/(imsqmidaemon|imsdatadaemon|ims_rtp_daemon|imscmservice)[[:space:]]' "$QS"/*/file_contexts 2>/dev/null | wc -l)" -ge 4 ] && echo 1 || echo 0)"
 ck "S3f legacy policy has sys.ims. context"  "$(grep -rq 'sys.ims.' "$QS"/*/property_contexts 2>/dev/null && echo 1 || echo 0)"
