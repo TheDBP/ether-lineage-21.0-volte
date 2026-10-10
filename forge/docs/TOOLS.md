@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-92 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+93 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -60,6 +60,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`hybrid-bootimg.sh`](../tools/hybrid-bootimg.sh) | a boot image with one build's kernel+dtb and another's ramdisk | `hybrid-bootimg.sh <kernel-from.img> <ramdisk-from.img> <out.img>` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`image-labels.sh`](../tools/image-labels.sh) | read the SELinux labels the image builder actually wrote, out of a built ext4 image, before flashing it | `image-labels.sh <image> <path> [<path>...]       one line per path: label, or MISSING` | — |
 | [`init-harness.sh`](../tools/init-harness.sh) | run a new ramdisk's /init on the live kernel, from recovery, without a boot | `init-harness.sh <boot.img \| ramdisk-dir> [-t SECONDS] [-o OUTDIR] [-c 'CMD ...'] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
+| [`install-hooks.sh`](../tools/install-hooks.sh) | Install this repo's git hooks into .git/hooks | `tools/install-hooks.sh` | — |
 | [`kernel-rebuild.sh`](../tools/kernel-rebuild.sh) | rebuild just the boot image (or any make target) after a kernel change, with the environment of the last full build | `./forge/tools/kernel-rebuild.sh [--am <patch>...] [target ...]      default target: bootimage` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`kmod-build.sh`](../tools/kmod-build.sh) | build an out-of-tree kernel module against the device's last kernel build in the forge container | `./forge/tools/kmod-build.sh <module-dir>            # dir holds a kbuild Makefile (obj-m := x.o)` | [debugging-mobile-data](debugging-mobile-data.md) |
 | [`kmod-rebase-crcs.py`](../tools/kmod-rebase-crcs.py) | make a .ko built against one kernel build load on another build of the same source | `kmod-rebase-crcs.py <module.ko> <target-Image> <kallsyms.txt> [out.ko]` | [debugging-mobile-data](debugging-mobile-data.md) |

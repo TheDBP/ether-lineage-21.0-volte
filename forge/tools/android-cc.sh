@@ -43,11 +43,11 @@ SYSROOT="$S/out/soong/ndk/sysroot"
 
 # arm64 path match, not first match: the glob otherwise yields a 32-bit object and the linker
 # complains about the architecture rather than about the glob.
-CRTB="$(find "$S/out/soong/.intermediates/bionic/libc/crtbegin_dynamic" -name crtbegin_dynamic.o -path '*arm64*' 2>/dev/null | head -1)"
-CRTE="$(find "$S/out/soong/.intermediates/bionic/libc/crtend_android"  -name crtend_android.o  -path '*arm64*' 2>/dev/null | head -1)"
+CRTB="$(find "$S/out/soong/.intermediates/bionic/libc/crtbegin_dynamic" -name crtbegin_dynamic.o -path '*arm64*' 2>/dev/null || true)"; CRTB="${CRTB%%$'\n'*}"
+CRTE="$(find "$S/out/soong/.intermediates/bionic/libc/crtend_android"  -name crtend_android.o  -path '*arm64*' 2>/dev/null || true)"; CRTE="${CRTE%%$'\n'*}"
 [ -n "$CRTB" ] && [ -n "$CRTE" ] || { echo "!! no arm64 crtbegin/crtend under out/soong/.intermediates/bionic" >&2; exit 1; }
 
-LIBDIR="$(ls -d "$S"/out/target/product/*/system/lib64 2>/dev/null | head -1)"
+LIBDIR="$(ls -d "$S"/out/target/product/*/system/lib64 2>/dev/null || true)"; LIBDIR="${LIBDIR%%$'\n'*}"
 [ -n "$LIBDIR" ] || { echo "!! no built system/lib64 under $S/out/target/product" >&2; exit 1; }
 
 "$CLANG" --target="${ANDROID_TARGET:-aarch64-linux-android30}" --sysroot="$SYSROOT" \

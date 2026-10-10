@@ -8,6 +8,9 @@
 #   JOBS=8  SYNC_JOBS="4 2 1"  BUILD_ROOT=/path  # overrides
 # JOBS defaults to physical cores minus two (floor 4), capped by MemTotal/2, leaving the
 # machine usable while a build runs. Set it to use the whole box.
+# Every sync writes build_output/manifests/manifest-<stamp>.xml with each project pinned to the SHA
+# it was built from, and manifests/latest.xml points at the newest. PIN_MANIFEST=<file> syncs back
+# to one of those, which is the only way to tell an upstream change from one of ours.
 #   SOONG_MEM_LIMIT=20GiB                        # cap soong_build's heap on a small machine
 # JOBS sizes the COMPILE phase. It does nothing for analysis: soong_build is one process whose
 # peak is set by the build graph (~30 GB live on a 24.0 tree, 60 GB at the Go default of a 2x
@@ -495,6 +498,19 @@ echo ">> [3/5] prefetch downloads in background (overlapping sync) -> $DL"
     "STOCK_DL_URL='$STOCK_DL_URL' GAPPS_DL_URL='$GAPPS_DL_URL' /repo/forge/docker/prefetch.sh" ) &
 PREFETCH_PID=$!
 
+# PIN_MANIFEST=<file> rebuilds the exact tree a previous build used. The snapshot from [3a] is a
+# manifest with every project pinned to a SHA, so installing it as the local manifest override and
+# syncing puts upstream back where it was. This is what makes an A/B meaningful: without it, a
+# rebuild of an older commit of this repo still pulls today's upstream, so a difference cannot be
+# attributed to either side.
+if [ -n "${PIN_MANIFEST:-}" ]; then
+  [ -f "$PIN_MANIFEST" ] || { echo "!! PIN_MANIFEST=$PIN_MANIFEST does not exist" >&2; exit 1; }
+  echo ">> [3/5] pinning upstream to $(basename "$PIN_MANIFEST") ($(grep -c "<project" "$PIN_MANIFEST") projects)"
+  cp "$PIN_MANIFEST" "$SRC/.repo/manifests/pinned.xml"
+  LOG_TAG=sync CONTAINER=aosp-${DEVICE_SLUG}-sync "$AOSP" \
+    bash -lc "cd /aosp && repo init -m pinned.xml" || { echo "!! repo init -m pinned.xml failed" >&2; exit 1; }
+fi
+
 echo ">> [3/5] repo sync — hours + ~100GB the first time (progress in logs/sync.log)"
 sync_ok=false
 for sj in ${SYNC_JOBS:-8 6 4 2 1}; do
@@ -505,6 +521,23 @@ for sj in ${SYNC_JOBS:-8 6 4 2 1}; do
   echo "!! sync failed at -j$sj (often HTTP 429 throttling) — retrying at lower parallelism"
 done
 [ "$sync_ok" = true ] || { echo "!! repo sync failed at every parallelism level"; kill "$PREFETCH_PID" 2>/dev/null || true; exit 1; }
+
+# ---- 3a. pin what we just synced -------------------------------------------------------------
+# repo sync follows the branch, so two builds a day apart are two different trees. Without a record
+# of which upstream revisions went in, a regression cannot be attributed: our patches and upstream
+# both moved, and there is no way afterwards to tell which. `repo manifest -r` writes every
+# project's exact SHA, so each build says what it was made of, and PIN_MANIFEST can rebuild it.
+SNAP_DIR="$BUILD_ROOT/manifests"; mkdir -p "$SNAP_DIR"
+SNAP="$SNAP_DIR/manifest-$(date +%Y%m%d-%H%M%S).xml"
+if LOG_TAG=snap CONTAINER=aosp-${DEVICE_SLUG}-sync "$AOSP" \
+     bash -lc "cd /aosp && repo manifest -r -o /aosp/.manifest-snapshot.xml" 2>/dev/null \
+   && [ -s "$SRC/.manifest-snapshot.xml" ]; then
+  mv "$SRC/.manifest-snapshot.xml" "$SNAP"
+  ln -sfn "$(basename "$SNAP")" "$SNAP_DIR/latest.xml"
+  echo ">> [3a] pinned $(grep -c "<project" "$SNAP") project revisions -> manifests/$(basename "$SNAP")"
+else
+  echo "!! [3a] could not snapshot the manifest; this build will not be reproducible" >&2
+fi
 
 echo ">> [3/5] waiting for prefetch to finish"
 wait "$PREFETCH_PID" || { echo "!! prefetch failed — see logs/prefetch.log (a missing input must stop the build)" >&2; exit 1; }

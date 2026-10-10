@@ -217,6 +217,17 @@ but nowhere near the hours the first one took.
 Optional extras — an on-device Linux environment (the `linux` option), F-Droid, Firefox, Google
 apps — are options; see *Options and presets* below.
 
+### 10. Knobs worth knowing
+
+Everything below is an environment variable on the `bootstrap.sh` call. None of them is required.
+
+| Variable | What it does |
+|---|---|
+| `JOBS=<n>` | How many compile jobs run at once. Defaults to your physical core count minus two, floored at four, then capped at one job per 2 GB of total RAM (so a low-memory machine can end up below four). The default deliberately leaves you two cores to work on; raise it if the machine is otherwise idle. Count cores, not threads: sizing this off `nproc` on an SMT machine oversubscribes it and the build slows to a crawl while looking busy. |
+| `KEEP_GOING=true` | Compile past the first error, so one run surfaces every problem. |
+| `PIN_MANIFEST=<file>` | Rebuild the exact upstream tree a previous build used, instead of syncing to current branch heads. Takes a snapshot from `build_output/manifests/`, which is written after every successful sync. Use it whenever you are comparing two builds; see GOTCHAS 47. |
+| `PRESET=<name>` / `OPTIONS="a b"` | What goes in the image, covered above. |
+
 ---
 
 
@@ -556,6 +567,10 @@ from a stock ROM dump, which is a good starting point for a device nobody has po
 so no device is left on a stale copy.
 
 Vendoring keeps history squashable and makes "which forge is this?" a single grep.
+
+If you are editing the forge itself, run `tools/install-hooks.sh` once in your clone. It installs
+the pre-commit hook, which is what actually runs `tools/check-sigpipe.sh` against staged shell
+files. Git does not clone hooks, so without that step the guard is documented but inert.
 
 ## Support
 

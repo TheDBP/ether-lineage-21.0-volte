@@ -61,6 +61,17 @@ RC=0
 # matches nothing makes ls exit 2, the pipeline inherits it, and `set -e` kills the script. Since
 # ls's stderr is discarded, that happens in total silence -- which is exactly how this script
 # managed to do nothing at all and still look like it had run. Pure bash, cannot fail.
+# Is $1 one of the newline-delimited values in $2? Tested with case rather than a pipe into
+# grep -q, which SIGPIPEs the producer under pipefail once the haystack outgrows the pipe buffer
+# (GOTCHAS 1). An empty needle never matches.
+is_opt_patch() {
+  [ -n "$1" ] || return 1
+  case $'\n'"$2" in
+    *$'\n'"$1"$'\n'*) return 0 ;;
+  esac
+  return 1
+}
+
 count_patches() {
   local f n=0
   for f in "$1"/*.patch; do [ -e "$f" ] && n=$((n+1)); done
@@ -115,7 +126,7 @@ refresh() {
   for f in "$FORGE"/options/*/patches/"$BRANCH"/"$proj"/*.patch; do
     [ -e "$f" ] || continue
     optids+="$(git patch-id --stable < "$f" | cut -d' ' -f1)"$'\n'
-      optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //p' "$f" | head -1)"$'\n'
+    optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //{p;q;}' "$f")"$'\n'
   done
   local shas="" sha id sub
   for sha in $(git -C "$d" rev-list --reverse "$base"..HEAD); do
@@ -124,9 +135,8 @@ refresh() {
     # patch-id ignores line numbers but not context: an option patch applied after another
     # option shifted nearby lines yields a commit whose id no longer matches its own file,
     # and it then looks device-owned. Subject survives that drift.
-    if { [ -n "$id" ] && printf '%s' "$optids" | grep -qx "$id"; } \
-       || { [ -n "$sub" ] && printf '%s' "$optsubs" | grep -qxF "$sub"; }; then
-      echo "   (not exporting \"$(git -C "$d" log -1 --format=%s "$sha" | cut -c1-60)\" -- an option's patch)"
+    if is_opt_patch "$id" "$optids" || is_opt_patch "$sub" "$optsubs"; then
+      echo "   (not exporting \"$(git -C "$d" log -1 --format=%s "$sha" | cut -c1-60)\", an option's patch)"
       continue
     fi
     shas+="$sha "
@@ -242,14 +252,14 @@ while read -r gitdir; do
   for _f in "$FORGE"/options/*/patches/"$BRANCH"/"$proj"/*.patch; do
     [ -e "$_f" ] || continue
     _optids+="$(git patch-id --stable < "$_f" | cut -d' ' -f1)"$'\n'
-    _optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //p' "$_f" | head -1)"$'\n'
+    _optsubs+="$(sed -n 's/^Subject: \[PATCH[^]]*\] //{p;q;}' "$_f")"$'\n'
   done
   n=0
   for _sha in $(git -C "$AOSP/$proj" rev-list "$mref..HEAD" 2>/dev/null); do
     _id="$(git -C "$AOSP/$proj" show --format= "$_sha" | git patch-id --stable | cut -d' ' -f1)"
-    [ -n "$_id" ] && printf '%s' "$_optids" | grep -qx "$_id" && continue
+    is_opt_patch "$_id" "$_optids" && continue
     _sub="$(git -C "$AOSP/$proj" log -1 --format=%s "$_sha")"
-    [ -n "$_sub" ] && printf '%s' "$_optsubs" | grep -qxF "$_sub" && continue
+    is_opt_patch "$_sub" "$_optsubs" && continue
     n=$((n+1))
   done
   [ "$n" -gt 0 ] || continue

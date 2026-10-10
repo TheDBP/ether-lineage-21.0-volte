@@ -42,6 +42,7 @@ container.
 | `make-apex-key.sh` | before the first EROFS repack | the four-file signing key that repack needs, made once on the host because KEYS_DIR is read-only in the container |
 | `unpack-block-ota.sh` | when you want to read a working build for this device | a mountable image out of an old-style block OTA (`system.new.dat[.br]` + `transfer.list`), which A-only devices still ship. For an A/B `payload.bin` OTA use `ota-extract.sh` instead |
 | `check-sigpipe.sh` | before committing | pipelines that will die silently under `set -o pipefail` |
+| `install-hooks.sh` | once per clone, before your first commit | the pre-commit hook that runs `check-sigpipe.sh` on staged shell files. Git does not clone hooks, so until you run this the guard is documented but inert |
 | `dev-shell.sh` | any time | an interactive shell in the build container |
 | `publish-kernel-source.sh` | before publishing a build | the kernel you actually shipped, as a normal kernel repo: upstream history with this device's patch series replayed on top. GPL asks for the *corresponding* source, and a link to upstream alone does not answer it once you patch the kernel. Regenerated from base+patches every run, so the published tree cannot drift from what you build |
 | `make-keys.sh` | once, before the first release | signing keys in a directory outside every repo; point `KEYS_DIR` at it in `device.conf.local` |

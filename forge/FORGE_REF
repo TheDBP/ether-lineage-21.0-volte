@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=4549c2302c89d8857b0e9ae0a134ed07182db48d
-subject=bootstrap: make the physical core count robust
-synced=2026-10-09T15:57:48Z
+commit=81484d04c82fa9295e3fc0b9f887e200a6221c31
+subject=tools/README: list install-hooks.sh in the quick reference
+synced=2026-10-10T00:03:22Z

@@ -13,7 +13,9 @@ size-dependent failure.
 - Don't pipe into an early-exiting reader. Capture, then test: `x="$(producer)"; case "$x" in *N*)`
 - Do use `n="$(producer | grep -c N || true)"` when you need a count.
 - Newest file: `x="$(ls -t g 2>/dev/null || true)"; x="${x%%$'\n'*}"`
-- Enforced by `tools/check-sigpipe.sh` and the pre-commit hook.
+- Enforced by `tools/check-sigpipe.sh`, which the pre-commit hook runs when a shell file is
+  staged. Hooks are not version-controlled, so a fresh clone has none: run
+  `tools/install-hooks.sh` once per clone or the guard is not running at all.
 
 ## 2. A module you added just isn't in the ROM
 A module or `PRODUCT_COPY_FILES` referenced from an un-included makefile does not ship, with no error.
@@ -592,6 +594,99 @@ One escape hatch exists and is worth checking before relying on any of this: an 
 `android.app.PROPERTY_LEGACY_UPDATE_OWNERSHIP_DENYLIST` manifest property. Dump the Play Store APK's
 manifest and look. The build bundled here declares no such property.
 
-XML comments may not contain `--`, which is easy to trip over when the house style uses it in prose;
-apply-overlay.sh parses every XML under an option's tree/, so a malformed file fails the overlay
-rather than the build.
+XML comments may not contain `--`, which is easy to trip over when the house style uses it in prose.
+Two places catch it and neither covers the other: `apply-overlay.sh` parses every XML under an
+option's `tree/`, so a malformed file there fails the overlay rather than the build, and
+`check-patch-series.sh` rejects a `--` in an XML comment added by a patch. Anything else, including
+a device overlay edited in place, is caught only by aapt2 twelve minutes into the build. The habit
+is the actual fix: do not write `--` in prose at all.
+
+## 44. A persistent app does not exist until the user unlocks
+
+`android:persistent="true"` has ActivityManager start a process at boot and keep restarting it. It
+does not start it *early*. Unless the app is also `android:directBootAware="true"`, AMS will not
+launch it until credential-encrypted storage unlocks, which means until someone types the PIN.
+
+This is invisible on a phone with no screen lock, because such a device unlocks itself during boot.
+The moment a PIN, pattern or password exists, every reboot has a window with no app at all, and the
+app then starts cold against a system that has been running for as long as the lock screen sat
+there. For an IMS implementation that window is a reboot with no IMS, followed by a registration
+attempt whose preconditions are nothing like the ones at boot.
+
+The tell is a bug that "started when I set a PIN". Do not go looking at the keyguard; the PIN only
+revealed an ordering your app always had.
+
+    dumpsys package <pkg> | grep -i directBoot
+    dumpsys activity processes | grep <pkg>
+
+Making the app direct-boot-aware is only correct if it can genuinely run with no CE storage, so no
+`SharedPreferences`, no database, nothing under `getFilesDir()`. If it cannot, keep the window and
+make the work retry instead of firing once at startup.
+
+## 45. A property that reads back empty is not necessarily unset
+
+`getprop foo.bar` prints an empty line both for a property that was never assigned and for one the
+shell domain is not allowed to read. The two are indistinguishable at the prompt, and reading the
+empty output as "my assignment did not take" sends you off rewriting a `.mk` that was already
+correct. This cost three separate detours in one session, on three different properties.
+
+Before concluding a property is unset:
+
+    dmesg | grep avc | grep <the property's context>
+
+and check that something grants `get_prop` on that context to `shell`. Confirm the value from the
+domain that actually consumes it, or from `init`'s own view, not from `adb shell`.
+
+Corollary for the write side: `gen_build_prop` rejects a duplicate assignment outright, so you
+cannot override a sysprop by assigning it a second time and expecting the later one to win. Change
+it where it is set, or set it from `/product`, which init loads last.
+
+## 46. A working AIDL fingerprint HAL reports no hardware, because of one leftover array
+
+Symptom: no fingerprint option anywhere in Settings. Not greyed out, absent. Enrolment is reachable
+only by intent, and it finishes immediately.
+
+`AuthService` decides between the AIDL and HIDL paths from a framework-res array:
+
+    new FingerprintSensorConfigurations(
+        !(hidlConfigStrings != null && hidlConfigStrings.length > 0))
+
+where `hidlConfigStrings` is `config_biometric_sensors`. A non-empty array means
+`resetLockoutRequiresHardwareAuthToken = false`, which routes everything to HIDL:
+`FingerprintProvider` logs "Adding HIDL configs", wraps each sensor in a `HidlToAidlSensorAdapter`,
+and that adapter calls `IBiometricsFingerprint.getService()`. On a device whose HAL is AIDL there is
+no such service, so every operation returns `BIOMETRIC_ERROR_HW_UNAVAILABLE` (1) and
+`BiometricEnrollActivity` has nothing to offer the user.
+
+`config_biometric_sensors` is a HIDL-era declaration. A device on the AIDL HAL must not carry it at
+all; the HAL declares its own sensors through `IFingerprint`. Delete it from the device overlay
+rather than trying to correct its contents.
+
+    logcat -s FingerprintProvider AuthService
+
+Working looks like "Adding AIDL configs: 1" and "Adding HIDL configs: 0". The array being present is
+easy to inherit without noticing, because it is correct for the same device on an older branch.
+
+## 47. Two builds are never the same experiment, so A/B needs a pinned manifest
+
+`repo sync` tracks branch heads. The build you ran yesterday and the "same" build today can differ
+by dozens of upstream commits across more than 1200 projects. Measured in a single day on
+lineage-24.0: frameworks/base moved 6 commits, Settings 3, vendor/lineage 4. So a feature that
+worked last week and fails today is not evidence about your patch series, and bisecting your own
+commits over a moving tree produces confident nonsense.
+
+Record what each build was made of:
+
+    repo manifest -r -o manifest.xml
+
+`bootstrap.sh` does this automatically after every successful sync, into
+`build_output/manifests/manifest-<stamp>.xml`, with `latest.xml` pointing at the newest. To rebuild
+the exact tree a previous build used:
+
+    PIN_MANIFEST=build_output/manifests/manifest-<stamp>.xml ./forge/bootstrap.sh
+
+Note the asymmetry when you have no snapshot to pin, because it determines what you may conclude.
+Checking an older patch series out onto today's upstream tests that series against a tree it has
+never seen. If the feature works, your series was the cause. If it does not, you have learned
+nothing, since upstream is now a second variable. Only the positive result is conclusive. Say so
+before spending an hour on the build, not after.
