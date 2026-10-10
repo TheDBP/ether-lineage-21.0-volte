@@ -23,6 +23,23 @@ while [ $# -gt 0 ]; do
     *) echo "!! unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+# Checks C7 to C10 read the bullhead tree. Without it they simply fail, which looks like a broken
+# port rather than a missing input, so say what to do instead of reporting ten failures.
+if [ ! -d "$B/.git" ]; then
+  cat >&2 <<EOM
+!! bullhead reference not found at: $B
+!!
+!! Checks C7-C10 compare this port against LineageOS commit 5cef16f, which disabled the pre-P IMS
+!! stack upstream. Clone it:
+!!
+!!   mkdir -p "$(dirname "$B")" && cd "$(dirname "$B")"
+!!   git clone https://github.com/LineageOS/android_device_lge_bullhead.git device_lge_bullhead
+!!
+!! Or point at an existing checkout with --bullhead DIR (or BULLHEAD_DIR). See VOLTE-BRINGUP.md 6.1.
+EOM
+  exit 2
+fi
+
 A="$SRC/out/host/linux-x86/bin/aapt2"
 MISSING="${IMS_MISSING:-$W/../ims-missing.txt}"
 fail=0

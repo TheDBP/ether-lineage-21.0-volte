@@ -290,6 +290,30 @@ For `Registration` (id 204): field 1 `state` varint, field 2 `errorCode` **fixed
 Note what it cannot tell you: a symbol that still resolves can have changed meaning (nanopb), and a
 type that still exists can have grown (`Surface`).
 
+### 6.1 `verify-volte.sh`, and the two inputs it needs
+
+`./verify-volte.sh` checks the claims in this document against the tree, the stock blobs and the
+upstream reference, printing PASS or FAIL per claim and exiting non-zero if any fails.
+
+It needs two things that are not in this repo, because neither is ours to ship:
+
+**The extracted stock IMS blobs**, under `$BUILD_ROOT/tmp/ims-inventory` by default, produced by
+`./extract-ims-blobs.sh`. Override with `--inventory DIR` or `IMS_INVENTORY`.
+
+**The bullhead device tree**, under a sibling `upstream-reference/` by default. This is the upstream
+citation for the daemon approach used here: LineageOS disabled the pre-P IMS stack on bullhead in
+commit `5cef16f`, and this port keeps those blobs deliberately. Checks C7 through C10 read it, and
+without it they fail with no indication that one clone is the fix:
+
+```sh
+mkdir -p ../upstream-reference && cd ../upstream-reference
+git clone https://github.com/LineageOS/android_device_lge_bullhead.git device_lge_bullhead
+```
+
+Override with `--bullhead DIR` or `BULLHEAD_DIR`. Any checkout containing commit `5cef16f` works;
+the script reads that commit's subject and `init.bullhead.rc`, so a shallow clone of a later branch
+will not do.
+
 ---
 
 ## 7. Reproducing the build
