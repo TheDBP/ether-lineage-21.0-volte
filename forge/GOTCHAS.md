@@ -829,3 +829,28 @@ Two habits that avoid it entirely: pull the log to the host once and grep the fi
 still in there, so still filter, but at least the evidence stops moving), and prefer matching the
 log line's own shape, e.g. the tag or level column, over a bare substring. When a count is load
 bearing, print the matching lines rather than the count and read them.
+
+## 51. A provisioned config knob can be dead code on the path you are actually on
+
+A vendor blob that reads a setting from config somewhere does not mean the setting reaches your
+code path. LG's IMS stack reads a provisioned list of retryable SIP response codes in
+`GlobalAoSRegistration::IsRetryResponseCode()`, and the value really does load: the parse is logged
+once per entry. The carrier subclass in use, `VZWAoSRegistration`, classifies the same response
+codes through three hardcoded bitmasks and never calls that function, so provisioning the list
+changed nothing and the log line proved only that the string had been parsed.
+
+Confirm the consuming call site before trusting a knob. Grep the symbol that reads the config for
+callers, and check that the class actually instantiated is one of them. A log line saying the value
+was read is evidence of parsing, not of use.
+
+## 52. Vtable slots read as zero straight out of an Android shared object
+
+Android links with packed relocations (`ANDROID_REL`, or RELR). The relocation targets live in the
+packed stream, not in place, so reading a `_ZTV...` symbol's words out of the file gives zeros, and
+symbolising those zeros produces whichever unrelated symbol happens to sit at address 0 in your
+lookup table. That looks like a real answer and is not one: every slot resolves to the same wrong
+name.
+
+`readelf -r` lists the entries but shows the symbol-value column rather than the addend, which
+reads as 0 and does not help. Use `tools/aps2-relocs.py` to decode the stream, or avoid the vtable
+entirely and identify the handler from the branch targets in the caller.
