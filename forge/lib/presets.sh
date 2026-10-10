@@ -70,11 +70,11 @@ _forge_preset_row() {
 # "stock" is reserved and exists on every device without being declared anywhere. It is the EMPTY
 # option set: LineageOS as upstream ships it, carrying only the overlay/patches that make this
 # hardware run, and none of the theming, app or behaviour options. Unlike every other preset it
-# takes neither COMMON_OPTIONS nor EXTRA_OPTIONS, because "stock plus the dozen things we always
-# add" is not stock.
+# takes neither COMMON_OPTIONS nor EXTRA_OPTIONS, because stock plus a dozen
+# routine additions is not stock.
 #
-# The point is to have a reference. When something misbehaves, a stock build answers "is this ours
-# or upstream's?" in one flash, which is otherwise a question that can only be argued about. There
+# The point is to have a reference. When something misbehaves, a stock build answers whether a fault is
+# local or upstream in one flash, which is otherwise a question that can only be argued about. There
 # was no way to ask for it before: an ad-hoc OPTIONS="" is indistinguishable from unset, so
 # bootstrap fell through to the first preset, and every declared preset gets COMMON_OPTIONS merged
 # in -- so the empty set was not expressible.

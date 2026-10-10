@@ -60,12 +60,12 @@ apply_project_from() {
   if [ ! -d "$AOSP/$proj/.git" ]; then echo "   (skip $proj — not synced yet)"; return 0; fi
   local subjs; subjs=$(sed -n 's/^Subject: \[PATCH[^]]*\] //p' "$dir"/*.patch)
   local subj="${subjs%%$'\n'*}"
-  # Look at OUR commits only -- those on top of BASE_REF -- not the project's whole history. A
+  # Look at the local commits only -- those on top of BASE_REF -- not the project's whole history. A
   # subject is not unique: a patch that reverts an upstream commit has the same subject as an
   # upstream revert of the same commit, and upstream sometimes lands one of its own. Matching the
-  # full log then "finds" our patch in upstream's history and silently skips it, leaving the tree
+  # full log then "finds" the patch in upstream's history and silently skips it, leaving the tree
   # without the change. That is how hardware/google/pixel lost the drv2624 vibrator tree: upstream
-  # carried its own Revert "pixel: Restore drv2624 vibrator HAL APEX" while ours restores the
+  # carried its own Revert "pixel: Restore drv2624 vibrator HAL APEX" while the local one restores the
   # directory that revert deleted. Fall back to the old window only if BASE_REF does not resolve.
   local _range="-80"
   if [ -n "${BASE_REF:-}" ] && ( cd "$AOSP/$proj" && git rev-parse --verify --quiet "$BASE_REF" >/dev/null 2>&1 ); then
@@ -136,7 +136,7 @@ apply_option_prepatch() {
   fi
   # Patches are BRANCH-SCOPED: patches/<branch>/<project>/*.patch. They are diffs against upstream
   # source, and upstream source differs per release -- themed-icons alone has five distinct versions
-  # across 19.1, 20.0 and 22.2. Everything else in an option (product.mk, tree/, hooks) is our own
+  # across 19.1, 20.0 and 22.2. Everything else in an option (product.mk, tree/, hooks) is local
   # text and applies to every branch unchanged, so only this part is scoped.
   local pdir="$odir/patches/$BRANCH"
   if [ -d "$pdir" ]; then
@@ -406,7 +406,7 @@ _find_kernel_boardconfig() {
 
 # ---- 5. extra kernel config fragments (KERNEL_EXTRA_CONFIGS in device.conf) ----
 # LineageOS kernel.mk merges TARGET_KERNEL_CONFIG as a LIST: the first entry is the base defconfig
-# and the rest are merged over it as fragments. That works on every branch we build.
+# and the rest are merged over it as fragments. That works on every branch built here.
 #
 # Do NOT use TARGET_KERNEL_CONFIG_EXT (absolute paths): it only exists on lineage-23.0. On 22.2 and
 # 19.1 kernel.mk never references KERNEL_DEFCONFIG_EXT, so the fragment is accepted, reported as
@@ -432,7 +432,7 @@ for _frag in ${KERNEL_EXTRA_CONFIGS:-}; do
   # How the fragment gets merged depends on the kernel. `make foo.config` (scripts/kconfig's
   # %.config rule) exists on 3.18+ but NOT on 3.10 -- ether fails there with
   #   make[2]: *** No rule to make target 'forge_container.config'.  Stop.
-  # So use the fragment-as-target path where supported (ours goes last, so it wins), and otherwise
+  # So use the fragment-as-target path where supported (the fragment goes last, so it wins), and otherwise
   # append the options to the base defconfig, which every kconfig honours (later assignments
   # override earlier ones; kconfig just prints "override: reassigning", as it already does for
   # these device trees).

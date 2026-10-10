@@ -61,7 +61,7 @@ chmod +x magiskboot boot_patch.sh
 
 # A-only vs A/B. An A-only OTA zip carries boot.img as a plain entry, so it can be patched and
 # swapped back in (one pre-rooted zip). An A/B zip is payload-based: no boot.img entry, and
-# re-inserting one would mean regenerating and re-signing payload.bin. On A/B we patch the BUILT
+# re-inserting one would mean regenerating and re-signing payload.bin. On A/B the patch is applied to the BUILT
 # image and ship it standalone for fastboot; the zip stays stock.
 # WHICH image: on GKI 2.0 devices (BOARD_USES_GENERIC_KERNEL_IMAGE — Tensor/Pixel 8 etc.) the
 # generic ramdisk lives in init_boot, and that is what Magisk patches; boot.img there is

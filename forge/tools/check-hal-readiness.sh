@@ -10,7 +10,7 @@
 # to HAL problems that were visible on disk the whole time. A device manifest declared
 # vendor.qti.hardware.cryptfshw, an interface lineage-20.0 deleted outright, and nothing complained
 # until the build did. Separately, the framework's hard dependency on IDevicesFactory was knowable
-# in advance -- we found it only when system_server blocked and the watchdog killed it.
+# in advance -- found only when system_server blocked and the watchdog killed it.
 #
 # WHAT THIS CANNOT DO: it will not catch a HAL that exists, is declared, satisfies VINTF, and then
 # SIGABRTs at runtime. The audio HAL on ether died with 'Binder threadpool cannot be shrunk after

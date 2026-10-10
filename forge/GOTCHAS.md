@@ -214,7 +214,7 @@ then failed with `unrecognized property "preprocessed"`.
 
 - Do check the property is in the exported struct, or just try it in a throwaway build.
 - Don't count symbols and call it verification. The same mistake reads "8 `ic_sysbar_*` resources in
-  SystemUI.apk" as "our icons won", when stock ships those same three names.
+  SystemUI.apk" as a win for the replacement icons, when stock ships those same three names.
 
 ## 27. An RRO on a resource the target does not declare overlayable is silently dropped
 Apps that ship `res/values/overlayable.xml` only let overlays touch the listed resources; anything
@@ -461,7 +461,7 @@ What makes this expensive is that every downstream symptom is an *absence*:
 
 That reads exactly like a permission or transport problem, and it is neither. On the V20 it cost
 four wrong theories — missing `qmuxd`, a hardcoded `rmnet0` port name, the `sec_config` GID rule
-for that service, and "our RIL owns the transport" — each of which explains silence just as well.
+for that service, and the device RIL owning the transport — each of which explains silence just as well.
 
 - Do run `tools/android-cc.sh tools/native-probes/qmi-idl-probe.c --push` and scan. It prints the
   `(major, minor, tool)` the ROM's `libqmiservices.so` will accept, with the OEM binary out of the
@@ -613,7 +613,7 @@ app then starts cold against a system that has been running for as long as the l
 there. For an IMS implementation that window is a reboot with no IMS, followed by a registration
 attempt whose preconditions are nothing like the ones at boot.
 
-The tell is a bug that "started when I set a PIN". Do not go looking at the keyguard; the PIN only
+The tell is a bug that appears only once a PIN is set. Do not go looking at the keyguard; the PIN only
 revealed an ordering your app always had.
 
     dumpsys user | grep State          # RUNNING_LOCKED vs RUNNING_UNLOCKED
@@ -632,8 +632,8 @@ make the work retry instead of firing once at startup.
 
 `getprop foo.bar` prints an empty line both for a property that was never assigned and for one the
 shell domain is not allowed to read. The two are indistinguishable at the prompt, and reading the
-empty output as "my assignment did not take" sends you off rewriting a `.mk` that was already
-correct. This cost three separate detours in one session, on three different properties.
+empty output as an assignment that did not take sends you off rewriting a `.mk` that was already
+correct. Three separate detours have come from this, on three different properties.
 
 Before concluding a property is unset:
 
@@ -804,8 +804,8 @@ APK shows whether the resources are compiled in, and a leftover
 
 Use the `aapt2` from **the same tree** as the APK. An older one run against a newer APK does not
 error; it prints a plausible-looking dump with the resource names missing and a nonsense
-`entryCount`, which reads exactly like "the resources are not there" and sent this investigation
-down a wrong path twice. `out/host/linux-x86/bin/aapt2` of the tree that built it.
+`entryCount`, which reads exactly like "the resources are not there" and has produced a wrong
+diagnosis twice. `out/host/linux-x86/bin/aapt2` of the tree that built it.
 
 ## 50. Your own adb command text is in logcat, and your grep counts it
 
@@ -814,10 +814,10 @@ down a wrong path twice. `out/host/linux-x86/bin/aapt2` of the tree that built i
     I adbd : adbd service requested 'shell,v2,...,raw:logcat -d -b all | grep -c "Security-Client"'
 
 So the needle you are hunting is written into the haystack by the act of hunting. `grep -c` then
-returns at least 1 and you conclude the thing is present. This bit twice in one session: an ANR
-count that was really the string `am_anr` inside the command, and a `Security-Client` count of 1
-on four captures where the real count was zero, which inverted the conclusion about whether the
-IMS stack was offering a security agreement at all.
+returns at least 1 and the thing looks present. Two cases, both real: an ANR count that was the
+string `am_anr` inside the command, and a `Security-Client` count of 1 across four captures whose
+real count was zero, which inverted the conclusion about whether the IMS stack was offering a
+security agreement at all.
 
 It is worse than a simple off-by-one, because the false hit looks exactly like a true one and
 survives being re-run. Any `grep -c` over `logcat` that you then reason from must exclude the

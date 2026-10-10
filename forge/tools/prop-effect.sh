@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prop-effect.sh — answer "I set this property and nothing happened" properly, instead of setting
+# prop-effect.sh — answer why a property was set and nothing happened, instead of setting
 # more properties.
 #
 #   prop-effect.sh <property> [--image DIR] [-s SERIAL]

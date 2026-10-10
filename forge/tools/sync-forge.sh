@@ -24,7 +24,7 @@ if [ "${_FORGE_SYNC_REEXEC:-}" != 1 ]; then
   _self_copy="$(mktemp)"; cp "$0" "$_self_copy"; chmod +x "$_self_copy"
   _FORGE_SYNC_REEXEC=1 FORGE_SYNC_ORIG="$0" exec "$_self_copy" "$@"
 fi
-trap 'rm -f "$0"' EXIT   # we are the temp copy; clean up on the way out
+trap 'rm -f "$0"' EXIT   # this is the temp copy; clean up on the way out
 
 ORIG="${FORGE_SYNC_ORIG:?}"
 DEVICE_REPO="$(cd "$(dirname "$ORIG")/../.." && pwd)"   # tools -> forge -> device repo root

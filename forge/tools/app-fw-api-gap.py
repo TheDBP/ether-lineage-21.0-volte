@@ -66,13 +66,13 @@ def collect_db(fw_args, bk, work):
 #   'ok'    - found on C or an ancestor
 #   'miss'  - the full ancestry is in the DB and none define it (a real NoSuchMethod)
 #   'unknown' - the chain leaves the DB (ancestor not disassembled: java.lang.Object, a mainline
-#               class, ...) so we cannot be sure -- do NOT flag, to avoid false positives.
+#               class, ...) so certainty is not possible -- do NOT flag, to avoid false positives.
 def resolve(cls, sig, methods, classes, supers):
     seen = set()
     while cls and cls not in seen:
         seen.add(cls)
         if cls + '->' + sig in methods: return 'ok'
-        if cls not in classes: return 'unknown'   # ancestor we do not have
+        if cls not in classes: return 'unknown'   # ancestor not present
         cls = supers.get(cls)
     return 'miss'
 

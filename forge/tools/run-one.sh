@@ -18,7 +18,7 @@ D="${1:?usage: run-one.sh <repo-dir> [PRESET] [EXTRA_OPTIONS]}"
 REPO="$(cd "$D" 2>/dev/null && pwd)" || { echo "!! no such directory: $D" >&2; exit 1; }
 [ -x "$REPO/bootstrap.sh" ] || { echo "!! not a device repo (no bootstrap.sh): $REPO" >&2; exit 1; }
 
-# Only aosp-* containers count: an unrelated container that happens to be up is not our build.
+# Only aosp-* containers count: an unrelated container that happens to be up is not this build.
 busy=$(ps -eo pid,args --no-headers | awk -v me=$$ '$1!=me && /forge\/bootstrap\.sh/ && !/awk/' | wc -l)
 cont=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^aosp-' || true)
 if [ "$busy" -gt 0 ] || [ "$cont" -gt 0 ]; then

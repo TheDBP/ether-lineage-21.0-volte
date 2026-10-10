@@ -82,7 +82,7 @@ The kernel is tainted (`F`) afterwards; that is fine for a diagnostic module.
 | Suspect | Test that cleared it |
 |---|---|
 | APN / 3GPP profile | `qmi-sni.sh` with each profile id, same bare error, no call-end reason |
-| Our ROM | official nightly from the same bootloader: same error |
+| This ROM | official nightly from the same bootloader: same error |
 | Modem firmware | full modem image swap to another carrier variant: same error |
 | EFS policy files (APM, DSD) | edited and verified after `rmt_storage` sync (wait 60-90 s before rebooting or the write is lost): same error |
 | RTRE / subscription source | changed and restored via QMI: same error |

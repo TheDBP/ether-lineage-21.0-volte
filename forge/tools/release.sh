@@ -63,8 +63,8 @@ source "$FORGE_DIR/lib/presets.sh"
 BRANCH="$(git -C "$REPO" branch --show-current 2>/dev/null || echo unknown)"
 
 # ---- 1. choose a preset, and prove it is redistributable ----------------------------------------
-# A preset is redistributable when its option set contains neither gapps (we are not handing out
-# Google's apps) nor oem (we are not handing out the manufacturer's art). Everything else about the
+# A preset is redistributable when its option set contains neither gapps (not redistributing
+# Google's apps) nor oem (not redistributing the manufacturer's art). Everything else about the
 # preset is irrelevant here.
 pick_preset() {
   local n opts
@@ -240,9 +240,9 @@ else
     fi
   done
 
-  # 4c. every wallpaper shipped as a loose file must be one we can account for. This is the check
+  # 4c. every wallpaper shipped as a loose file must be accountable. This is the check
   # that does not know what it is looking for -- 4a and 4b only find things already named somewhere.
-  # Accounted-for means: it is an asset from a feature this build enables (so, ours), or its hash is
+  # Accounted-for means: it is an asset from a feature this build enables, or its hash is
   # listed in RELEASE_AUDIT_ALLOW with a reason. Anything else stops the release until a human says
   # what it is. It has already earned its place once, on a wallpaper nobody remembered shipping.
   featsums="$(mktemp)"

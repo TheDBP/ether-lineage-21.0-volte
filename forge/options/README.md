@@ -58,7 +58,7 @@ changes per release. That is not hypothetical: `themed-icons` carries five disti
 has no patches for uses its other parts (fetch, `product.mk`, hooks); one with nothing else to
 contribute on that branch is a hard error, not a silent skip.
 
-Everything else — `product.mk`, `tree/`, `assets.list`, the hooks — is text we wrote, so it applies
+Everything else — `product.mk`, `tree/`, `assets.list`, the hooks — is text maintained here, so it applies
 unchanged everywhere.
 
 ## When each part runs

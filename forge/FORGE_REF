@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=cdf63995541ffafc66eab30b3a2878e036510500
-subject=GOTCHAS 50: adbd echoes your command into logcat and your grep counts it
-synced=2026-10-10T12:46:26Z
+commit=4ba3bc7ace0efb9980e0db9042356f4eb2d55265
+subject=push-system-app: stop reading the platform cert from the app being replaced
+synced=2026-10-10T17:37:56Z

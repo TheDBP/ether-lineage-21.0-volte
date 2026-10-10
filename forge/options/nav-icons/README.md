@@ -34,7 +34,7 @@ The PNGs are also flat white with an alpha channel, so they cannot be tinted and
 whatever the nav bar is doing. These use `?attr/singleToneColor`, so they follow the nav bar and
 Monet theming.
 
-And they were drawn rather than lifted out of someone's firmware, so they are ours to ship.
+And they were drawn rather than lifted out of someone's firmware, so they are redistributable here.
 
 ## Two consumers, two icon sets
 
@@ -69,4 +69,4 @@ viewport stock uses for it.
 
 Checking this needs care: counting `ic_sysbar_*` resources in `SystemUI.apk` proves nothing, because
 stock ships those same names. Decode the compiled XML and look at `viewportWidth` — 28 with an
-annulus path is ours, 20 is stock.
+annulus path is the one added here, 20 is stock.

@@ -17,7 +17,7 @@
 #      cert (from an installed platform app) and finds the matching key among the candidates, instead
 #      of guessing.
 #   2. UNCOMPRESSED JNI. android_app_import stores a system app's embedded .so uncompressed+aligned;
-#      harmless to keep compressed for extractNativeLibs=true apps, but we zipalign -p either way.
+#      harmless to keep compressed for extractNativeLibs=true apps, but zipalign -p is applied either way.
 #   3. THE FLAKY /system REMOUNT. On a block (non-overlay, dm-verity-less-but-RO) system-as-root, only
 #      the FIRST `mount -o rw,remount /` after a clean boot persists; later ones report "not user
 #      mountable in fstab" and adb push lands in a view that reverts on reboot. So: adb push to /data,
@@ -35,16 +35,28 @@ SER=(); while [ $# -gt 0 ]; do case "$1" in -s) SER=(-s "$2"); shift 2;; *) echo
 A=("${ADB:-adb}" "${SER[@]+"${SER[@]}"}")
 S="${BUILD_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)/build_output}/src"
 ZA="$S/out/host/linux-x86/bin/zipalign"; AS="$S/out/host/linux-x86/bin/apksigner"
+AAPT2="$S/out/host/linux-x86/bin/aapt2"   # optional: only used to name the package in the final check
 for t in "$ZA" "$AS"; do [ -x "$t" ] || { echo "!! missing $t (set BUILD_ROOT)" >&2; exit 1; }; done
 "${A[@]}" root >/dev/null 2>&1; sleep 2
 
 # 1. find the platform key that matches the device's platform signer.
 base=$(basename "$DIR"); devapk=$("${A[@]}" shell "ls $DIR/*.apk 2>/dev/null | head -1" | tr -d '\r')  # sigpipe-ok: that head runs on the device
 [ -n "$devapk" ] || { echo "!! no apk in $DIR on device -- is the dir right?" >&2; exit 1; }
+# Read the platform cert from an app that is NOT the one being replaced. Reading it from $DIR is a
+# self-confirming loop: once a wrongly signed apk has landed there, the next run reads that wrong
+# cert, "matches" the wrong key and reports success. framework-res is always platform signed.
+REFS=(/system/framework/framework-res.apk /system/priv-app/TeleService/TeleService.apk
+      /system/priv-app/Settings/Settings.apk)
+certsrc=""
+for r in "${REFS[@]}"; do
+  [ "$r" = "$devapk" ] && continue
+  "${A[@]}" shell "[ -f $r ]" 2>/dev/null && { certsrc="$r"; break; }
+done
+[ -n "$certsrc" ] || certsrc="$devapk"
 W="${TMPDIR:-$(dirname "$APK")}/.push-sysapp"; mkdir -p "$W"
 DEVFP=""
 for try in 1 2 3; do
-  "${A[@]}" pull "$devapk" "$W/ref.apk" >/dev/null 2>&1
+  "${A[@]}" pull "$certsrc" "$W/ref.apk" >/dev/null 2>&1
   [ -s "$W/ref.apk" ] && DEVFP=$("$AS" verify --print-certs "$W/ref.apk" 2>/dev/null | awk '/SHA-256 digest/{print $NF; exit}')
   [ -n "$DEVFP" ] && break
   sleep 3   # device may be mid-reboot / crash-looping; retry
@@ -61,12 +73,17 @@ if [ -n "$DEVFP" ]; then
   [ -n "$KEY" ] || { echo "!! no candidate key matches the device platform cert ($DEVFP); set KEYS_DIR" >&2; exit 1; }
   echo ">> signing with $(basename "$KEY") (matches device platform cert)"
 else
-  # Could not read the device cert (device unstable, or the ref app is itself the one we're replacing
+  # Could not read the device cert (device unstable, or the ref app is itself the one being replaced
   # and is unsigned mid-iteration). Fall back to build/make's default platform key -- the usual signer
   # for a bringup -- rather than bail. Set KEYS_DIR / edit CANDS if your build uses a custom platform key.
-  KEY="$S/build/make/target/product/security/platform"
-  [ -f "$KEY.x509.pem" ] || { echo "!! could not read device cert AND no fallback platform key at $KEY" >&2; exit 1; }
-  echo ">> WARN: could not read device platform cert; falling back to build/make platform key"
+  # Do NOT guess. Signing a sharedUserId app with the wrong key makes PackageManager reject it at
+  # scan, and the package then disappears from the device rather than failing visibly. A release
+  # signed build does not use build/make's platform key, so the guess is wrong exactly when it
+  # matters most.
+  echo "!! could not read the platform cert from $certsrc" >&2
+  echo "!! The device may be mid-reboot; let it settle and retry." >&2
+  echo "!! Signing with the wrong key silently uninstalls a sharedUserId app, so this will not guess." >&2
+  exit 1
 fi
 
 # 2. zipalign + sign
@@ -84,4 +101,19 @@ echo ">> reboot #2 (PackageManager rescans the swapped apk)"
 "${A[@]}" reboot; until "${A[@]}" devices 2>/dev/null | awk 'NR==2{exit($2=="device"?0:1)}'; do sleep 5; done
 t0=$(date +%s); until [ "$("${A[@]}" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do [ $(( $(date +%s)-t0 )) -gt 240 ] && break; sleep 15; done
 echo ">> boot_completed=[$("${A[@]}" shell getprop sys.boot_completed | tr -d '\r')] (+$(( $(date +%s)-t0 ))s)"
+
+# A rejected apk does not fail loudly: the package is simply absent afterwards, which reads as a
+# runtime bug in whatever was being debugged. Check, and say which comparison settles it.
+if [ -x "$AAPT2" ]; then pkg=$("$AAPT2" dump packagename "$APK" 2>/dev/null | tr -d '\r'); else pkg=""; fi
+if [ -n "$pkg" ]; then
+  n=$("${A[@]}" shell "pm list packages 2>/dev/null" | tr -d '\r' | grep -cx "package:$pkg" || true)
+  if [ "${n:-0}" -gt 0 ]; then
+    echo ">> $pkg is installed"
+  else
+    echo "!! $pkg is NOT installed after the swap." >&2
+    echo "!! PackageManager rejected it, usually a signature mismatch on a sharedUserId app." >&2
+    echo "!! Compare: apksigner verify --print-certs on the pushed apk and on $certsrc." >&2
+    exit 1
+  fi
+fi
 true

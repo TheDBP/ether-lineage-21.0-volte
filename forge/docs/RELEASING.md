@@ -60,7 +60,7 @@ time.
 Without `--preset`, `release.sh` takes the FIRST preset whose options contain neither `gapps` nor
 `oem`, which is whatever sits highest in `PRESETS`. That is a sensible default for one release and
 the wrong thing to rely on for several, so name them: a device that ships two images publishes the
-barest first, because it is the one that answers "is this the ROM or my phone?".
+barest first, because it is the one that answers whether a fault is the ROM or the handset.
 
 ```sh
 PRESET=stock ./forge/bootstrap.sh && ./forge/tools/release.sh --preset stock

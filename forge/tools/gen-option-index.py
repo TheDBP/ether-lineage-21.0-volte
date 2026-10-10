@@ -35,7 +35,7 @@ MARK = re.compile(r'^(?P<open><!--\s*options:start(?P<mode>[^>]*?)-->)\s*$.*?^(?
 
 
 def _conf(path):
-    """KEY=value / KEY="value" out of an option.conf. Not shell: only the fields we document."""
+    """KEY=value / KEY="value" out of an option.conf. Not shell: only the documented fields."""
     out = {}
     if not os.path.isfile(path):
         return out

@@ -796,7 +796,7 @@ Two traps while reading those logs:
   Check the xrefs before treating a line as a milestone.
 - A warning with the right words can belong to another process. A `QMUXD ... failed` line that
   looked like the smoking gun came from an unrelated system service; the pid was right there in the
-  log and I had not read it.
+  log, unread.
 
 **If the QMI client will not initialise, suspect the IDL version gate first** — see GOTCHAS 40. It
 is quiet in a way that permission problems are not.

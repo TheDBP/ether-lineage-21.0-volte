@@ -114,8 +114,8 @@ if [ -d "$TMP/system/media/audio" ]; then
         # Keep it, but namespace it if the name is taken. Installing a second Effect_Tick.ogg
         # would not work anyway: the framework resolves ui sounds under /product before /system,
         # Lineage fills /product, and the build keeps the first destination it sees for any
-        # duplicate. A name of our own sidesteps both, leaves the Lineage sound installed and
-        # selectable, and gives the overlay that selects ours something to point at.
+        # duplicate. A distinct name sidesteps both, leaves the Lineage sound installed and
+        # selectable, and gives the overlay that selects it something to point at.
         if grep -qxF "$(basename "$f")" "$ref_name"; then
           ns_names="$ns_names $(basename "$f")"
           rel="$(dirname "$rel")/$OEM_SOUND_PREFIX$(basename "$f")"
@@ -138,7 +138,7 @@ if [ -d "$TMP/system/media/audio" ]; then
   #
   # The overlay REPLACES the stock resource, so it is derived from the stock file rather than
   # written from a template: every asset id the branch declares is preserved and only the file=
-  # names we actually reclaimed are rewritten. A hand-written table would silently drop whatever
+  # names actually reclaimed are rewritten. A hand-written table would silently drop whatever
   # ids a future branch adds.
   _aa_src="$AOSP/frameworks/base/core/res/res/xml/audio_assets.xml"
   if [ -n "${ns_names// /}" ] && [ -f "$_aa_src" ]; then
@@ -153,7 +153,7 @@ if [ -d "$TMP/system/media/audio" ]; then
     if [ "$_aa_n" -gt 0 ]; then
       echo "   sound effects: $_aa_n file(s) repointed to $OEM_SOUND_PREFIX* in the audio_assets overlay"
     else
-      rm -f "$_aa_out"   # nothing we reclaimed is in the table; do not replace it for no reason
+      rm -f "$_aa_out"   # nothing reclaimed is in the table; do not replace it for no reason
     fi
   fi
 

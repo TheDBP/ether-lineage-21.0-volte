@@ -398,7 +398,7 @@ tools:
       - "docs/debugging-a-vendor-blob.md"
   - name: "prop-effect.sh"
     path: "tools/prop-effect.sh"
-    summary: "answer \"I set this property and nothing happened\" properly, instead of setting more properties"
+    summary: "answer why a property was set and nothing happened, instead of setting more properties"
     usage: "prop-effect.sh <property> [--image DIR] [-s SERIAL]"
     docs:
       - "docs/debugging-a-vendor-blob.md"

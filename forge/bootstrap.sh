@@ -10,7 +10,7 @@
 # machine usable while a build runs. Set it to use the whole box.
 # Every sync writes build_output/manifests/manifest-<stamp>.xml with each project pinned to the SHA
 # it was built from, and manifests/latest.xml points at the newest. PIN_MANIFEST=<file> syncs back
-# to one of those, which is the only way to tell an upstream change from one of ours.
+# to one of those, which is the only way to tell an upstream change from a local one.
 #   SOONG_MEM_LIMIT=20GiB                        # cap soong_build's heap on a small machine
 # JOBS sizes the COMPILE phase. It does nothing for analysis: soong_build is one process whose
 # peak is set by the build graph (~30 GB live on a 24.0 tree, 60 GB at the Go default of a 2x
@@ -96,7 +96,7 @@ fi
 [ -f "$DEVICE_REPO/device.conf" ] || { echo "!! no device.conf at $DEVICE_REPO — copy forge/device.conf.example"; exit 1; }
 source "$DEVICE_REPO/device.conf"
 # Personal, per-checkout settings. Gitignored, so it never reaches the published repo: this is where
-# "every build I make also wants the reclaimed OEM assets" belongs, as EXTRA_OPTIONS="oem". Sourced
+# "every build on this checkout also wants the reclaimed OEM assets" belongs, as EXTRA_OPTIONS="oem". Sourced
 # after device.conf so it can override anything there, and applies to whichever preset you build
 # rather than needing an -oem twin of each one. Anything it adds is reflected in the build tag.
 [ -f "$DEVICE_REPO/device.conf.local" ] && source "$DEVICE_REPO/device.conf.local"
@@ -355,7 +355,7 @@ LOG_TAG=init "$AOSP" bash -lc "
 # Resolve the ANDROID VERSION, not the branch: BRANCH naming is ROM-specific (lineage-22.2,
 # android-15.0.0_r1, 15.0, bka, fourteen, ...) and the forge is not only for LineageOS. Order:
 #   1. ANDROID_VERSION in device.conf                -- explicit, ROM-agnostic, always correct
-#   2. derived from BRANCH for naming we recognise   -- convenience for LineageOS and plain AOSP
+#   2. derived from BRANCH for recognised naming   -- convenience for LineageOS and plain AOSP
 #   3. otherwise fail and ask                        -- never guess
 android_version_for_branch() {
   case "$1" in
@@ -463,7 +463,7 @@ if [ "$WANT_GAPPS" = true ]; then
   fi
 fi
 # ---- 3. reset patched projects (feature targets + device patches), then prefetch + sync ----
-# Compute the full set of projects our commits touch so repo sync can check them out clean.
+# Compute the full set of projects the local commits touch so repo sync can check them out clean.
 RESET_PROJECTS="${PATCHED_PROJECTS:-}"
 [ -d "$OVL/patches" ] && RESET_PROJECTS="$RESET_PROJECTS $(cd "$OVL/patches" && find . -name '*.patch' -printf '%h\n' | sed 's#^\./##' | sort -u)"
 # Projects the enabled options patch. Derived from the directory layout -- patches/<project>/*.patch
@@ -536,9 +536,9 @@ for sj in ${SYNC_JOBS:-8 6 4 2 1}; do
 done
 [ "$sync_ok" = true ] || { echo "!! repo sync failed at every parallelism level"; kill "$PREFETCH_PID" 2>/dev/null || true; exit 1; }
 
-# ---- 3a. pin what we just synced -------------------------------------------------------------
+# ---- 3a. pin what was just synced -------------------------------------------------------------
 # repo sync follows the branch, so two builds a day apart are two different trees. Without a record
-# of which upstream revisions went in, a regression cannot be attributed: our patches and upstream
+# of which upstream revisions went in, a regression cannot be attributed: the patch series and upstream
 # both moved, and there is no way afterwards to tell which. `repo manifest -r` writes every
 # project's exact SHA, so each build says what it was made of, and PIN_MANIFEST can rebuild it.
 SNAP_DIR="$BUILD_ROOT/manifests"; mkdir -p "$SNAP_DIR"

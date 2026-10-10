@@ -8,7 +8,7 @@
 set -o pipefail
 AOSP="${AOSP:-/aosp}"
 [ -f "${DEVICE_REPO:?DEVICE_REPO unset}/device.conf" ] || { echo "!! volte: no device.conf at $DEVICE_REPO" >&2; exit 1; }
-# A subshell: device.conf is a config file, not ours to leak into the build environment.
+# A subshell: device.conf is a config file, not something to leak into the build environment.
 MARKER="$( . "$DEVICE_REPO/device.conf" >/dev/null 2>&1; printf '%s' "${VOLTE_STAGED_MARKER:-}" )"
 if [ -z "$MARKER" ]; then
   echo "!! volte: this device sets no VOLTE_STAGED_MARKER in device.conf, so there is no way to" >&2

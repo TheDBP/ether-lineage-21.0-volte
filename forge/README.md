@@ -6,8 +6,8 @@ Docker — the host needs only Docker, git and disk. No JDK, no Python, no repo 
 **Setting up a phone? Start with the template instead**, which has this vendored and a guided setup:
 
 ```sh
-git clone https://github.com/TheDBP/rom-forge-device-template.git my-phone
-cd my-phone && ./start-here.sh
+git clone https://github.com/TheDBP/rom-forge-device-template.git phone-repo
+cd phone-repo && ./start-here.sh
 ```
 
 This repo is the engine itself — read it when you want to know how the build works, change what it
@@ -17,7 +17,7 @@ does, or update `forge/` inside an existing device repo.
 
 ## What people use this for
 
-| I want to… | Do this |
+| Goal | Do this |
 |---|---|
 | Set up a new phone from scratch | Clone the [device template](https://github.com/TheDBP/rom-forge-device-template) and run `./start-here.sh`. |
 | Build one **without** Google apps, to share | `PRESET=clean ./bootstrap.sh` |
@@ -56,8 +56,8 @@ This assumes you have never built Android before. Follow it in order.
 ### 2. Get a device repo
 
 ```sh
-git clone https://github.com/TheDBP/rom-forge-device-template.git my-phone
-cd my-phone
+git clone https://github.com/TheDBP/rom-forge-device-template.git phone-repo
+cd phone-repo
 ./start-here.sh
 ```
 
@@ -105,8 +105,8 @@ theming, apps or behaviour changes.
 PRESET=stock ./forge/bootstrap.sh          # tag: stock
 ```
 
-It is the only preset that takes neither `COMMON_OPTIONS` nor `EXTRA_OPTIONS` — "stock plus the
-dozen things we always add" would not be stock, and a stock image quietly carrying `oem` art would
+It is the only preset that takes neither `COMMON_OPTIONS` nor `EXTRA_OPTIONS` — stock plus a
+dozen routine additions would not be stock, and a stock image quietly carrying `oem` art would
 be a lie in its own filename. Asking for it with `EXTRA_OPTIONS` set prints a note saying it was
 ignored.
 
@@ -114,14 +114,14 @@ Two things do reach it, and both are the device saying "this is not an extra, it
 working at all". `STOCK_OPTIONS` in `device.conf` names options stock still gets — without
 `setup-mobile-data` on the Robin, SetupWizard leaves mobile data off, and an image that cannot
 reach the network does not answer the question stock exists to answer. And on a device that builds
-VoLTE from stock firmware, `volte` turns itself on here as everywhere else. So "is this bug ours or
-upstream's?" is answered against upstream *plus those*. If you suspect one of them, empty
+VoLTE from stock firmware, `volte` turns itself on here as everywhere else. So the local-or-upstream question is
+answered against upstream *plus those*. If you suspect one of them, empty
 `STOCK_OPTIONS` for the run, or move the stock firmware aside so `volte` reports itself off. An
 empty `OPTIONS=` will not do it: with no `PRESET` either, bootstrap falls back to the first preset
 rather than to nothing.
 
-Its value is answering one question quickly: **is this ours or upstream's?** A bug that reproduces
-on a stock build is LineageOS's; one that disappears is something we added, and the option list is
+Its value is answering one question quickly: **is this local or upstream?** A bug that reproduces
+on a stock build is LineageOS's; one that disappears originates here, and the option list is
 then the search space. That is a single flash instead of an argument.
 
 Declare your own `stock` row in `PRESETS` and it wins over the built-in one.
@@ -175,7 +175,7 @@ Everything the forge changes is a patch. To add your own, edit the source direct
 ```sh
 cd build_output/src/device/<vendor>/<codename>
 # edit files
-git commit -am "my change"
+git commit -am "describe the change"
 ```
 
 Then rebuild. Your commit is already in the tree, so the next build picks it up.
@@ -240,8 +240,8 @@ holding that phone's config and patches, with `forge/` vendored inside it.
 setup script:
 
 ```sh
-git clone https://github.com/TheDBP/rom-forge-device-template.git my-phone
-cd my-phone
+git clone https://github.com/TheDBP/rom-forge-device-template.git phone-repo
+cd phone-repo
 ./start-here.sh
 ```
 
@@ -525,7 +525,7 @@ it.
 
 The difference is what it does not try to do: customization happens through
 `local_manifests/*.xml`, so the ROM is whatever your manifests point at. There is no layer for
-"apply this change to all my phones".
+"apply this change to every phone".
 
 **[hashbang/aosp-build](https://github.com/hashbang/aosp-build)** is closer in shape to this
 project, and the more interesting comparison. It also runs entirely in Docker, also keeps patches

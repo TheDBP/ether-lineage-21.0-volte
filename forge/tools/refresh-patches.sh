@@ -112,8 +112,8 @@ refresh() {
     RC=1; return 0
   fi
 
-  # Uncommitted edits are invisible to format-patch. Saying so is the difference between "my change
-  # did not get exported" and an hour of confusion.
+  # Uncommitted edits are invisible to format-patch. Saying so is the difference between a change
+  # that silently did not get exported and an hour of confusion.
   if [ -n "$(git -C "$d" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
     echo "   note: $proj has uncommitted changes -- they will NOT be exported (commit them first)"
   fi

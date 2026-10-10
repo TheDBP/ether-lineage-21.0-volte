@@ -63,7 +63,7 @@ if [ -n "${KEYS_DIR:-}" ]; then
   KEYS_MNT=(-v "$KEYS_DIR":/aosp/vendor/lineage-priv/keys:ro)
 fi
 
-# Clear only OUR OWN leftover container (by this name) — never another concurrent phase's.
+# Clear only this script's own leftover container (by this name) — never another concurrent phase's.
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
 # In-place layout: the device dir has no forge/ of its own, so layer the engine over /repo/forge with

@@ -10,7 +10,7 @@ Why: a bridge to an OEM's legacy IMS (or any removed @hide AIDL) is one half of 
 whose other half is compiled into the OEM's binary. AIDL numbers transactions by declaration order,
 so an interface that *looks* the same but has one method inserted (7.1 added IImsService.
 addRegistrationListener at transaction 6 -- every later call on a 7.0 device lands on the wrong
-method) fails only on hardware, silently. This answers "can I reuse that bridge's AIDL as is?" in a
+method) fails only on hardware, silently. This answers whether another bridge's AIDL is reusable as is, in a
 second, and is the build-time guard that the committed .aidl still matches the stock binary.
 
 Left side: a package directory holding I*.smali and I*$Stub.smali (from oat-to-smali.sh /

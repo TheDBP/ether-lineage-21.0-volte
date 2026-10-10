@@ -29,7 +29,7 @@ PKGS=("$@")
 
 "${ADB[@]}" get-state >/dev/null 2>&1 || { echo "!! no device on adb" >&2; exit 1; }
 
-# Launcher activity of a package, via the package manager, so we launch what the icon launches.
+# Launcher activity of a package, via the package manager, so the launch matches what the icon launches.
 _activity() {
   "${ADB[@]}" shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$1" 2>/dev/null \
     | tr -d '\r' | tail -n1
