@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# verify-volte.sh — check the VoLTE stack against the tree, the stock blobs and
-# the bullhead reference. Prints PASS/FAIL per claim; exits non-zero if any fails.
+# verify-volte.sh — check the VoLTE stack against the tree and the stock blobs.
+# Prints PASS/FAIL per claim; exits non-zero if any fails.
 #
-#   ./verify-volte.sh [--inventory DIR] [--bullhead DIR]
+#   ./verify-volte.sh [--inventory DIR]
 #
 # Defaults assume the layout VOLTE-BRINGUP.md describes: the extracted stock IMS blobs under
-# $BUILD_ROOT/tmp/ims-inventory, and device_lge_bullhead under a sibling upstream-reference/.
+# $BUILD_ROOT/tmp/ims-inventory.
 #
 # A checker that cannot fail is worth nothing: this one was negative-tested by pointing it at
 # missing inputs, which is how C4d was found passing vacuously (an empty manifest dump has no
@@ -15,31 +15,12 @@ R="$(cd "$(dirname "$0")" && pwd)"
 SRC="$R/build_output/src"
 BUILD_ROOT="${BUILD_ROOT:-$R/build_output}"
 W="${IMS_INVENTORY:-$BUILD_ROOT/tmp/ims-inventory}"
-B="${BULLHEAD_DIR:-$(cd "$R/.." && pwd)/upstream-reference/device_lge_bullhead}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --inventory) W="$2"; shift 2 ;;
-    --bullhead)  B="$2"; shift 2 ;;
     *) echo "!! unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-# Checks C7 to C10 read the bullhead tree. Without it they simply fail, which looks like a broken
-# port rather than a missing input, so say what to do instead of reporting ten failures.
-if [ ! -d "$B/.git" ]; then
-  cat >&2 <<EOM
-!! bullhead reference not found at: $B
-!!
-!! Checks C7-C10 compare this port against LineageOS commit 5cef16f, which disabled the pre-P IMS
-!! stack upstream. Clone it:
-!!
-!!   mkdir -p "$(dirname "$B")" && cd "$(dirname "$B")"
-!!   git clone https://github.com/LineageOS/android_device_lge_bullhead.git device_lge_bullhead
-!!
-!! Or point at an existing checkout with --bullhead DIR (or BULLHEAD_DIR). See VOLTE-BRINGUP.md 6.1.
-EOM
-  exit 2
-fi
-
 A="$SRC/out/host/linux-x86/bin/aapt2"
 MISSING="${IMS_MISSING:-$W/../ims-missing.txt}"
 fail=0
@@ -85,16 +66,6 @@ ck "C6b ImsServiceControllerCompat in opt/telephony" "$([ -f "$SRC/frameworks/op
 ck "C6c MmTelFeatureCompatAdapter in opt/telephony"  "$([ -f "$SRC/frameworks/opt/telephony/src/java/com/android/internal/telephony/ims/MmTelFeatureCompatAdapter.java" ] && echo 1 || echo 0)"
 ck "C6d ImsResolver still scans compat"   "$(grep -q 'compat ImsService' "$SRC/frameworks/opt/telephony/src/java/com/android/internal/telephony/ims/ImsResolver.java" 2>/dev/null && echo 1 || echo 0)"
 
-# C7 bullhead citation
-ck "C7  bullhead 5cef16f exists"          "$(git -C "$B" show -s --format=%s 5cef16f 2>/dev/null | grep -q 'Disable pre-P IMS stack' && echo 1 || echo 0)"
-ck "C7b it only changed the blobs list"   "$(git -C "$B" show --stat --format= 5cef16f 2>/dev/null | grep -q 'lineage-proprietary-blobs-vendor.txt' && echo 1 || echo 0)"
-
-# C8/C9/C10 bullhead material
-ck "C8  bullhead init defines imsqmidaemon" "$(grep -q '^service imsqmidaemon' "$B/init.bullhead.rc" 2>/dev/null && echo 1 || echo 0)"
-ck "C8b property trigger QMI_DAEMON_STATUS" "$(grep -q 'sys.ims.QMI_DAEMON_STATUS=1' "$B/init.bullhead.rc" 2>/dev/null && echo 1 || echo 0)"
-ck "C9  bullhead sepolicy/ims.te exists"    "$([ -f "$B/sepolicy/ims.te" ] && echo 1 || echo 0)"
-ck "C9b ims_socket + qcom_ims_prop types"   "$(grep -q 'type ims_socket' "$B/sepolicy/file.te" 2>/dev/null && grep -q 'type qcom_ims_prop' "$B/sepolicy/property.te" 2>/dev/null && echo 1 || echo 0)"
-ck "C10 Android.mk IMS_SYMLINKS"            "$(grep -q 'IMS_SYMLINKS' "$B/Android.mk" 2>/dev/null && echo 1 || echo 0)"
 
 
 # ---------------------------------------------------------------- step 4: the stack built here

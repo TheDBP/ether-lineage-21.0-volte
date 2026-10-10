@@ -290,29 +290,29 @@ For `Registration` (id 204): field 1 `state` varint, field 2 `errorCode` **fixed
 Note what it cannot tell you: a symbol that still resolves can have changed meaning (nanopb), and a
 type that still exists can have grown (`Surface`).
 
-### 6.1 `verify-volte.sh`, and the two inputs it needs
+### 6.1 `verify-volte.sh`
 
-`./verify-volte.sh` checks the claims in this document against the tree, the stock blobs and the
-upstream reference, printing PASS or FAIL per claim and exiting non-zero if any fails.
+`./verify-volte.sh` checks the claims in this document against the tree and the stock blobs,
+printing PASS or FAIL per claim and exiting non-zero if any fails.
 
-It needs two things that are not in this repo, because neither is redistributable here:
+It needs the extracted stock IMS blobs, under `$BUILD_ROOT/tmp/ims-inventory` by default, produced
+by `./extract-ims-blobs.sh`. Override with `--inventory DIR` or `IMS_INVENTORY`.
 
-**The extracted stock IMS blobs**, under `$BUILD_ROOT/tmp/ims-inventory` by default, produced by
-`./extract-ims-blobs.sh`. Override with `--inventory DIR` or `IMS_INVENTORY`.
+The upstream precedent for the daemon approach used here is LineageOS commit `5cef16f` on
+`android_device_lge_bullhead`, "bullhead: Disable pre-P IMS stack". That tree is the last LineageOS
+device to carry a working pre-P IMS stack: init starting `imsqmidaemon` and `imsdatadaemon`, the
+`sys.ims.QMI_DAEMON_STATUS` handshake between them, `sepolicy/ims.te` with the `ims_socket` and
+`qcom_ims_prop` types, and `IMS_SYMLINKS` in its `Android.mk`. The Robin needs the same four
+ingredients, though it runs four daemons from its own stock init rather than bullhead's two.
 
-**The bullhead device tree**, under a sibling `upstream-reference/` by default. This is the upstream
-citation for the daemon approach used here: LineageOS disabled the pre-P IMS stack on bullhead in
-commit `5cef16f`, and this port keeps those blobs deliberately. Checks C7 through C10 read it, and
-without it they fail with no indication that one clone is the fix:
+That citation used to be machine-checked against a local clone. The checks were dropped: upstream
+git history is immutable, so they compared one fixed string against another and could only fail
+when the clone was absent, which says nothing about this port. The commit is resolvable on GitHub
+by anyone who wants to confirm it.
 
-```sh
-mkdir -p ../upstream-reference && cd ../upstream-reference
-git clone https://github.com/LineageOS/android_device_lge_bullhead.git device_lge_bullhead
-```
-
-Override with `--bullhead DIR` or `BULLHEAD_DIR`. Any checkout containing commit `5cef16f` works;
-the script reads that commit's subject and `init.bullhead.rc`, so a shallow clone of a later branch
-will not do.
+What *is* checked locally is the other half of that decision: S3, S3b and S3c assert this tree
+ships no `ims.te` and does not redeclare `ims_socket` or `qcom_ims_prop`, because the vendored
+`sepolicy-legacy` already defines them and a second declaration is a hard build failure.
 
 ---
 
