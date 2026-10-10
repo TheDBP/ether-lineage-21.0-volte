@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=0a185f324d1f9f2fa41878c4878f0878469551cd
-subject=refresh-patches: repair the subject extraction I broke today
-synced=2026-10-10T01:34:33Z
+commit=7c083d62f8e5493f5056e9aa9e8c6e16de7d396e
+subject=oem: the Backgrounds overlay has to be static, or the wallpapers never show
+synced=2026-10-10T02:20:41Z

@@ -26,6 +26,19 @@ PRODUCT_COPY_FILES += $(foreach f,$(forge_oem_wallpaper),\
     $(f):$(TARGET_COPY_OUT_PRODUCT)/media/wallpaper/$(notdir $(f)))
 DEVICE_PACKAGE_OVERLAYS += vendor/extra/overlay/oem-assets
 
+# Backgrounds must be a STATIC overlay, not an RRO. A device that sets
+# PRODUCT_ENFORCE_RRO_TARGETS (msm8996 sets it to *) turns every device overlay into a runtime
+# overlay, and an RRO can only override a resource that already exists: it cannot add one. The
+# partner_wallpapers array is overridden fine, so the picker is told about wallpapers whose
+# drawables were never added, and it silently renders nothing. Measured on a vs995 build: the RRO
+# carried the 17 entry array and a drawable table of entryCount=1, while the base Backgrounds.apk
+# had zero of the reclaimed drawables.
+#
+# Only this one package is excluded. The framework overlays beside it (audio_assets, the
+# SettingsProvider defaults) override resources that already exist, which is exactly what an RRO
+# does correctly, so they stay runtime overlays and the device keeps a generic framework-res.
+PRODUCT_ENFORCE_RRO_EXCLUDED_OVERLAYS += vendor/extra/overlay/oem-assets/packages/apps/Backgrounds
+
 # Boot animation. TARGET_BOOTANIMATION is read later by vendor/lineage/bootanimation/Android.mk,
 # which falls back to the generated one when it is empty -- so an absent zip needs no conditional.
 # It is not a product variable, but a plain assignment here does reach that far: verified by setting

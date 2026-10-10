@@ -695,3 +695,42 @@ Checking an older patch series out onto today's upstream tests that series again
 never seen. If the feature works, your series was the cause. If it does not, you have learned
 nothing, since upstream is now a second variable. Only the positive result is conclusive. Say so
 before spending an hour on the build, not after.
+
+## 48. A HAL service named for a version is named for the *module* it accepts
+
+Lineage ships two fingerprint HAL services that differ in one constant:
+
+    .../biometrics/fingerprint/2.0/   kVersion = HARDWARE_MODULE_API_VERSION(2, 0)   HIDL, registers @2.1
+    .../biometrics/fingerprint/aidl/  kVersion = HARDWARE_MODULE_API_VERSION(2, 1)   AIDL, IFingerprint
+
+The `2.0` in `android.hardware.biometrics.fingerprint@2.0-service` is the **legacy libhardware
+module version it opens**, not the HIDL interface it serves: its vintf fragment declares
+`<version>2.1</version>`. So when `hardware/interfaces/biometrics/fingerprint/2.0` disappears from
+a newer branch, that service is not affected and has not been removed. Deleting the interface
+directory and retiring the service are different events, and a device tree that moves off the
+service because the interface went away has moved for no reason.
+
+Getting this backwards is expensive, because the failure is not a build break. `openHal()` version
+check fails, returns `nullptr`, and `createSession` hands the null to the session constructor with
+no guard:
+
+    Session::Session: mDevice->set_active_group(mDevice, ...)
+    signal 11 (SIGSEGV), fault addr 0xc0        # set_active_group's offset, from a null base
+
+The HAL dies on first use, the framework logs `HAL deaths since last reboot: 1`, and the Settings
+enrolment screen keeps its consent button disabled forever, because it waits on a challenge that
+can never arrive. Everything else looks healthy.
+
+**Do not relax the version check to make it fit.** The two legacy APIs are not ABI compatible:
+
+    2.0:  int (*enumerate)(struct fingerprint_device*, fingerprint_finger_id_t* results, uint32_t* max_size)
+    2.1:  int (*enumerate)(struct fingerprint_device*)
+
+which is why the 2.0 service casts to its own `enumerate_2_0` typedef. Calling the one-argument form
+on a 2.0 module leaves the blob writing templates through whatever is in the second argument
+register. Silent corruption, not a clean error. Check every member against both headers before
+assuming a version gate is merely conservative.
+
+Pick the implementation that matches the blob, and check the FCM level permits it:
+`compatibility_matrix.7.xml` still allows `format="hidl"` fingerprint `2.1-3`, while level 8 lists
+AIDL only. A device on an old blob and a new target level needs a real shim, not a looser check.
