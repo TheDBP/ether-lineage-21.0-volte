@@ -41,10 +41,15 @@ elif [ -f "$CP" ]; then
   if [ -z "$(ls -A "$BOOTCP" 2>/dev/null)" ]; then
     command -v debugfs >/dev/null || { echo "!! debugfs needed to read $CP" >&2; exit 1; }
     echo "  extracting /framework/arm64 boot classpath from $(basename "$CP")"
+    # debugfs exits 0 whether or not the path was in the image, so the candidate is judged by
+    # whether anything landed, never by the exit status.
     for d in /framework/arm64 /system/framework/arm64 /framework/oat/arm64; do
-      debugfs -R "rdump $d $BOOTCP" "$CP" >/dev/null 2>&1 && break
+      debugfs -R "rdump $d $BOOTCP" "$CP" >/dev/null 2>&1
+      [ -n "$(ls -A "$BOOTCP" 2>/dev/null)" ] && break
     done
-    find "$BOOTCP" -mindepth 2 -name '*.oat' -exec sh -c 'mv "$1" "$(dirname "$2")"/' _ {} "$BOOTCP" \; 2>/dev/null
+    # rdump recreates the source directory inside the destination, so the oats arrive one or more
+    # levels down. Move them INTO $BOOTCP: dirname would put them in its parent instead.
+    find "$BOOTCP" -mindepth 2 -name '*.oat' -exec sh -c 'mv "$1" "$2"/' _ {} "$BOOTCP" \; 2>/dev/null
     # flatten one level if rdump nested under arm64/
     for sub in "$BOOTCP"/arm64 "$BOOTCP"/*/arm64; do [ -d "$sub" ] && mv "$sub"/* "$BOOTCP"/ 2>/dev/null; done
   fi

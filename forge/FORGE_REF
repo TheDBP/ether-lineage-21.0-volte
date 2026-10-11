@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=32ecb8d40f11df115d11e91b1606beab6bf1665f
-subject=unpack-lg-kdz.sh: pin kdztools to a commit that exists
-synced=2026-10-11T20:40:33Z
+commit=7cfd0139d706a492b2b690cd75b536feb18e47f4
+subject=deodex-jar.sh: put the extracted boot oats in the output dir, not its parent
+synced=2026-10-11T20:47:56Z
