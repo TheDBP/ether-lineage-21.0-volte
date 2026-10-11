@@ -21,7 +21,8 @@ set -o pipefail
 KDZ="${1:?usage: unpack-lg-kdz.sh <firmware.kdz> <work-dir> [partition]}"
 WORK="${2:?usage: unpack-lg-kdz.sh <firmware.kdz> <work-dir> [partition]}"
 PART="${3:-system}"
-KDZTOOLS_REF="${KDZTOOLS_REF:-3fe29d2}"
+# Pinned to the commit the extraction was actually validated against, not to a branch.
+KDZTOOLS_REF="${KDZTOOLS_REF:-4eaa7f7}"
 
 [ -f "$KDZ" ] || { echo "!! no such KDZ: $KDZ" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "!! python3 not found; kdztools is Python" >&2; exit 1; }
