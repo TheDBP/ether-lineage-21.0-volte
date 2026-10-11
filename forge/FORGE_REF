@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=16a151a14fde50bebd56dc0e764dcebe2151b72d
-subject=tools: list unpack-lg-kdz.sh in the quick reference
-synced=2026-10-11T19:02:55Z
+commit=33ef16c1ae3ab24a5b2b77ab154169e0e81534f6
+subject=unpack-lg-kdz.sh: use undz -s with a resolved slice index
+synced=2026-10-11T20:35:19Z

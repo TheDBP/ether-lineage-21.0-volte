@@ -49,17 +49,39 @@ if [ -z "$TOOLS" ]; then
 fi
 [ -f "$TOOLS/unkdz.py" ] || { echo "!! $TOOLS does not look like kdztools (no unkdz.py)" >&2; exit 1; }
 
-# 2. KDZ -> DZ. unkdz writes beside the kdz into a kdzextracted/ dir, so run it from the work dir.
-echo ">> kdz: unpacking $(basename "$KDZ")" >&2
-( cd "$WORK" && python3 "$TOOLS/unkdz.py" -f "$(readlink -f "$KDZ")" -x ) >&2 || {
+# 2. KDZ -> DZ. The KDZ holds the DZ plus a few small vendor DLLs; -x takes the lot, which is
+# simpler and more robust than selecting by the numeric id that -s wants.
+echo ">> kdz: unpacking $(basename "$KDZ") (gigabytes, minutes)" >&2
+python3 "$TOOLS/unkdz.py" -f "$KDZ" -x -d "$WORK/kdz" >&2 || {
   echo "!! unkdz failed on $KDZ" >&2; exit 1; }
-DZ="$(find "$WORK" -maxdepth 2 -name '*.dz' -print -quit 2>/dev/null)"
-[ -n "$DZ" ] || { echo "!! unkdz produced no .dz under $WORK" >&2; exit 1; }
+DZ="$(find "$WORK/kdz" -maxdepth 2 -iname '*.dz' -print -quit 2>/dev/null)"
+[ -n "$DZ" ] || { echo "!! unkdz produced no .dz under $WORK/kdz" >&2; exit 1; }
 
-# 3. DZ -> partition images. undz writes dzextracted/<part>_<n>.image chunks and a merged image.
-echo ">> kdz: extracting partitions from $(basename "$DZ")" >&2
-( cd "$(dirname "$DZ")" && python3 "$TOOLS/undz.py" -f "$(basename "$DZ")" -x ) >&2 || {
-  echo "!! undz failed on $DZ" >&2; exit 1; }
+# 3. DZ -> the wanted partition, as <slice-name>.image.
+#
+# -s and not -x: -x writes the chunk files a reconstruction needs, not the partitions. And -s must
+# be given a slice INDEX, not a name, so the index is read out of the listing. Extracting every
+# slice instead would be simpler and is not an option: userdata alone unpacks to 55 GB on this
+# device, against about 3 GB for system.
+#
+# Listing format is `<slice>/<chunk> : <name>_<n>.bin (<size> bytes)`, with `<name> (<empty>)` for
+# slices carrying nothing. awk reads the whole listing rather than stopping at the first match, so
+# nothing upstream is ever handed a SIGPIPE.
+echo ">> kdz: locating the $PART slice in $(basename "$DZ")" >&2
+IDX="$(python3 "$TOOLS/undz.py" -f "$DZ" -l 2>/dev/null | awk -v p="$PART" '
+  /^[[:space:]]*[0-9]+\// {
+    split($0, a, "/"); idx = a[1] + 0
+    if (match($0, /:[[:space:]]*[^ ]+/)) {
+      nm = substr($0, RSTART, RLENGTH); sub(/^:[[:space:]]*/, "", nm)
+      sub(/_[0-9]+\.bin$/, "", nm); sub(/\.bin$/, "", nm)
+      if (nm == p && !found) { print idx; found = 1 }
+    }
+  }')"
+[ -n "$IDX" ] || { echo "!! no slice named '$PART' in $(basename "$DZ")" >&2
+                   echo "!! list it with: python3 undz.py -f '$DZ' -l" >&2; exit 1; }
+echo ">> kdz: extracting slice $IDX ($PART)" >&2
+python3 "$TOOLS/undz.py" -f "$DZ" -s "$IDX" -d "$WORK/parts" >&2 || {
+  echo "!! undz failed extracting slice $IDX from $DZ" >&2; exit 1; }
 
 # undz names the output per partition; take the largest match so a chunked partition does not win
 # over the assembled one.
