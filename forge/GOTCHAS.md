@@ -883,3 +883,42 @@ The two profiles differed in 542 parameters, and the transport behaviour lived i
 elsewhere in the set. When a vendor ships one configuration per carrier or per variant, treat the
 configuration as the unit: select the right one. Flipping the flag that names the feature gets the
 feature half-enabled, which is harder to diagnose than it being off.
+
+## 55. A sysfs node that accepts writes is not proof the hardware exists
+
+`/sys/class/leds/{red,green,blue}` on an msm8996 LG device report `max_brightness` 255, accept
+`brightness` writes, read the value back, and accept a full LPG duty table. Nothing illuminates,
+because no LED is wired to those PMIC outputs. The nodes come from the PMI8994 reference device
+tree and the qpnp driver binds to the LPG channels whether or not anything is attached. Register
+writes into a PMIC channel succeed into open air.
+
+Reading back the value you just wrote tests the driver's variable, not the hardware. A shell
+command returning 0 tests the write path, not the output. For anything whose only real output is
+physical, the only confirmation is observing it, or a datasheet or teardown saying the part is
+populated.
+
+Supporting signals that cost nothing to check first: whether the platform declares the feature at
+all (upstream LineageOS declared no notification LED for this device), and whether the vendor's own
+grouping device registered (LG's `rgb_blink` needs an `rgb` sync class device that never appears).
+When those disagree with a sysfs node, believe them over the node.
+
+## 56. PRODUCT_ENFORCE_RRO_TARGETS silently drops overlays that cannot be turned into an RRO
+
+A device tree that sets `PRODUCT_ENFORCE_RRO_TARGETS := *` converts every
+`DEVICE_PACKAGE_OVERLAYS` entry into an auto-generated runtime resource overlay, except paths
+listed in `PRODUCT_ENFORCE_RRO_EXCLUDED_OVERLAYS`. Resource packages that get no auto-generated
+RRO, such as lineage-sdk's `org.lineageos.platform-res`, end up with neither: the overlay is not
+baked in, no RRO is produced, and the build says nothing. Every value in it is lost.
+
+This is invisible in review because the overlay file looks right and sits in the expected place. One
+tree had three settings dropped this way for its whole life, including a notch flag and a
+fingerprint cleanup flag.
+
+Verify an overlay landed rather than assuming, by dumping the compiled resource out of the target
+package and comparing it to the overlay:
+
+    aapt2 dump resources out/target/product/<dev>/system/framework/<res>.apk | grep -A2 <resource>
+
+Use the tree's own `out/host/linux-x86/bin/aapt2`; an older aapt2 misreads newer APKs (GOTCHAS 49).
+A mismatch means the overlay never applied. Exclude its path from RRO enforcement, and expect every
+value in that file to start taking effect at once when you do.

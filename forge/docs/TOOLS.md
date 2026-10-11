@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-93 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+94 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -102,4 +102,5 @@ carries the same data for anything that would rather not parse Markdown.
 | [`sync-forge.sh`](../tools/sync-forge.sh) | vendor forge/ into a device repo from rom-forge at a pinned ref | `./forge/tools/sync-forge.sh              # sync to origin/main, pin to that commit` | — |
 | [`triage-build-log.sh`](../tools/triage-build-log.sh) | collapse a `mka -k` build log into distinct failure CLASSES | `./tools/triage-build-log.sh <build.log> [--targets]` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`unpack-block-ota.sh`](../tools/unpack-block-ota.sh) | turn a block-based OTA zip into a mountable image you can read | `./tools/unpack-block-ota.sh <ota.zip> <outdir> [partition]` | [OEM-ASSETS](OEM-ASSETS.md), [debugging-volte](debugging-volte.md) |
+| [`unpack-lg-kdz.sh`](../tools/unpack-lg-kdz.sh) | get a partition image out of an LG KDZ, so a stock firmware container can be handed to a build directly instead of being unpacked by hand first | `unpack-lg-kdz.sh <firmware.kdz> <work-dir> [partition]        (partition default: system)` | — |
 | [`usb-watch.sh`](../tools/usb-watch.sh) | one line per USB/adb/fastboot state change, timestamped | `usb-watch.sh [seconds] [logfile]        default 300 s; Ctrl-C to stop early` | — |

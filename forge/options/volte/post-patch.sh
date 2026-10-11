@@ -26,12 +26,28 @@ fi
 
 # Find the stock input the script needs. Looked for in the device repo root and the build root --
 # the two places a large proprietary file can sit without being inside a git tree.
+# VOLTE_STOCK_GLOB may list several patterns, most preferred first, so a device can accept the
+# manufacturer's own firmware container as well as anything already unpacked from it. Each pattern is
+# expanded under both roots in turn; a pattern may contain a directory, which is how firmware kept in
+# a subdirectory of the device repo is found.
 SRC=""
+# No multi-level break: the first match is recorded and later candidates are skipped, so the search
+# cannot depend on how deeply it happens to be nested.
 if [ -n "$GLOB" ]; then
-  for c in "$DEVICE_REPO"/$GLOB "$DEVICE_REPO/build_output"/$GLOB; do
-    [ -e "$c" ] && { SRC="$c"; break; }
+  for g in $GLOB; do
+    for root in "$DEVICE_REPO" "$DEVICE_REPO/build_output"; do
+      for c in "$root"/$g; do
+        [ -n "$SRC" ] && continue
+        [ -e "$c" ] && SRC="$c"
+      done
+    done
   done
-  [ -n "$SRC" ] || { echo "   !! volte: no $GLOB in $DEVICE_REPO -- cannot stage the IMS stack"; exit 1; }
+  if [ -z "$SRC" ]; then
+    echo "   !! volte: none of these are in $DEVICE_REPO or its build_output:"
+    for g in $GLOB; do echo "   !!   $g"; done
+    echo "   !! cannot stage the IMS stack."
+    exit 1
+  fi
 fi
 echo "   volte: staging the IMS stack from $(basename "${SRC:-<device-supplied>}") -- first build only, minutes"
 "$DEVICE_REPO/$SCRIPT" "$SRC" "$AOSP" || { echo "   !! volte: $SCRIPT failed"; exit 1; }
