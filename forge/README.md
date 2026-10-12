@@ -574,7 +574,7 @@ files. Git does not clone hooks, so without that step the guard is documented bu
 
 ## Support
 
-This is unpaid work on phones their makers abandoned. If a build saved one from the drawer, [a donation](https://www.paypal.com/donate/?hosted_button_id=7U8PDZLK7742Q) keeps the next one coming.
+This is unpaid work on phones their makers abandoned. If a build saved one from the drawer, [a donation](https://www.paypal.com/donate/?hosted_button_id=7U8PDZLK7742Q) is greatly appreciated.
 
 ## License
 
