@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=9afacbde12e3b481dff4f21b09731b7d2a63c9c4
-subject=apply-overlay: remove the asset copies of options that are not being built
-synced=2026-10-12T02:54:59Z
+commit=0af434cee1969c2693008330326e7768011e6ec8
+subject=release.sh: let a device name the proprietary content its image carries
+synced=2026-10-12T04:28:49Z

@@ -350,6 +350,17 @@ if [ -n "${KERNEL_SOURCE_URL:-}" ]; then
 else
   KERNEL_SOURCE_NOTE=""
 fi
+# A device whose headline feature is reclaimed from the manufacturer should say so on its own
+# download page, rather than leaving the line above to cover it by implication: an IMS stack lifted
+# out of stock firmware is the manufacturer's application, not vendor firmware for a chip. Set
+# RELEASE_PROPRIETARY_NOTE in device.conf to name it.
+if [ -n "${RELEASE_PROPRIETARY_NOTE:-}" ]; then
+  PROPRIETARY_NOTE="
+$RELEASE_PROPRIETARY_NOTE
+"
+else
+  PROPRIETARY_NOTE=""
+fi
 # The body is one shared head plus one section per preset, so a second preset published the same
 # day (same tag, same commit) appends its section instead of needing a release of its own.
 cat > "$NOTES" <<EOF
@@ -361,7 +372,7 @@ your phone, the build system can put them back from a copy of your phone's own s
 see \`forge/docs/OEM-ASSETS.md\`.
 
 Like every Android ROM, this contains proprietary vendor firmware for the hardware to work at all.
-${KERNEL_SOURCE_NOTE}
+${PROPRIETARY_NOTE}${KERNEL_SOURCE_NOTE}
 **Installing:** ${RECOVERY_STEP}boot into recovery, *Factory reset*, then *Apply update → ADB
 sideload* the zip, reboot. Updating from an earlier one of these builds: sideload the new zip, no
 wipe. $RECOVERY_NOTE
