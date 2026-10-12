@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=7cfd0139d706a492b2b690cd75b536feb18e47f4
-subject=deodex-jar.sh: put the extracted boot oats in the output dir, not its parent
-synced=2026-10-11T20:47:56Z
+commit=f43ece502e9ec376fdf37ddb96108f054c69b7d6
+subject=README: point the V20 row at the public repo
+synced=2026-10-12T00:33:59Z
