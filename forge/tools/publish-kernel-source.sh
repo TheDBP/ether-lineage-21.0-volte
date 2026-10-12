@@ -51,7 +51,14 @@ export LC_ALL=C
 # device it was written against and fail on the next.
 DDIR="$AOSP/device/${DEVICE:?device.conf missing DEVICE}"
 [ -d "$DDIR" ] || { echo "!! no device tree at $DDIR — is the tree synced?" >&2; exit 1; }
+# Search the device directory, then its vendor directory. The declaration often lives in a shared
+# *-common tree beside the device rather than inside it: the V20 declares it in
+# device/lge/msm8996-common while device/lge/vs995 has nothing. Looking only under the device dir is
+# the same assumption this comment warns about, one level up.
 KSRC_LINE=$(grep -rhE '^[[:space:]]*TARGET_KERNEL_SOURCE[[:space:]]*:?=' "$DDIR" --include='*.mk' 2>/dev/null | sed -n 1p)
+if [ -z "$KSRC_LINE" ]; then
+  KSRC_LINE=$(grep -rhE '^[[:space:]]*TARGET_KERNEL_SOURCE[[:space:]]*:?=' "$(dirname "$DDIR")" --include='*.mk' 2>/dev/null | sed -n 1p)
+fi
 KPATH=$(printf '%s' "$KSRC_LINE" | sed 's/^[[:space:]]*TARGET_KERNEL_SOURCE[[:space:]]*:\?=[[:space:]]*//' | tr -d ' ')
 if [ -z "$KPATH" ]; then
   echo ">> $DDIR declares no TARGET_KERNEL_SOURCE: prebuilt kernel, nothing to publish"

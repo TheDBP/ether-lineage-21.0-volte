@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=f43ece502e9ec376fdf37ddb96108f054c69b7d6
-subject=README: point the V20 row at the public repo
-synced=2026-10-12T00:33:59Z
+commit=fda9f0490c3f358b35a69454ba63f9f864053251
+subject=publish-kernel-source.sh: find TARGET_KERNEL_SOURCE in a shared device tree too
+synced=2026-10-12T00:42:16Z
