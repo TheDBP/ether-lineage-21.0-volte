@@ -280,6 +280,31 @@ GEN="$XTRA/product.mk"
   echo ""
 } > "$GEN"
 _nopt=0
+# Undo the asset copies of every option that is NOT being built. An option's `copy` puts an
+# untracked file into a synced project, and `repo sync --force-sync` cannot remove an untracked file,
+# so it survives into the next build. Where the same option also `rm`s a tracked file that sync then
+# restores, a later build without the option gets BOTH: teal-wallpaper copies
+# drawable-nodpi/default_wallpaper.webp and removes the upstream .png, so building stock after libre
+# in one tree failed with "resource 'drawable/default_wallpaper' has a conflicting value", thousands
+# of lines into aapt2. Clearing the copies first makes the tree reflect only the enabled options.
+for _odir in "$FORGE"/options/*; do
+  [ -f "$_odir/assets.list" ] || continue
+  _oname="$(basename "$_odir")"
+  case " ${BUILD_OPTIONS:-} " in *" $_oname "*) continue ;; esac
+  while read -r op a b; do
+    case "$op" in
+      copy|'copy?')
+        b="$(expand_dest "$b" 2>/dev/null)" || continue
+        [ -n "$b" ] && [ -e "$AOSP/$b" ] || continue
+        # Only ever remove something the option itself put there, never a tracked upstream file.
+        if ( cd "$AOSP/$(dirname "$b")" 2>/dev/null && git ls-files --error-unmatch "$(basename "$b")" >/dev/null 2>&1 ); then
+          continue
+        fi
+        rm -f "$AOSP/$b" && echo "   option $_oname is off: removed its stale $b" ;;
+    esac
+  done < "$_odir/assets.list"
+done
+
 for _oname in ${BUILD_OPTIONS:-}; do
   _odir="$FORGE/options/$_oname"
   [ -f "$_odir/option.conf" ] || { echo "   !! no such option: $_oname"; exit 1; }

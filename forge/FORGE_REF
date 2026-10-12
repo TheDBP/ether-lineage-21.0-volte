@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=fda9f0490c3f358b35a69454ba63f9f864053251
-subject=publish-kernel-source.sh: find TARGET_KERNEL_SOURCE in a shared device tree too
-synced=2026-10-12T00:42:16Z
+commit=9afacbde12e3b481dff4f21b09731b7d2a63c9c4
+subject=apply-overlay: remove the asset copies of options that are not being built
+synced=2026-10-12T02:54:59Z
