@@ -922,3 +922,22 @@ package and comparing it to the overlay:
 Use the tree's own `out/host/linux-x86/bin/aapt2`; an older aapt2 misreads newer APKs (GOTCHAS 49).
 A mismatch means the overlay never applied. Exclude its path from RRO enforcement, and expect every
 value in that file to start taking effect at once when you do.
+
+## 57. Plain logcat contains no telephony framework logs at all
+
+Everything under `frameworks/opt/telephony` and the IMS stack logs through `Rlog`, which is
+`Log.logToRadioBuffer`, not the main buffer. `logcat` with no `-b` reads `main,system,crash`, so a
+capture taken that way has zero lines from `ImsPhoneCallTracker`, `RILJ`, `ImsManager`,
+`GsmCdmaPhone` or `ImsPhoneConnection`, however verbose they are.
+
+The trap is that the capture does not look empty. `Telecom` and `Telephony` log to the main buffer,
+so a call still produces hundreds of plausible lines, and the telephony framework's own decisions
+are simply absent. Reading one of those captures leads straight to "the handler was never called"
+about a handler whose `DBG` flag is hardcoded `true` and which ran fine.
+
+Capture with `-b all` whenever radio behaviour is in question:
+
+    adb logcat -b all -v time > capture.log
+
+Confirm the buffer is really there before drawing a conclusion from a silence, by grepping the
+capture for a tag that only ever appears on the radio buffer, `RILJ` being the obvious one.
