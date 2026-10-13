@@ -982,3 +982,37 @@ failure; `getDisconnectCauseFromReasonInfo` has no case for 146 and falls throug
 
 Catch it with `tools/ims-call-test.sh wait`, which fails when a call is left behind and prints
 whether any `DIAL` went unanswered.
+
+## 59. A property derived from the SIM cannot be ready for an app that starts at boot
+
+A device patch that configures something from the SIM, by setting a `persist.` property from an init
+service triggered on `property:gsm.sim.operator.numeric=*`, works on every boot except the one that
+matters. The property is empty until the RIL has read the card, and an app that AMS starts at boot
+has already read it by then. Measured on an msm8996 handset: the consumer started at 43.9 s uptime
+(`ActivityManager: Start proc`), the init service ran at 52.5 s (`init: starting service` in dmesg).
+
+Every later boot hides it, because init loads `persist.` properties from `/data/property` during
+`post-fs-data`, long before any app starts. So the bug appears only on the first boot after a wipe,
+which is the boot nobody tests and the one every new user gets.
+
+Check the ordering before trusting such a patch, and check it on a wiped device or a simulation of
+one. Seeding the property with the value the fallback would pick, and clearing the consumer's data,
+reproduces it while keeping adb, which a real wipe takes away:
+
+    adb shell pm clear <consumer>
+    adb shell setprop <the persist property> <fallback value>
+    adb reboot
+
+Three things that look like fixes and are not, all tested:
+
+- **Firing the service earlier.** There is nothing earlier. Cached subscription info in `/data` can
+  look like an early signal, and a wipe clears exactly that cache.
+- **`pm disable` on the consumer, to be enabled by the service.** Accepted, reports `enabled=2`, and
+  a `persistent` system app starts on the next boot anyway.
+- **Restarting the consumer once the property is right.** It may come back without re-reading
+  anything that matters; one app here returned in four seconds and sat on the stale value for 150 s
+  with no retry.
+
+What works is a reboot, since that is what puts the property in place before the consumer starts. A
+service that reboots once when it writes the property for the first time, detected by the previous
+value being empty, is self-limiting: the persisted value stops it firing again until the next wipe.
