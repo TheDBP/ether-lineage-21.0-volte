@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=2afa67d79c924b50ee524d53aa226871d1f1b8e3
-subject=GOTCHAS: plain logcat contains no telephony framework logs
-synced=2026-10-13T15:22:46Z
+commit=927e13127db772c4e6d440365b3ad3b464d9f346
+subject=tools: ims-call-test.sh, amend-patch.sh, and the circuit-switched retry trap
+synced=2026-10-13T16:03:46Z

@@ -941,3 +941,38 @@ Capture with `-b all` whenever radio behaviour is in question:
 
 Confirm the buffer is really there before drawing a conclusion from a silence, by grepping the
 capture for a tag that only ever appears on the radio buffer, `RILJ` being the obvious one.
+
+## 58. A circuit-switched retry hangs forever on a carrier that has no circuit-switched voice
+
+An OEM IMS stack that predates VoLTE-only networks answers a failed call setup with
+`CODE_LOCAL_CALL_CS_RETRY_REQUIRED`, reason 146, and expects the framework to place the call again
+over 2G or 3G. Without domain selection `ImsPhoneCallTracker.onCallStartFailed` does exactly that:
+`initiateSilentRedial` detaches the IMS connection, replaces it with a GSM one and dials.
+
+On a carrier that retired its circuit-switched network there is nothing to dial on, and the modem
+does not report that. Measured on an msm8996 handset on a T-Mobile MVNO:
+
+    RILJ: [0418]> DIAL [PHONE0]           <- request sent
+                                          <- no response, ever
+                                          <- no GET_CURRENT_CALLS poll
+    GsmCdmaCallTracker: update phone state, old=IDLE new=OFFHOOK
+    GsmCdmaPhone: getCsCallRadioTech, current vrs=0, vrat=14  ->  result calcVrat=0
+
+`RIL_REQUEST_DIAL` is accepted and never answered, so the call tracker holds OFFHOOK with no call in
+the modem's list to disconnect. Telecom shows DIALING for good and the dialer cannot be closed. The
+framework cannot recover from this: it is waiting on a request that will never complete.
+
+Nothing in the stack says the fallback is unavailable up front. The signs are that voice registers
+on LTE (`getRilVoiceRadioTechnology=14`), the CS domain's `accessNetworkTechnology` is also LTE, and
+`getCsCallRadioTech` resolves to UNKNOWN.
+
+Do not pass a retry request through to the framework on such a device. Convert it to a termination
+in whatever shim sits between the OEM stack and the framework, keeping
+`EXTRA_CODE_CALL_RETRY_EMERGENCY` as the one exception, since emergency fallback takes a different
+modem path and losing the attempt matters. Where the extra code carries a real SIP status, 100 or
+above, map it to the matching `CODE_SIP_*` reason so the UI can say "busy" rather than a bare
+failure; `getDisconnectCauseFromReasonInfo` has no case for 146 and falls through to
+`ERROR_UNSPECIFIED`.
+
+Catch it with `tools/ims-call-test.sh wait`, which fails when a call is left behind and prints
+whether any `DIAL` went unanswered.
