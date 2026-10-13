@@ -69,6 +69,17 @@ git -C "$D" merge-base --is-ancestor "$BASE" HEAD 2>/dev/null || {
 DIRTY=$(git -C "$D" status --porcelain -- "${FILES[@]}" | wc -l)
 [ "$DIRTY" -gt 0 ] || { echo "!! none of the named files differ from the commit; nothing to fold" >&2; exit 1; }
 
+# --autosquash acts on EVERY commit whose subject starts with fixup! or squash!, not just the one
+# written here. Upstream history is full of them (one LineageOS device tree carries four), and if any
+# sits inside the rebased range the autosquash silently folds and reorders it, which shows up later
+# as a patch that lost a change nobody removed. Below BASE they are harmless, so only the local range
+# is checked.
+STRAY=$(git -C "$D" log --format=%s "$BASE..HEAD" | grep -cE '^(fixup|squash)!' || true)
+[ "$STRAY" = 0 ] || {
+  echo "!! $STRAY commit(s) in $BASE..HEAD already have a fixup!/squash! subject." >&2
+  echo "   --autosquash would fold those too. Resolve them first, or amend by hand." >&2
+  exit 1; }
+
 # The commit that owns the file is the last one in the series that touched it.
 OWNER=$(git -C "$D" log --format=%H -1 "$BASE..HEAD" -- "${FILES[@]}")
 [ -n "$OWNER" ] || { echo "!! no commit in $BASE..HEAD touches those files; this would be a new patch, not an amend" >&2; exit 1; }
@@ -77,11 +88,16 @@ DEPTH=$(git -C "$D" rev-list --count "$OWNER..HEAD")
 echo ">> folding into: ${OWNER:0:9} $SUBJ"
 echo "   $DEPTH commit(s) back in the series, base $BASE"
 
+# A synced project has no identity configured, and both the fixup and the rebase need one. Match
+# what apply-overlay.sh uses for vendored projects; nothing here is ever pushed, and refresh-patches
+# re-exports the patch with whatever authorship the original commit already had.
+GI=(-c user.name=rom-forge -c user.email=rom-forge@localhost)
+
 BEFORE=$(git -C "$D" rev-list --count "$BASE..HEAD")
 git -C "$D" add -- "${FILES[@]}"
-git -C "$D" commit -q --fixup="$OWNER" || { echo "!! fixup commit failed" >&2; exit 1; }
+git "${GI[@]}" -C "$D" commit -q --fixup="$OWNER" || { echo "!! fixup commit failed" >&2; exit 1; }
 
-if ! GIT_SEQUENCE_EDITOR=true git -C "$D" rebase -q --autosquash "$BASE"; then
+if ! GIT_SEQUENCE_EDITOR=true git "${GI[@]}" -C "$D" rebase -q --autosquash "$BASE"; then
   echo "!! the rebase stopped, most likely a conflict. The fixup commit is in place." >&2
   echo "   finish it with: git -C $D rebase --continue   (or --abort to back out)" >&2
   exit 1

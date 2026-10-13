@@ -1000,8 +1000,13 @@ one. Seeding the property with the value the fallback would pick, and clearing t
 reproduces it while keeping adb, which a real wipe takes away:
 
     adb shell pm clear <consumer>
-    adb shell setprop <the persist property> <fallback value>
+    adb shell 'setprop <the persist property> ""'
     adb reboot
+
+Set it EMPTY rather than to the value the fallback would pick. A `persist.` property set to an empty
+string stays empty across the reboot, which is what a wipe leaves. Seeding the fallback value
+reproduces the symptom but not the precondition, so any fix that keys on "there was no previous
+value" will never fire and the test passes for the wrong reason.
 
 Three things that look like fixes and are not, all tested:
 
@@ -1022,3 +1027,24 @@ A service that does this once when it writes the property for the first time, de
 previous value being empty, is self-limiting: the persisted value stops it firing again until the
 next wipe. Note that `stop` takes first-run setup down with it, so the restart is visible to whoever
 is holding the phone.
+
+## 60. `git rebase --autosquash` folds upstream `fixup!` commits too
+
+Amending a patch deep in a device series with `--fixup` plus `--autosquash` is the clean way to do
+it (`tools/amend-patch.sh`), with one trap: autosquash acts on every commit whose subject begins
+`fixup!` or `squash!`, not only the one just written. Upstream history is full of them, because
+people commit the fixup and never squash it; one LineageOS msm8996 device tree carries four, such as
+`fixup! msm8996-common: Change how we sync FlipFlap`.
+
+If any of those sit inside the rebased range, the rebase silently folds and reorders them. Nothing
+fails; it surfaces later as a patch missing a change nobody deleted. Commits below `BASE_REF` are
+outside the range and harmless, which is why this usually goes unnoticed.
+
+Check the local range only, and refuse rather than proceed:
+
+    git -C "$proj" log --format=%s "$BASE..HEAD" | grep -cE '^(fixup|squash)!'
+
+Related: hand-editing a patch file instead leaves the `index <sha>..<sha>` blob hashes stale, and
+`git apply` accepts that for a whole-file addition, so the patch applies while being malformed. A
+re-export from the tree is what makes those agree again.
+

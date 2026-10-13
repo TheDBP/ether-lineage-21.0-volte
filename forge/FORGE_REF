@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=f891e43b6b0bcb9daeb31b692a3563d5a49c5d47
-subject=GOTCHAS 59: a framework restart is enough, a device reboot is not required
-synced=2026-10-13T18:52:16Z
+commit=2ad14236579d595a16f4d882e8833f7fc2f7529a
+subject=GOTCHAS 59: empty the property to reproduce, do not seed the fallback value
+synced=2026-10-13T20:07:27Z
