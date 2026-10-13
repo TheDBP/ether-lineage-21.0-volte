@@ -942,7 +942,7 @@ Capture with `-b all` whenever radio behaviour is in question:
 Confirm the buffer is really there before drawing a conclusion from a silence, by grepping the
 capture for a tag that only ever appears on the radio buffer, `RILJ` being the obvious one.
 
-## 58. A circuit-switched retry hangs forever on a carrier that has no circuit-switched voice
+## 58. A circuit-switched retry stalls a call for half a minute on a VoLTE-only carrier
 
 An OEM IMS stack that predates VoLTE-only networks answers a failed call setup with
 `CODE_LOCAL_CALL_CS_RETRY_REQUIRED`, reason 146, and expects the framework to place the call again
@@ -950,23 +950,29 @@ over 2G or 3G. Without domain selection `ImsPhoneCallTracker.onCallStartFailed` 
 `initiateSilentRedial` detaches the IMS connection, replaces it with a GSM one and dials.
 
 On a carrier that retired its circuit-switched network there is nothing to dial on, and the modem
-does not report that. Measured on an msm8996 handset on a T-Mobile MVNO:
+takes its time saying so. Measured on an msm8996 handset on a T-Mobile MVNO:
 
-    RILJ: [0418]> DIAL [PHONE0]           <- request sent
-                                          <- no response, ever
-                                          <- no GET_CURRENT_CALLS poll
-    GsmCdmaCallTracker: update phone state, old=IDLE new=OFFHOOK
+    RILJ: [0324]> DIAL [PHONE0]
+    ... 32.1 s later ...
+    RILJ: [0324]< DIAL error 46
+    RilRequest: [0324]< DIAL error: CommandException: INVALID_MODEM_STATE
     GsmCdmaPhone: getCsCallRadioTech, current vrs=0, vrat=14  ->  result calcVrat=0
 
-`RIL_REQUEST_DIAL` is accepted and never answered, so the call tracker holds OFFHOOK with no call in
-the modem's list to disconnect. Telecom shows DIALING for good and the dialer cannot be closed. The
-framework cannot recover from this: it is waiting on a request that will never complete.
+For those 32 seconds `GsmCdmaCallTracker` holds OFFHOOK with no call in the modem's list, Telecom
+shows DIALING, and pressing end does nothing because there is nothing to end. The call then clears
+itself: a redialled call measured 32.4 s from `MSG_REDIAL_CONNECTION_CHANGED` to `onCallRemoved`.
+
+So this is a dead stall rather than a permanent zombie, and it is easy to misread as one. Do not
+conclude "never answered" or "never cleared" from a capture shorter than the modem's timeout; a
+28.5 s window over the same path showed no response and no disconnect, and both arrived a few
+seconds after it ended.
 
 Nothing in the stack says the fallback is unavailable up front. The signs are that voice registers
 on LTE (`getRilVoiceRadioTechnology=14`), the CS domain's `accessNetworkTechnology` is also LTE, and
 `getCsCallRadioTech` resolves to UNKNOWN.
 
-Do not pass a retry request through to the framework on such a device. Convert it to a termination
+Do not pass a retry request through to the framework on such a device; half a minute of a dialer
+that will not close is worse than an immediate failure. Convert it to a termination
 in whatever shim sits between the OEM stack and the framework, keeping
 `EXTRA_CODE_CALL_RETRY_EMERGENCY` as the one exception, since emergency fallback takes a different
 modem path and losing the attempt matters. Where the extra code carries a real SIP status, 100 or

@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=927e13127db772c4e6d440365b3ad3b464d9f346
-subject=tools: ims-call-test.sh, amend-patch.sh, and the circuit-switched retry trap
-synced=2026-10-13T16:03:46Z
+commit=eb159e0b88364709a16ac915ea16a662c5316973
+subject=GOTCHAS 58: the circuit-switched retry stalls, it does not hang forever
+synced=2026-10-13T16:13:13Z
