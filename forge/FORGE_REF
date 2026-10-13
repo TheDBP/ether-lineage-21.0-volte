@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=4af72bbe1cf7580bb291e90e7cce96a2865cfaf7
-subject=GOTCHAS 59: a SIM-derived property cannot be ready for a boot-start app
-synced=2026-10-13T18:42:36Z
+commit=f891e43b6b0bcb9daeb31b692a3563d5a49c5d47
+subject=GOTCHAS 59: a framework restart is enough, a device reboot is not required
+synced=2026-10-13T18:52:16Z

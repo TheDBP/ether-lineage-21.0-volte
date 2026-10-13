@@ -1013,6 +1013,12 @@ Three things that look like fixes and are not, all tested:
   anything that matters; one app here returned in four seconds and sat on the stale value for 150 s
   with no retry.
 
-What works is a reboot, since that is what puts the property in place before the consumer starts. A
-service that reboots once when it writes the property for the first time, detected by the previous
-value being empty, is self-limiting: the persisted value stops it firing again until the next wipe.
+What works is restarting the framework, `stop` then `start`, which is far cheaper than a device
+reboot and comes back in about five seconds. AMS starts the persistent app again with the property
+now in place, which is the part `am force-stop` on the app alone does not achieve. A device reboot
+works for the same reason and takes longer.
+
+A service that does this once when it writes the property for the first time, detected by the
+previous value being empty, is self-limiting: the persisted value stops it firing again until the
+next wipe. Note that `stop` takes first-run setup down with it, so the restart is visible to whoever
+is holding the phone.
