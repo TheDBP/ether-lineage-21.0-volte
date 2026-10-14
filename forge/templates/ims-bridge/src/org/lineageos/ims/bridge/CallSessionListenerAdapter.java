@@ -63,20 +63,85 @@ class CallSessionListenerAdapter extends IImsCallSessionListener.Stub {
     public void callSessionStartFailed(IImsCallSession s, ImsReasonInfo r) throws RemoteException {
         ModemVoiceSession.setActive(false);
         final android.telephony.ims.ImsReasonInfo reason = Convert.toModern(r);
-        // The OEM stack reports a remote hangup on a call that was never answered as startFailed --
-        // in its model the session never started. On 17 that is only half true: ImsPhoneCallTracker
+        // The OEM stack reports a hangup on a call that was never answered as startFailed -- in its
+        // model the session never started. On 17 that is only half true: ImsPhoneCallTracker
         // .onCallStartFailed unwinds mPendingMO and nothing else, and mPendingMO is null for an
         // incoming call, so the ringing connection is never disconnected and the handset rings
         // until it is rebooted. Telecom's own CallAnomalyWatchdog spots the zombie after 2 minutes
-        // and cannot clear it either. Deliver MT as the termination it actually is; MO must stay
-        // startFailed, because that is what drives the CSFB retry path.
-        if (mOwner != null && mOwner.isIncoming()) {
-            Log.i(TAG, "startFailed on an incoming session -> terminated, code "
-                    + (reason == null ? -1 : reason.getCode()));
-            mTarget.callSessionTerminated(modern(s), reason);
+        // and cannot clear it either.
+        //
+        // Outgoing calls are not safe to forward either, which an earlier version of this file had
+        // wrong. mPendingMO is also null once onCallProgressing has reset it, which AOSP's own
+        // comment in that method says, so a call cancelled after reaching ALERTING arrives here as
+        // reason 501 CODE_USER_TERMINATED and the handler does nothing at all with it. That is a
+        // permanent zombie: no disconnect, no redial, and KEYCODE_ENDCALL has no session to act on.
+        // A user hangup is a termination by definition, so anything that is not the retry code is
+        // delivered as one.
+        final int code = reason == null ? -1 : reason.getCode();
+        final int extra = reason == null ? 0 : reason.getExtraCode();
+        final boolean retryRequest = code == android.telephony.ims.ImsReasonInfo
+                .CODE_LOCAL_CALL_CS_RETRY_REQUIRED;
+        // Emergency fallback is always forwarded: the modem takes a different path for it, and
+        // losing the attempt matters more than a stalled call does.
+        final boolean forwardRetry = retryRequest
+                && (CS_RETRY_USABLE || extra == android.telephony.ims.ImsReasonInfo
+                        .EXTRA_CODE_CALL_RETRY_EMERGENCY);
+        android.telephony.ims.ImsReasonInfo delivered = reason;
+        if (retryRequest && !forwardRetry && extra >= 100) {
+            // The stack puts the real SIP status in the extra code, so the UI can say "busy" rather
+            // than show the bare failure that reason 146 maps to (ERROR_UNSPECIFIED).
+            delivered = new android.telephony.ims.ImsReasonInfo(
+                    reasonForSipStatus(extra), extra, reason.getExtraMessage());
+        }
+        if (mOwner != null && (mOwner.isIncoming() || !forwardRetry)) {
+            Log.i(TAG, "startFailed on " + (mOwner.isIncoming() ? "an incoming" : "an outgoing")
+                    + " session, reason " + code + " extra " + extra + " -> terminated as "
+                    + delivered.getCode());
+            mTarget.callSessionTerminated(modern(s), delivered);
             return;
         }
-        mTarget.callSessionStartFailed(modern(s), reason);
+        mTarget.callSessionStartFailed(modern(s), delivered);
+    }
+
+    // Whether this handset can actually complete a circuit-switched retry, which is a property of
+    // the carrier and not of the software. A network with no 2G or 3G left cannot, and nothing
+    // tells the framework so: it detaches the IMS connection, replaces it with a GSM one and
+    // dials, and the modem may sit on RIL_REQUEST_DIAL for half a minute before refusing it,
+    // during which the call cannot be ended. See GOTCHAS 58 for how to tell, and set this false
+    // for such a device.
+    // The signs are voice registered on LTE with the CS domain's accessNetworkTechnology also LTE,
+    // and getCsCallRadioTech resolving to UNKNOWN.
+    private static final boolean CS_RETRY_USABLE = true;
+
+    // A final SIP failure response the OEM stack reported as a request for circuit-switched
+    // fallback, mapped to the reason the framework would carry for that response on its own.
+    private static int reasonForSipStatus(int sip) {
+        switch (sip) {
+            case 400: return android.telephony.ims.ImsReasonInfo.CODE_SIP_BAD_REQUEST;
+            case 403: return android.telephony.ims.ImsReasonInfo.CODE_SIP_FORBIDDEN;
+            case 404:
+            case 604: return android.telephony.ims.ImsReasonInfo.CODE_SIP_NOT_FOUND;
+            case 405: return android.telephony.ims.ImsReasonInfo.CODE_SIP_METHOD_NOT_ALLOWED;
+            case 406:
+            case 606: return android.telephony.ims.ImsReasonInfo.CODE_SIP_NOT_ACCEPTABLE;
+            case 407:
+                return android.telephony.ims.ImsReasonInfo.CODE_SIP_PROXY_AUTHENTICATION_REQUIRED;
+            case 408: return android.telephony.ims.ImsReasonInfo.CODE_SIP_REQUEST_TIMEOUT;
+            case 480: return android.telephony.ims.ImsReasonInfo.CODE_SIP_TEMPRARILY_UNAVAILABLE;
+            case 484: return android.telephony.ims.ImsReasonInfo.CODE_SIP_BAD_ADDRESS;
+            case 486:
+            case 600: return android.telephony.ims.ImsReasonInfo.CODE_SIP_BUSY;
+            case 487: return android.telephony.ims.ImsReasonInfo.CODE_SIP_REQUEST_CANCELLED;
+            case 500: return android.telephony.ims.ImsReasonInfo.CODE_SIP_SERVER_INTERNAL_ERROR;
+            case 503: return android.telephony.ims.ImsReasonInfo.CODE_SIP_SERVICE_UNAVAILABLE;
+            case 504: return android.telephony.ims.ImsReasonInfo.CODE_SIP_SERVER_TIMEOUT;
+            case 603: return android.telephony.ims.ImsReasonInfo.CODE_SIP_USER_REJECTED;
+            default: break;
+        }
+        if (sip >= 600) return android.telephony.ims.ImsReasonInfo.CODE_SIP_GLOBAL_ERROR;
+        if (sip >= 500) return android.telephony.ims.ImsReasonInfo.CODE_SIP_SERVER_ERROR;
+        if (sip >= 400) return android.telephony.ims.ImsReasonInfo.CODE_SIP_CLIENT_ERROR;
+        return android.telephony.ims.ImsReasonInfo.CODE_SIP_REDIRECTED;
     }
 
     @Override

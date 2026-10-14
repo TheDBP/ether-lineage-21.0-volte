@@ -4,7 +4,7 @@
 or run it with `--check` to find out whether this file is stale. `propagate-forge.sh`
 does that automatically, so an engine change cannot ship with an index that lies.
 
-96 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
+97 tools. Each row is `| name | what it does | usage | docs |` with a fixed column count
 and any literal pipe escaped, so `awk -F'|'` is enough to parse it. `docs/tools.yaml`
 carries the same data for anything that would rather not parse Markdown.
 
@@ -24,6 +24,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`blob-log-tags.py`](../tools/blob-log-tags.py) | find which logcat tags a prebuilt .so logs under, by resolving the tag literal | `blob-log-tags.py <lib.so> [--objdump PATH] [--window N] [-v]` | [debugging-volte](debugging-volte.md) |
 | [`boot-console-wrap.sh`](../tools/boot-console-wrap.sh) | a boot image that gets the kernel console out of a boot loop or a hang, on a device whose bootloader gives you no serial, no ramoops across its resets, and no `fastboot boot` | `boot-console-wrap.sh build <boot.img> <recovery.img> <out.img> [--timeout 150] [--every 10] [--misc-offset-mib 16]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
 | [`boot-window-logcat.sh`](../tools/boot-window-logcat.sh) | catch the logcat of a boot that ends in a reboot, through the seconds adbd is reachable | `boot-window-logcat.sh <outdir> [-s SERIAL] [--timeout SECONDS]        default timeout 900` | — |
+| [`build-queue.sh`](../tools/build-queue.sh) | run several builds back to back, one at a time, unattended | `./forge/tools/build-queue.sh <queue-file>` | — |
 | [`check-bpf-objects.py`](../tools/check-bpf-objects.py) | which BPF programs and maps of a built Android tree this kernel cannot load | `check-bpf-objects.py --kernel <old uapi bpf.h> --kver 4.9.337 [--api 3700] [--modern <new bpf.h>] [--available-events <file>] <objects...>` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`check-bpf-readiness.sh`](../tools/check-bpf-readiness.sh) | find what a kernel without eBPF (or other modern syscalls) will break, before you spend a build-flash-boot cycle finding out | `check-bpf-readiness.sh --src <ANDROID_ROOT> \| --log <file>` | — |
 | [`check-dt-needed.py`](../tools/check-dt-needed.py) | every ELF in a built image whose DT_NEEDED libraries are not in the image | `check-dt-needed.py <out>/target/product/<device> [--partition system\|vendor\|all] [--quiet]` | [debugging-a-boot-loop](debugging-a-boot-loop.md) |
@@ -60,7 +61,7 @@ carries the same data for anything that would rather not parse Markdown.
 | [`gen-verify-stubs.py`](../tools/gen-verify-stubs.py) | emit minimal smali "verify stubs" for framework/vendor classes a ported app references but the target ROM lacks | `gen-verify-stubs.py --app <app-smali-dir> --out <extra-smali-dir> CLASS [CLASS ...]` | [debugging-volte](debugging-volte.md) |
 | [`hybrid-bootimg.sh`](../tools/hybrid-bootimg.sh) | a boot image with one build's kernel+dtb and another's ramdisk | `hybrid-bootimg.sh <kernel-from.img> <ramdisk-from.img> <out.img>` | [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`image-labels.sh`](../tools/image-labels.sh) | read the SELinux labels the image builder actually wrote, out of a built ext4 image, before flashing it | `image-labels.sh <image> <path> [<path>...]       one line per path: label, or MISSING` | — |
-| [`ims-call-test.sh`](../tools/ims-call-test.sh) | place an outgoing call on a VoLTE port and report how it ended, so a call that never ends is a test failure instead of something noticed by hand | `./forge/tools/ims-call-test.sh cancel [--number N] [--log F]   # end it once it reaches ALERTING` | — |
+| [`ims-call-test.sh`](../tools/ims-call-test.sh) | place an outgoing call on a VoLTE port and report how it ended, so a call that never ends is a test failure instead of something noticed by hand | `./forge/tools/ims-call-test.sh cancel [--number N] [--log F]   # end it once it reaches ALERTING` | [debugging-volte](debugging-volte.md) |
 | [`init-harness.sh`](../tools/init-harness.sh) | run a new ramdisk's /init on the live kernel, from recovery, without a boot | `init-harness.sh <boot.img \| ramdisk-dir> [-t SECONDS] [-o OUTDIR] [-c 'CMD ...'] [-s SERIAL]` | [debugging-a-boot-loop](debugging-a-boot-loop.md), [porting-a-branch-bump](porting-a-branch-bump.md) |
 | [`install-hooks.sh`](../tools/install-hooks.sh) | Install this repo's git hooks into .git/hooks | `tools/install-hooks.sh` | — |
 | [`kernel-rebuild.sh`](../tools/kernel-rebuild.sh) | rebuild just the boot image (or any make target) after a kernel change, with the environment of the last full build | `./forge/tools/kernel-rebuild.sh [--am <patch>...] [target ...]      default target: bootimage` | [porting-a-branch-bump](porting-a-branch-bump.md) |

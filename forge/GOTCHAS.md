@@ -1048,3 +1048,30 @@ Related: hand-editing a patch file instead leaves the `index <sha>..<sha>` blob 
 `git apply` accepts that for a whole-file addition, so the patch applies while being malformed. A
 re-export from the tree is what makes those agree again.
 
+
+## 61. An adb reading that means "not allowed" or "not settled" looks like data
+
+Four separate wrong conclusions in one debugging session, all from trusting a reading that was never
+valid. Each is silent: the command exits, prints something plausible, and the number is garbage.
+
+**`adb root` lapses on every reboot.** adbd comes back as shell, so a privileged command fails. On a
+release build `setprop` then prints `Failed to set property ... See dmesg for error reason`, which
+reads as a broken property system rather than a missing privilege. Re-assert `adb root` after every
+reboot, in the script, not by hand, and check `adb shell id -u` is 0 before trusting anything that
+needs it.
+
+**`dmesg` is root-only.** As shell it returns nothing and exits 0, so
+`adb shell dmesg | grep -c 'starting service'` is `0`, which reads as "the service never started"
+rather than "you cannot see the log". Assert the output is non-empty before counting it:
+
+    [ "$(adb shell dmesg 2>/dev/null | wc -l)" -gt 0 ] || { echo "dmesg unreadable (need root)"; }
+
+**A reading taken while the device is rebooting is not a reading.** Properties come back empty
+because the thing that sets them has not run yet, and an unexpected reboot mid-measurement is
+invisible in the output. One empty property read this way was taken for a live failure and sent the
+analysis down a dead end. Gate on `sys.boot_completed`, then wait for the subsystem under test, then
+check `/proc/uptime` is still rising.
+
+**The device's grep is not GNU grep.** It is ugrep, and `grep 'a\|b'` does not alternate: the
+pattern silently matches nothing. One such pattern reported a property absent from the persistent
+store when it was present. Run one pattern per call, or use `grep -E`.

@@ -560,10 +560,28 @@ broken outgoing calls.
 - The one-line signature: `ImsPhoneCallTracker: onCallStartFailed reasonCode=510`
   (`CODE_USER_TERMINATED_BY_REMOTE`) on a call that is *ringing* rather than dialling. A correct
   teardown reads `onCallTerminated`. The OEM layer usually logs the truth immediately above it.
-- The fix is in the bridge, not the framework: deliver MT sessions as `callSessionTerminated` and
-  leave MO on `callSessionStartFailed`, which is what drives the CSFB retry path. `templates/
-  ims-bridge` carries it — `CallSessionWrapper` takes an `incoming` flag, set only on the
-  `getPendingCallSession` path, since that is the only way an MT session arrives.
+- **Capture with `adb logcat -b all`** or that signature is not in your log. `ImsPhoneCallTracker`
+  logs through `Rlog`, which is the radio buffer, and a default capture carries plenty of `Telecom`
+  traffic with none of the telephony framework's own decisions. A handler that ran fine then reads
+  as one that was never called (GOTCHAS 57).
+- The fix is in the bridge, not the framework, and it is not only MT. `templates/ims-bridge` carries
+  it; `CallSessionWrapper` takes an `incoming` flag set only on the `getPendingCallSession` path,
+  since that is the only way an MT session arrives.
+  - **MT**: deliver as `callSessionTerminated`, always.
+  - **MO, any reason but the retry code**: also a termination. An earlier version of this guidance
+    said to leave all MO on `callSessionStartFailed`, and that is wrong: `mPendingMO` is null once
+    `onCallProgressing` has reset it, so a call cancelled after it reaches ALERTING arrives as
+    reason 501 `CODE_USER_TERMINATED` and the handler does nothing with it at all. Permanent zombie.
+  - **MO with `CODE_LOCAL_CALL_CS_RETRY_REQUIRED`**: a decision about the carrier, not the software.
+    Forwarding it drives the CSFB retry, which is right where there is a circuit-switched network to
+    retry on and a stalled call where there is not (GOTCHAS 58). The template exposes this as
+    `CS_RETRY_USABLE`. Always forward `EXTRA_CODE_CALL_RETRY_EMERGENCY` either way.
+  - Where the extra code carries a real SIP status, 100 or above, map it to the matching `CODE_SIP_*`
+    before delivering, so the UI can say "busy" instead of the bare `ERROR_UNSPECIFIED` that reason
+    146 falls through to.
+- `tools/ims-call-test.sh` exercises all of this on the handset and fails when a call is left behind,
+  rather than leaving you to notice. It waits for ALERTING before cancelling, which matters: a cancel
+  during DIALING is disconnected through `mPendingMO` and passes even on a broken build.
 
 Generalises past this callback: when an OEM stack's vocabulary predates the modern stack's, check
 what the modern handler *does* with each callback, not just that a callback of that name exists.

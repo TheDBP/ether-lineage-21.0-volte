@@ -2,6 +2,6 @@
 # Update with: ./forge/tools/sync-forge.sh [ref]
 url=https://github.com/TheDBP/rom-forge.git
 ref=main
-commit=2ad14236579d595a16f4d882e8833f7fc2f7529a
-subject=GOTCHAS 59: empty the property to reproduce, do not seed the fallback value
-synced=2026-10-13T20:07:27Z
+commit=b39f2a22208d0be94e60b3a7f752df5a74f5d64e
+subject=docs: regenerate the tool index for the new debugging-volte cross-link
+synced=2026-10-14T02:16:31Z
